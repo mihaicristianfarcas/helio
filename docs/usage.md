@@ -253,7 +253,7 @@ How each system installs it:
 |---|---|---|
 | macOS | The app is replaced where it is (Applications) | Pong and Pong Control are replaced, and the host restarts |
 | macOS, installed with Homebrew | `brew upgrade --cask ping`, run for you | `brew upgrade --cask pong`, run for you; the host is started again |
-| Windows | Ping's files are replaced in its folder | The new release's `install.ps1` runs: Windows asks for an administrator's permission, PongService restarts |
+| Windows | Ping's files are replaced in its folder; Settings > Apps shows the new version | The new release's `install.ps1` runs: Windows asks for an administrator's permission, PongService restarts, and Settings > Apps shows the new version |
 | Linux | The new release's `install.sh` (into `~/.local/bin`) | The same; the host's user service restarts |
 
 The download is checked against the SHA-256 GitHub records for the

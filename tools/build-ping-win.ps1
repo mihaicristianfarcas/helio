@@ -7,8 +7,9 @@
 # ffmpeg-n8.1-latest-win64-lgpl-shared; default: the FFMPEG_DIR environment
 # variable. The bindings need LLVM's libclang (C:\Program Files\LLVM, or
 # LIBCLANG_PATH).
-# -Install: copy target\Ping to %LOCALAPPDATA%\Programs\Ping and add Ping to
-# the Start menu.
+# -Install: install target\Ping as the release's installer does
+# (tools\install-ping.ps1): in %LOCALAPPDATA%\Programs\Ping, the Start menu
+# and Settings > Apps.
 param(
     [string]$FFmpeg = $env:FFMPEG_DIR,
     [switch]$Install
@@ -39,16 +40,7 @@ try {
     Write-Output "built $dist"
 
     if ($Install) {
-        $target = Join-Path $env:LOCALAPPDATA 'Programs\Ping'
-        Get-Process Ping -ErrorAction SilentlyContinue | Where-Object { $_.Path -like "$target*" } | Stop-Process -Force
-        New-Item -ItemType Directory -Force $target | Out-Null
-        Copy-Item (Join-Path $dist '*') $target -Force
-        $shell = New-Object -ComObject WScript.Shell
-        $link = $shell.CreateShortcut((Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs\Ping.lnk'))
-        $link.TargetPath = Join-Path $target 'Ping.exe'
-        $link.WorkingDirectory = $target
-        $link.Save()
-        Write-Output "installed $target (Start menu: Ping)"
+        & (Join-Path $PSScriptRoot 'install-ping.ps1') -Source $dist -NoStart
     }
 } finally {
     Pop-Location

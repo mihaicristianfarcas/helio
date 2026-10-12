@@ -183,6 +183,7 @@ fn staging(program: Program, version: &str) -> PathBuf {
 /// folder goes either way.
 pub(crate) fn finish(program: Program, build: &Build, dir: &Path) -> Option<Install> {
     platform::tidy(program);
+    platform::keep_listed(program, build.version);
     let pending = Pending::take(dir)?;
     let _ = std::fs::remove_dir_all(staging(program, &pending.version));
     let (Some(wanted), Some(mine)) = (

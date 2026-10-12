@@ -30,8 +30,9 @@ paired clients, the web UI's certificate and accounts, and `logs\`. The host
 makes that folder private when it starts (`pong/src/private.rs`): only
 SYSTEM and Administrators can read it, apart from the two files Pong's
 window needs (`config.toml`, `web-cert.pem`).
-`tools/host-deploy.ps1` installs a build as the service and adds Pong's
-window to the Start menu; see [../install.md](../install.md).
+`tools/host-deploy.ps1` installs a build as the service, adds Pong's
+window to the Start menu and lists Pong in Settings > Apps (whose
+**Uninstall** runs it with `-Uninstall`); see [../install.md](../install.md).
 
 ### Pong's icon in the notification area
 
@@ -223,6 +224,17 @@ As Moonlight does it on Windows:
 - **Sound.** WASAPI shared mode on the default device, following it when it
   changes.
 - **Timers.** 1 ms timer resolution while streaming.
+
+**Install Ping.cmd** (`tools/install-ping.ps1`, the download's
+`install.ps1`) installs Ping for the user who runs it, with no
+administrator: in `%LOCALAPPDATA%\Programs\Ping` with the script beside
+it, in the Start menu, and in Settings > Apps (the key
+`HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\dev.pingpong.Ping`),
+whose **Uninstall** runs the script with `-Uninstall`. When Ping starts
+from that folder and its entry is missing or names another version, as
+after an update installed by 0.9.4 or older, the script beside it writes
+the entry again. Pong's entry is `dev.pingpong.Pong`, under
+`HKEY_LOCAL_MACHINE`.
 
 Building it needs an FFmpeg 8 shared build and LLVM (for the FFmpeg
 bindings): see [../install.md](../install.md#ping-on-windows).

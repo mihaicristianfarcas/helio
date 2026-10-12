@@ -103,6 +103,10 @@ pub(crate) fn rehearse(_program: Program, unpacked: &Path, folder: &Path) -> Res
 /// Nothing is left behind: install.sh replaces the programs in place.
 pub(crate) fn tidy(_program: Program) {}
 
+/// The launcher lists the entries install.sh writes, which name no
+/// version: there is nothing to keep.
+pub(crate) fn keep_listed(_program: Program, _version: &str) {}
+
 /// Wait until process `pid` has exited, or `timeout`.
 pub(crate) fn wait_for_exit(pid: u32, timeout: Duration) {
     let Ok(pid) = libc::pid_t::try_from(pid) else {

@@ -3,7 +3,8 @@
 # zip archives for a GitHub release and the website's downloads.
 #
 #   powershell -NoProfile -ExecutionPolicy Bypass -File tools\package-windows.ps1 [-FFmpeg DIR]
-#     -> target\dist\Ping-VERSION-windows-x86_64.zip  (Ping.exe beside FFmpeg's DLLs)
+#     -> target\dist\Ping-VERSION-windows-x86_64.zip  (Ping.exe beside FFmpeg's DLLs,
+#                                                        install.ps1, Install Ping.cmd)
 #        target\dist\Pong-VERSION-windows-x86_64.zip  (pong.exe, Pong Control.exe,
 #                                                        install.ps1, Install Pong.cmd)
 #
@@ -64,6 +65,14 @@ try {
         # FFmpeg is LGPL: its license goes with its DLLs.
         $license = Join-Path $FFmpeg 'LICENSE.txt'
         if (Test-Path $license) { Copy-Item $license (Join-Path $dir 'FFmpeg LICENSE.txt') }
+        Copy-Item (Join-Path $PSScriptRoot 'install-ping.ps1') (Join-Path $dir 'install.ps1')
+        # What a person double-clicks. Ping.exe also runs from the unpacked
+        # folder as it is; installed, it is in the Start menu and Settings >
+        # Apps. The window closes once Ping opens, and stays to show why if
+        # it did not install.
+        $cmd = "@echo off`r`nrem Install Ping from this folder for you: in the Start menu, and in Settings > Apps to uninstall.`r`n" +
+            "powershell -NoProfile -ExecutionPolicy Bypass -File `"%~dp0install.ps1`"`r`nif errorlevel 1 pause`r`n"
+        [IO.File]::WriteAllText((Join-Path $dir 'Install Ping.cmd'), $cmd)
     }
 
     zip "Pong-$version-windows-x86_64" {
