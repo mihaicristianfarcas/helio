@@ -77,9 +77,9 @@ const panels: Panel[] = [
     needs: 'Windows 10 or 11, 64-bit',
     files: one,
     steps: [
-      'Extract the zip into a folder of its own: Ping.exe needs the DLLs beside it.',
-      'Open <strong>Ping.exe</strong>. It is not signed yet, so SmartScreen asks first: choose <strong>More info</strong>, then <strong>Run anyway</strong>.',
+      'Extract the zip and double-click <strong>Install Ping.cmd</strong>. It is not signed yet, so Windows asks whether to run it. Ping installs for you, with no administrator needed, and opens.',
       'Let Ping on private networks when Windows Firewall asks.',
+      'Ping is in the Start menu, and in <strong>Settings &gt; Apps</strong>, which uninstalls it.',
     ],
     commands: [],
     caveat: smartAppControl,
@@ -92,7 +92,7 @@ const panels: Panel[] = [
     steps: [
       'Install <a href="https://github.com/SudoMaker/SudoVDA">SudoVDA</a>, the virtual display driver, and a current NVIDIA driver: Pong encodes with NVENC. Without them, Pong streams the PC’s main display in H.264, encoded in software. If Apollo is installed, it brought SudoVDA; stop its service while Pong runs.',
       'Extract the zip and double-click <strong>Install Pong.cmd</strong>. It is not signed yet, so Windows asks whether to run it, then whether PowerShell may make changes. Pong then runs as a service from startup, before anyone signs in.',
-      'Open <strong>Pong</strong> from the Start menu to see the host and pair devices.',
+      'Open <strong>Pong</strong> from the Start menu to see the host and pair devices. It is in <strong>Settings &gt; Apps</strong> too, which uninstalls it.',
     ],
     commands: [],
     caveat: smartAppControl,
