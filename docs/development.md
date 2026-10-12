@@ -118,7 +118,7 @@ tools/linux-dev tools/linux/loopback-test        # a Linux host streaming to a L
   committed).
 - `tools/host-deploy.ps1` (on the host; it asks for an administrator when
   not run as one) installs the built `pong.exe` as `PongService`, and
-  Pong's window.
+  Pong's window; `-Uninstall` removes them.
 - `tools/host-run.ps1 -Command '…'` runs a command in the interactive
   console session and prints its output: SSH lands in session 0, where there
   is no desktop to capture and no display to configure.
@@ -181,7 +181,7 @@ on `main` when it needs to be and never merged into it.
 | Script | Makes |
 |---|---|
 | `tools/package-macos` | `Ping-VERSION-macos-ARCH.zip` (Ping.app) and `Pong-VERSION-macos-ARCH.zip` (Pong.app, Pong Control.app) |
-| `tools/package-windows.ps1` | `Ping-VERSION-windows-x86_64.zip` (Ping.exe beside FFmpeg's DLLs) and `Pong-VERSION-windows-x86_64.zip` (pong.exe, Pong Control.exe, `install.ps1`, which is `tools/host-deploy.ps1`, and `Install Pong.cmd`) |
+| `tools/package-windows.ps1` | `Ping-VERSION-windows-x86_64.zip` (Ping.exe beside FFmpeg's DLLs, `install.ps1`, which is `tools/install-ping.ps1`, and `Install Ping.cmd`) and `Pong-VERSION-windows-x86_64.zip` (pong.exe, Pong Control.exe, `install.ps1`, which is `tools/host-deploy.ps1`, and `Install Pong.cmd`). Each `install.ps1` copies itself beside the programs and lists them in Settings > Apps, whose **Uninstall** runs it with `-Uninstall` |
 | `tools/linux/package` | `Ping-VERSION-linux-ARCH.tar.gz` and `Pong-VERSION-linux-ARCH.tar.gz`, each a folder with the programs, launcher entries, icons and `install.sh` (`tools/linux/install-release`) |
 | `tools/publish-downloads DIST` | The downloads: each archive at `https://downloads.ping-pong.sh/latest/APP-OS-ARCH.EXT`, then `latest/SHA256SUMS` and `latest.json` (version, commit, sizes, checksums), in the Cloudflare R2 bucket `pingpong-downloads`, with wrangler |
 

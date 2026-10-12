@@ -44,17 +44,20 @@ Pong**, as in [Pong on macOS](#pong-on-macos).
 The programs are not code-signed yet, so Windows asks before it first runs
 each one, and names its publisher as unknown.
 
-- **Ping**: extract the zip into a folder of its own (Ping.exe needs
-  FFmpeg's DLLs beside it) and open **Ping.exe**. SmartScreen asks first:
-  **More info**, then **Run anyway**.
+- **Ping**: extract the zip and double-click **Install Ping.cmd**. Windows
+  asks whether to run it. It installs Ping for you, with no administrator
+  needed: in `%LOCALAPPDATA%\Programs\Ping`, in the Start menu as
+  **Ping**, and in **Settings > Apps > Installed apps**, which uninstalls
+  it. Then it opens Ping. Ping also runs from the extracted folder as it
+  is: open **Ping.exe** there (it needs FFmpeg's DLLs beside it).
 - **Pong**: the host needs what [Pong on Windows](#pong-on-windows) lists
   first (an NVIDIA GPU, SudoVDA). Extract the zip and double-click
   **Install Pong.cmd**. Windows asks whether to run it, then whether
   Windows PowerShell may make changes as an administrator. It does what
   `host-deploy.ps1` does there (PongService, the Start menu entry, the
-  icon at sign-in). Pong's window installs updates itself
-  ([usage.md](usage.md#updates)); running **Install Pong.cmd** from a
-  newer download does the same.
+  icon at sign-in, the entry in **Settings > Apps**). Pong's window
+  installs updates itself ([usage.md](usage.md#updates)); running
+  **Install Pong.cmd** from a newer download does the same.
 
 SmartScreen judges an unsigned program by the file itself, so it may ask
 again after an update: each build is a new file. On a PC where **Smart
@@ -202,9 +205,11 @@ starts **PongService** (it starts at boot, before anyone signs in, and adds
 Windows Firewall rules for Pong), puts Pong's window in the Start menu as
 **Pong**, and puts Pong's icon in the taskbar's notification area from your
 next sign-in on (your `Run` key; **Show Pong's icon at login** in the window
-turns it off). Run it again after each build to update. `pong uninstall` (as
-administrator, from `C:\Program Files\Pong`) removes the service and its
-firewall rules.
+turns it off), and lists Pong in **Settings > Apps > Installed apps**. Run
+it again after each build to update. `host-deploy.ps1 -Uninstall`, or
+**Uninstall** in Settings, removes all of that again; `pong uninstall` (as
+administrator, from `C:\Program Files\Pong`) removes only the service and
+its firewall rules.
 
 Pong's settings and state are in `C:\ProgramData\Pong`. Details:
 [platforms/windows.md](platforms/windows.md).
@@ -225,8 +230,9 @@ powershell -ExecutionPolicy Bypass -File tools\build-ping-win.ps1 -FFmpeg C:\pat
 ```
 
 (`-FFmpeg` can be left out when `FFMPEG_DIR` is set.) The first leaves
-`target\Ping\Ping.exe` beside FFmpeg's DLLs; `-Install` copies them to
-`%LOCALAPPDATA%\Programs\Ping` and adds **Ping** to the Start menu. Windows
+`target\Ping\Ping.exe` beside FFmpeg's DLLs; `-Install` then installs them
+as a download's **Install Ping.cmd** does (`tools\install-ping.ps1`): in
+`%LOCALAPPDATA%\Programs\Ping`, the Start menu and Settings > Apps. Windows
 Firewall may ask to let Ping on the network the first time: allow private
 networks.
 
@@ -286,8 +292,8 @@ anywhere ([networking.md](networking.md)). Next: [usage.md](usage.md).
 | Homebrew | `brew uninstall --cask ping pong` (the host's LaunchAgents go too); `--zap` also deletes the data folders |
 | Ping, macOS | Delete `/Applications/Ping.app` and `~/Library/Application Support/Ping` |
 | Pong, macOS | `launchctl bootout gui/$(id -u) ~/Library/LaunchAgents/dev.pingpong.Pong.plist` and the same for `dev.pingpong.PongControl.plist`, delete those files, the two apps, and `~/Library/Application Support/Pong` |
-| Ping, Windows | Delete `%LOCALAPPDATA%\Programs\Ping`, its Start menu entry and `%APPDATA%\Ping` |
-| Pong, Windows | `pong uninstall` as administrator, then delete `C:\Program Files\Pong`, `C:\ProgramData\Pong`, `%APPDATA%\Pong`, the Start menu entry, and the `Pong` value under `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` |
+| Ping, Windows | **Settings > Apps > Installed apps**, **Ping**, **Uninstall** (or `install.ps1 -Uninstall` in `%LOCALAPPDATA%\Programs\Ping`). It leaves your hosts and settings: delete `%APPDATA%\Ping` too to remove them. A copy run from its extracted folder: delete the folder |
+| Pong, Windows | **Settings > Apps > Installed apps**, **Pong**, **Uninstall** (or `install.ps1 -Uninstall` in `C:\Program Files\Pong`); Windows asks for an administrator. It removes PongService, its firewall rules, the programs, the Start menu entry and the icon at sign-in, and leaves the host's identity, pairings and settings: delete `C:\ProgramData\Pong` and `%APPDATA%\Pong` too to remove them |
 | Ping, Linux | `install.sh --uninstall` from the download, or `tools/linux/install-apps --uninstall` (or delete the binary); and `~/.config/ping` |
 | Pong, Linux | `install.sh --uninstall` from the download; or `systemctl --user disable --now pong`, then delete the unit and the binary. Then `~/.config/pong` |
 

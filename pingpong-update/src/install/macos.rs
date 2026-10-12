@@ -388,6 +388,10 @@ pub(crate) fn rehearse(program: Program, unpacked: &Path, folder: &Path) -> Resu
 /// are in place.
 pub(crate) fn tidy(_program: Program) {}
 
+/// A Mac lists an app by where it is (Applications): there is no entry to
+/// keep.
+pub(crate) fn keep_listed(_program: Program, _version: &str) {}
+
 /// Wait until process `pid` has exited, or `timeout`.
 pub(crate) fn wait_for_exit(pid: u32, timeout: Duration) {
     let Ok(pid) = libc::pid_t::try_from(pid) else {
