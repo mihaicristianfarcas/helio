@@ -39,7 +39,10 @@ const DOUBLE_CLICK_POINTS: f64 = 4.0;
 
 pub struct CgEventSink {
     source: Option<CFRetained<CGEventSource>>,
-    /// The streamed display, in global points.
+    /// The streamed display.
+    display: u32,
+    /// Its place and size in global points, as of the last batch with motion
+    /// in it (`follow_display`).
     bounds: CGRect,
     /// The stream's pixels across that display.
     stream: (f64, f64),
@@ -61,6 +64,7 @@ impl CgEventSink {
     pub fn new(display_id: u32, stream_w: u32, stream_h: u32) -> CgEventSink {
         CgEventSink {
             source: CGEventSource::new(CGEventSourceStateID::HIDSystemState),
+            display: display_id,
             bounds: CGDisplayBounds(display_id),
             stream: (stream_w.max(1) as f64, stream_h.max(1) as f64),
             held: HeldSet::new(),
@@ -72,6 +76,16 @@ impl CgEventSink {
                 objc2_app_kit::NSEvent::doubleClickInterval().clamp(0.15, 5.0),
             ),
         }
+    }
+
+    /// The display's points as they are now. Someone at the host (or the
+    /// client, through it) may pick another resolution in System Settings
+    /// mid-session: a 2560x1440 stream's display at 1280x720 points made
+    /// 2560x1440, the pointer stayed in the top-left quarter until the
+    /// bounds were read again. One read is ~8 µs (measured on an M4 Pro),
+    /// once per batch of input that moves the pointer.
+    fn follow_display(&mut self) {
+        self.bounds = CGDisplayBounds(self.display);
     }
 
     fn cursor(&self) -> CGPoint {
@@ -240,6 +254,14 @@ impl CgEventSink {
 
 impl InputSink for CgEventSink {
     fn inject(&mut self, events: &[InputEvent]) -> Result<(), InputError> {
+        if events.iter().any(|e| {
+            matches!(
+                e,
+                InputEvent::MouseMoveAbs { .. } | InputEvent::MouseMoveRel { .. }
+            )
+        }) {
+            self.follow_display();
+        }
         for &ev in events {
             self.held.observe(ev);
             match ev {
