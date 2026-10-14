@@ -86,7 +86,7 @@ says which system the host runs (so Ping forwards Command as Command).
 | Sound | WASAPI loopback of a virtual sink, up to 7.1 | ScreenCaptureKit's system mix in stereo; up to 7.1 from a Core Audio tap of a surround output |
 | Input | `SendInput` | CoreGraphics events at the HID tap |
 | Pointer | Desktop Duplication's, drawn into the picture | ScreenCaptureKit draws it into the picture |
-| Keeping awake | `SetThreadExecutionState` | IOKit power assertions (an asleep display cannot be captured) |
+| Keeping awake | `SetThreadExecutionState` | IOKit power assertions (an asleep display cannot be captured), and no sleep when the lid closes |
 
 Everything after the encoder is shared with the other hosts: the paced
 sender, FEC, adaptive bitrate, the tunnel, pairing, discovery, reconnection
@@ -190,8 +190,14 @@ seconds and prints each channel's level.
   panel is the same every session (3840x2400) and put in the session's mode
   once online: sizes from 800x600 to 3024x1890 come up in 0.1–0.7 s without
   a prompt. If it does not come up within 2 s, Pong streams the main display.
-- **Lid closed, no display**: fine — the session's virtual display is what
-  gets captured. A locked Mac streams its lock screen.
+- **Lid closed**: the stream goes on. A MacBook sleeps a few seconds after
+  its lid closes, on battery even with a display attached, and no power
+  assertion stops that; for the length of a session Pong asks macOS not to
+  sleep on the lid (`kPMSetClamshellSleepState`, as Amphetamine's
+  Closed-Display Mode does), and lets it again when the session ends. The
+  session's virtual display is what gets captured. A locked Mac streams its
+  lock screen. Amphetamine's Closed-Display Mode, if you use it, is off
+  after a session until it turns it on again.
 - **The capture starts again on its own** when macOS stops it (the
   displays turning off as the lid closes, sleep, a display rearranged):
   macOS does not always say so, but a capture that runs hands over

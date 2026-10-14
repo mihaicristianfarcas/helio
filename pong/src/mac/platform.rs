@@ -68,17 +68,27 @@ pub struct Display {
     _virtual: Option<pingpong_display::macos::VirtualDisplay>,
     /// The display awake for as long as the session runs.
     _awake: crate::power::Awake,
+    /// The Mac kept from sleeping on a closed lid; dropped after the
+    /// virtual display (declared after it) so the Mac never sleeps while
+    /// its arrangement is being put back.
+    lid: crate::power::LidOpen,
     /// The input warning told so many times: control messages are not
     /// retransmitted, so a few times over.
     told: u32,
     input_blocked: bool,
 }
 
-pub struct Platform;
+pub struct Platform {
+    /// The host's data folder (`power::LidOpen`'s marker).
+    data_dir: std::path::PathBuf,
+}
 
 impl Platform {
-    pub fn new(_data_dir: &Path) -> Platform {
-        Platform
+    pub fn new(data_dir: &Path) -> Platform {
+        crate::power::LidOpen::put_back_left_over(data_dir);
+        Platform {
+            data_dir: data_dir.to_path_buf(),
+        }
     }
 
     /// VideoToolbox on Apple silicon encodes both; AV1 encoding it does not
@@ -177,10 +187,14 @@ impl Platform {
         let id = virtual_display
             .as_ref()
             .map_or_else(pingpong_capture::sck::SckCapture::main_display, |d| d.id);
+        // After the virtual display: plugging it in is a display arriving,
+        // which has powerd put the lid setting back.
+        let lid = crate::power::LidOpen::hold(&self.data_dir);
         Ok(Display {
             id,
             _virtual: virtual_display,
             _awake: awake,
+            lid,
             told: 0,
             input_blocked,
         })
@@ -242,10 +256,14 @@ impl Platform {
     /// The session runs.
     pub fn started(&mut self, _req: &SessionStart) {}
 
-    /// Once a second while streaming, the first few seconds: whether input
-    /// reaches anything.
+    /// While streaming: the lid setting said again once a second (powerd
+    /// puts it back when a display or the charger comes or goes), and the
+    /// first few seconds whether input reaches anything.
     pub fn tick(&mut self, d: &mut Display, _now: Instant, second: bool) -> Vec<Control> {
         let mut out = Vec::new();
+        if second {
+            d.lid.renew();
+        }
         if second && d.told < 3 {
             d.told += 1;
             if d.input_blocked {
