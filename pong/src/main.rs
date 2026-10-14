@@ -32,6 +32,9 @@ mod endsession;
 #[cfg(windows)]
 mod gamepad;
 mod host;
+#[cfg(target_os = "macos")]
+#[path = "mac/icon.rs"]
+mod icon;
 mod negotiate;
 mod netif;
 #[cfg(windows)]
@@ -121,7 +124,16 @@ fn init_logging_named(
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let dir = config::data_dir();
-    let command = args.first().map(String::as_str).unwrap_or("host");
+    // Pong.app opened from the Finder: the host, with its icon.
+    #[cfg(target_os = "macos")]
+    let opened_by_hand = icon::opened_by_hand(&args);
+    #[cfg(not(target_os = "macos"))]
+    let opened_by_hand = false;
+    let command = match args.first() {
+        _ if opened_by_hand => "host",
+        Some(c) => c.as_str(),
+        None => "host",
+    };
     // On Windows the data folder is the host's alone (see `private`). Not
     // from the clipboard helper, which runs as the signed-in user.
     if command != "clipboard-agent" {
@@ -131,7 +143,7 @@ fn main() -> ExitCode {
         // Clipboard sharing as the signed-in user, for the host (Windows).
         #[cfg(windows)]
         "clipboard-agent" => clipagent::run(&args),
-        "host" => run_host(dir),
+        "host" => run_host(dir, opened_by_hand),
         #[cfg(windows)]
         "service" => run_service(&dir),
         #[cfg(windows)]
@@ -179,8 +191,18 @@ fn fail(e: impl std::fmt::Display) -> ExitCode {
 }
 
 /// `pong host`: run the host in this session until it is asked to stop.
-fn run_host(dir: std::path::PathBuf) -> ExitCode {
+/// `opened_by_hand`: Pong.app opened from the Finder (a Mac), which brings
+/// its icon up too.
+fn run_host(dir: std::path::PathBuf, opened_by_hand: bool) -> ExitCode {
     let _guard = init_logging(&dir);
+    // Before the host: one already running (the LaunchAgent's) makes this
+    // one fail to start, and the icon is still what was asked for.
+    #[cfg(target_os = "macos")]
+    if opened_by_hand {
+        icon::show();
+    }
+    #[cfg(not(target_os = "macos"))]
+    let _ = opened_by_hand;
     #[cfg(windows)]
     pingpong_capture::gpu::declare_dpi_aware();
     let host = match host::Host::open(dir) {

@@ -108,6 +108,12 @@ When Pong.app is beside it and the host is not running, the window's
 **Start Pong** writes the host's LaunchAgent and loads it: that is how a
 copy installed with Homebrew, where no install script runs, starts the host.
 
+Opening **Pong** itself (from the Finder, Launchpad or Spotlight) starts
+the host and Pong Control with it, in the background, so the icon is in the
+menu bar whenever you started Pong. Opened again while it runs, it changes
+nothing. The host started at login by its LaunchAgent leaves the icon to
+its own login item.
+
 ### Permissions
 
 Pong needs **Screen Recording** (to capture) and **Accessibility** (to

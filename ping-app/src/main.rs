@@ -63,7 +63,7 @@ fn main() {
     let _instance = if std::env::var_os("PING_UI_DEMO").is_some() {
         None
     } else {
-        match pingpong_ui::instance::claim(&ping_core::store::data_dir(), "ping", move || {
+        match pingpong_ui::instance::claim(&ping_core::store::data_dir(), "ping", true, move || {
             let _ = show.unbounded_send(());
         }) {
             Some(instance) => Some(instance),

@@ -139,27 +139,28 @@ fn bind_keys_and_menus(cx: &mut App) {
 fn main() {
     // Started by an update: the old copy quits first.
     pingpong_update::install::after_update();
-    // One copy of the app: a second start shows the first one's window. A
-    // check (PONG_UI_DEMO) is not the app started again, and runs beside it.
-    // Before the log is opened: opening it moves the last runs' logs aside,
-    // the running copy's among them.
+    // `--background`: started at login (or by the host opened by hand on a
+    // Mac), to sit in the tray without a window.
+    let background = std::env::args().skip(1).any(|a| a == "--background");
+    // One copy of the app: a second start shows the first one's window, one
+    // in the background leaves it be. A check (PONG_UI_DEMO) is not the app
+    // started again, and runs beside it. Before the log is opened: opening
+    // it moves the last runs' logs aside, the running copy's among them.
     let (show, shows) = futures::channel::mpsc::unbounded::<()>();
     let _instance = if std::env::var_os("PONG_UI_DEMO").is_some() {
         None
     } else {
-        match pingpong_ui::instance::claim(&api::app_dir(), "pong-window", move || {
+        match pingpong_ui::instance::claim(&api::app_dir(), "pong-window", !background, move || {
             let _ = show.unbounded_send(());
         }) {
             Some(instance) => Some(instance),
             None => {
-                eprintln!("Pong's window is running already: it was asked to show itself");
+                eprintln!("Pong's window is running already");
                 return;
             }
         }
     };
     init_logging();
-    // `--background`: started at login, to sit in the tray without a window.
-    let background = std::env::args().skip(1).any(|a| a == "--background");
     let build = Build::this();
     tracing::info!(version = build.version, commit = build.short_commit(), os = std::env::consts::OS, data = %api::data_dir().display(), background, "Pong app");
     let application = gpui_platform::application().with_assets(pingpong_ui::Assets);
