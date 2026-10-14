@@ -192,6 +192,13 @@ seconds and prints each channel's level.
   a prompt. If it does not come up within 2 s, Pong streams the main display.
 - **Lid closed, no display**: fine — the session's virtual display is what
   gets captured. A locked Mac streams its lock screen.
+- **The capture starts again on its own** when macOS stops it (the
+  displays turning off as the lid closes, sleep, a display rearranged):
+  macOS does not always say so, but a capture that runs hands over
+  something many times a second even on a still desktop, so 2 s of nothing
+  is a stopped capture. The client keeps the last picture meanwhile.
+  Measured with `replayd` (which serves every capture) killed mid-capture:
+  the picture and the sound ran again 0.2 s after the 2 s.
 - **Loss recovery** uses VideoToolbox's long-term references. The protocol
   has no per-frame acknowledgement, so Pong counts a frame as arrived once
   200 ms pass with no loss reported for it, and acknowledges it to the
