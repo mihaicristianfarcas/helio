@@ -48,9 +48,9 @@ pub struct Options {
     pub files_dir: PathBuf,
     /// Bytes per second at most.
     pub rate: u64,
-    /// Send what is on the clipboard now (text or an image, not files) as
-    /// the sharing starts: a client does, so what was copied before the
-    /// stream can be pasted in it.
+    /// Send what is on the clipboard now (files, text or an image, as a copy
+    /// made later would go) as the sharing starts: a client does, so what
+    /// was copied before the stream can be pasted in it.
     pub offer_current: bool,
     /// The other end, for the log.
     pub peer: String,
@@ -194,8 +194,15 @@ impl Worker {
         if self.directions.send {
             self.seen = self.board.stamp();
             if self.opts.offer_current && !self.board.concealed() {
-                if let Some(items) = self.board.read(false) {
-                    self.offer(items);
+                // Files too, as a copy made during the session goes: a file
+                // copied in Finder before connecting is pasted on the host
+                // as often as text is.
+                match self.board.read(true) {
+                    Some(items) => self.offer(items),
+                    None => tracing::info!(
+                        why = self.board.why_not(),
+                        "nothing on the clipboard to share as the sharing starts"
+                    ),
                 }
             }
         }
