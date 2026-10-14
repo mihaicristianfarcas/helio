@@ -24,14 +24,20 @@ pub struct Instance {
 }
 
 /// Become the one copy of `app` (a short name: "ping") that keeps its data
-/// in `dir`, or, if one runs already, ask it to show itself and return
-/// `None` (the caller then exits). `on_show` is called on a thread of its
-/// own when a later copy asks.
+/// in `dir`, or, if one runs already, ask it to show itself (unless
+/// `ask_to_show` is false: a copy started in the background, which leaves
+/// the running one as it is) and return `None` (the caller then exits).
+/// `on_show` is called on a thread of its own when a later copy asks.
 ///
 /// Anything that stops the check itself (a folder that cannot hold a
 /// socket) lets the app run unguarded rather than not at all.
-pub fn claim(dir: &Path, app: &str, on_show: impl Fn() + Send + 'static) -> Option<Instance> {
-    platform::claim(dir, app, Box::new(on_show))
+pub fn claim(
+    dir: &Path,
+    app: &str,
+    ask_to_show: bool,
+    on_show: impl Fn() + Send + 'static,
+) -> Option<Instance> {
+    platform::claim(dir, app, ask_to_show, Box::new(on_show))
 }
 
 /// A name for `dir` that is safe in an object's name: FNV-1a of its path.
@@ -56,7 +62,12 @@ mod platform {
 
     const SHOW: &[u8] = b"show";
 
-    pub(super) fn claim(dir: &Path, app: &str, on_show: Box<dyn Fn() + Send>) -> Option<Instance> {
+    pub(super) fn claim(
+        dir: &Path,
+        app: &str,
+        ask_to_show: bool,
+        on_show: Box<dyn Fn() + Send>,
+    ) -> Option<Instance> {
         let path = dir.join(format!("{app}.sock"));
         let _ = std::fs::create_dir_all(dir);
         let unguarded = Some(Instance { socket: None });
@@ -66,8 +77,10 @@ mod platform {
                 // A copy that runs answers; a crashed one left only the
                 // file.
                 if let Ok(mut running) = UnixStream::connect(&path) {
-                    let _ = running.set_write_timeout(Some(Duration::from_secs(2)));
-                    let _ = running.write_all(SHOW);
+                    if ask_to_show {
+                        let _ = running.set_write_timeout(Some(Duration::from_secs(2)));
+                        let _ = running.write_all(SHOW);
+                    }
                     return None;
                 }
                 let _ = std::fs::remove_file(&path);
@@ -130,7 +143,12 @@ mod platform {
     // (it is leaked to it).
     unsafe impl Send for SendHandle {}
 
-    pub(super) fn claim(dir: &Path, app: &str, on_show: Box<dyn Fn() + Send>) -> Option<Instance> {
+    pub(super) fn claim(
+        dir: &Path,
+        app: &str,
+        ask_to_show: bool,
+        on_show: Box<dyn Fn() + Send>,
+    ) -> Option<Instance> {
         let tag = dir_tag(dir);
         let mutex_name = HSTRING::from(format!("Local\\pingpong-{app}-{tag}"));
         let event_name = HSTRING::from(format!("Local\\pingpong-{app}-{tag}-show"));
@@ -144,6 +162,10 @@ mod platform {
                 return unguarded;
             };
             if GetLastError() == ERROR_ALREADY_EXISTS {
+                if !ask_to_show {
+                    let _ = CloseHandle(mutex);
+                    return None;
+                }
                 // Windows lets a process bring its window to the front only
                 // if the one in front allows it: this one was just started
                 // by the user, so it can, and hands that to the first copy.
@@ -206,25 +228,44 @@ mod tests {
         // A short name: a socket's path is limited to about a hundred bytes.
         let dir = std::env::temp_dir().join(format!("pp-inst-{}", std::process::id()));
         let (shown, wait) = std::sync::mpsc::channel();
-        let first = claim(&dir, "app", move || {
+        let first = claim(&dir, "app", true, move || {
             let _ = shown.send(());
         });
         assert!(first.is_some());
         assert!(
-            claim(&dir, "app", || {}).is_none(),
+            claim(&dir, "app", true, || {}).is_none(),
             "the second copy is refused"
         );
         // Another app keeping its data in the same folder is another app.
-        let other = claim(&dir, "other", || {});
+        let other = claim(&dir, "other", true, || {});
         assert!(other.is_some());
         drop(other);
         wait.recv_timeout(std::time::Duration::from_secs(5))
             .expect("the first copy is asked to show itself");
         // The first copy gone, the folder is free again.
         drop(first);
-        let again = claim(&dir, "app", || {});
+        let again = claim(&dir, "app", true, || {});
         assert!(again.is_some());
         drop(again);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_second_copy_in_the_background_leaves_the_first_be() {
+        let dir = std::env::temp_dir().join(format!("pp-quiet-{}", std::process::id()));
+        let (shown, wait) = std::sync::mpsc::channel();
+        let first = claim(&dir, "app", true, move || {
+            let _ = shown.send(());
+        });
+        assert!(first.is_some());
+        assert!(claim(&dir, "app", false, || {}).is_none());
+        assert!(
+            wait.recv_timeout(std::time::Duration::from_millis(500))
+                .is_err(),
+            "the first copy is not asked to show itself"
+        );
+        drop(first);
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -237,7 +278,7 @@ mod tests {
         // nobody listening.
         drop(std::os::unix::net::UnixListener::bind(dir.join("app.sock")).unwrap());
         assert!(dir.join("app.sock").exists());
-        assert!(claim(&dir, "app", || {}).is_some());
+        assert!(claim(&dir, "app", true, || {}).is_some());
         let _ = std::fs::remove_dir_all(&dir);
     }
 }
