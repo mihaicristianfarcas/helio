@@ -284,7 +284,9 @@ the ways the device's permissions allow (**Copy from this computer**,
 [What each device may do](#what-each-device-may-do)).
 
 - Each end watches its own clipboard and sends each new copy: files if there
-  are some, else text, else an image. Files arrive in a temporary folder
+  are some, else text, else an image. Ping also sends what is on its
+  clipboard as the stream starts, so what you copied before connecting
+  pastes on the host. Files arrive in a temporary folder
   (`Ping Clipboard` or `Pong Clipboard`, replaced by the next copy) and are
   put on the clipboard as files, so pasting in Finder or Explorer copies
   them from there.
