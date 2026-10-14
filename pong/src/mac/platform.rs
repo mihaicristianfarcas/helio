@@ -141,11 +141,14 @@ impl Platform {
     pub fn display(
         &mut self,
         n: &Negotiated,
-        _req: &SessionStart,
+        req: &SessionStart,
         keep_host_displays: bool,
         cfg: &HostConfig,
     ) -> Result<Display, AckStatus> {
         let (width, height, fps_mhz, video) = (n.width, n.height, n.fps_mhz, n.video);
+        // The client's own density: a 1440p monitor at 100% gets 2560x1440
+        // points, a Retina Mac its Retina scale.
+        let hidpi = pingpong_display::mac_hidpi(width as u32, req.scale_pct);
         // An asleep display cannot be captured at all: wake it first.
         let awake = crate::power::Awake::hold();
         let mode = pingpong_display::DisplayMode {
@@ -157,6 +160,7 @@ impl Platform {
             mode,
             &cfg.name,
             video & control::video::HDR != 0,
+            hidpi,
         ) {
             Ok(mut d) => {
                 if let Err(e) = d.make_main(!keep_host_displays) {
@@ -167,6 +171,8 @@ impl Platform {
                     width,
                     height,
                     fps = fps_mhz as f64 / 1000.0,
+                    hidpi,
+                    client_scale_pct = req.scale_pct,
                     mirrored = !keep_host_displays,
                     "virtual display plugged in"
                 );

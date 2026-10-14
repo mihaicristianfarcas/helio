@@ -110,6 +110,7 @@ mod tests {
             repeat_interval_ms: 0,
             video: 0,
             exact_refresh_mhz: 0,
+            scale_pct: 0,
         }
     }
 

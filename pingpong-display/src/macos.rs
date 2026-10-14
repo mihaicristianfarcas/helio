@@ -7,11 +7,12 @@
 //! treat like a plugged-in monitor. It lives exactly as long as the object:
 //! dropping it unplugs the display.
 //!
-//! At Retina-class sizes the mode is HiDPI at the client's pixels (points =
-//! pixels / 2), so a Retina client sees the host's interface at its own
-//! Retina scale rather than at a quarter of the size; smaller sizes are one
-//! point per pixel, as a monitor of that size would be. It also gives a Mac without a display of
-//! its own (lid closed, a headless mini) something to capture at all.
+//! For a HiDPI client (a Retina Mac, a 4K screen at 150% and up; see
+//! `mac_hidpi`) the mode is HiDPI at the client's pixels (points = pixels /
+//! 2), so it sees the host's interface at its own scale rather than at a
+//! quarter of the size; for others it is one point per pixel, as a monitor
+//! of that size would be. It also gives a Mac without a display of its own
+//! (lid closed, a headless mini) something to capture at all.
 
 use std::ffi::CStr;
 
@@ -32,9 +33,6 @@ use objc2_foundation::{NSArray, NSString};
 
 use crate::{DisplayError, DisplayMode};
 
-/// Widths from which the display is HiDPI (Retina-class clients).
-const HIDPI_FROM_WIDTH: u32 = 2560;
-
 /// The virtual panel's size in pixels, whatever the session's mode (see
 /// `VirtualDisplay::new`); larger sessions get a larger panel.
 const PANEL: (u32, u32) = (3840, 2400);
@@ -54,6 +52,8 @@ pub struct VirtualDisplay {
     _queue: DispatchRetained<DispatchQueue>,
     pub id: u32,
     pub mode: DisplayMode,
+    /// Two pixels a point.
+    pub hidpi: bool,
     /// The arrangement was changed for the session: put the user's back.
     rearranged: bool,
 }
@@ -99,9 +99,14 @@ fn class(name: &CStr) -> Result<&'static AnyClass, DisplayError> {
 }
 
 impl VirtualDisplay {
-    /// Plug in a display of `mode` (pixels; HiDPI), named `name`; an HDR one
-    /// with `hdr`.
-    pub fn new(mode: DisplayMode, name: &str, hdr: bool) -> Result<VirtualDisplay, DisplayError> {
+    /// Plug in a display of `mode` (pixels), named `name`; an HDR one with
+    /// `hdr`, a HiDPI one (two pixels a point) with `hidpi`.
+    pub fn new(
+        mode: DisplayMode,
+        name: &str,
+        hdr: bool,
+        hidpi: bool,
+    ) -> Result<VirtualDisplay, DisplayError> {
         let (w, h) = (mode.width as u32 & !1, mode.height as u32 & !1);
         let hz = mode.refresh_mhz as f64 / 1000.0;
         let queue = DispatchQueue::new("pong.virtual-display", None);
@@ -134,10 +139,6 @@ impl VirtualDisplay {
                 DisplayError::Os("CGVirtualDisplay refused the descriptor".into())
             })?;
 
-            // Retina-class sizes at twice the pixels per point, as the
-            // client's own Mac shows them; smaller ones one to one, as a
-            // 1080p monitor would (at 2x, 1920x1080 is a 960x540 desktop).
-            let hidpi = w >= HIDPI_FROM_WIDTH;
             let (mw, mh) = if hidpi { (w / 2, h / 2) } else { (w, h) };
             let mode_alloc: Allocated<AnyObject> =
                 msg_send![class(c"CGVirtualDisplayMode")?, alloc];
@@ -189,6 +190,7 @@ impl VirtualDisplay {
                     height: h as u16,
                     ..mode
                 },
+                hidpi,
                 rearranged: false,
             };
             // Briefly: arranging it (`make_main`) is when the modes show up
@@ -239,7 +241,7 @@ impl VirtualDisplay {
     /// no modes for a while (seen for over 1.5 s).
     fn settle_mode(&self, within: std::time::Duration) -> bool {
         let (w, h) = (self.mode.width as u32, self.mode.height as u32);
-        let hidpi = w >= HIDPI_FROM_WIDTH;
+        let hidpi = self.hidpi;
         let hz = self.mode.refresh_mhz as f64 / 1000.0;
         let deadline = std::time::Instant::now() + within;
         while !select_mode(self.id, w, h, hidpi, hz) {

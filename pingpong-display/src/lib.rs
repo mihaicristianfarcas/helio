@@ -52,6 +52,22 @@ impl DisplayMode {
     }
 }
 
+/// Whether a Mac host's display for a session is HiDPI (two pixels a point,
+/// a Retina screen's density) rather than one pixel a point: the density
+/// the client's own screen has, so the host's interface comes out the size
+/// the client's does. HiDPI from a client scale of 150% (nearer macOS's 2x
+/// than 1x), and only for streams from 2560 pixels across: below, 2x is a
+/// desktop of 960x540 points or less. A client that does not say its scale
+/// gets HiDPI from 3840 across (4K): a 2560x1440 display at 2x looks like
+/// 1280x720, far too large on the 1440p monitors that size mostly is.
+pub fn mac_hidpi(width: u32, client_scale_pct: u16) -> bool {
+    width >= 2560
+        && match client_scale_pct {
+            0 => width >= 3840,
+            pct => pct >= 150,
+        }
+}
+
 /// Which display the pipeline should capture, and what it is set to.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ActiveDisplay {
@@ -117,6 +133,26 @@ mod tests {
     #[test]
     fn a_whole_rate_is_itself() {
         assert_eq!(mode(120_000).listed_hz([60, 119, 120, 121]), Some(120));
+    }
+
+    #[test]
+    fn a_mac_host_is_hidpi_where_the_client_is() {
+        // A Retina Mac at its native size.
+        assert!(mac_hidpi(3024, 200));
+        // A 1440p monitor at Windows' 100%: one point a pixel, not "720p".
+        assert!(!mac_hidpi(2560, 100));
+        assert!(!mac_hidpi(2560, 125));
+        // 4K at 150%.
+        assert!(mac_hidpi(3840, 150));
+        // A Retina client streaming 1080p: 2x would be 960x540 points.
+        assert!(!mac_hidpi(1920, 200));
+    }
+
+    #[test]
+    fn a_client_that_does_not_say_its_scale_is_hidpi_from_4k() {
+        assert!(!mac_hidpi(2560, 0));
+        assert!(!mac_hidpi(3024, 0));
+        assert!(mac_hidpi(3840, 0));
     }
 
     #[test]

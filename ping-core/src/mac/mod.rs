@@ -50,6 +50,18 @@ pub fn display_refresh_mhz() -> Option<u32> {
     (hz > 1.0).then(|| (hz * 1000.0).round() as u32)
 }
 
+/// The main display's pixels per point, in percent: 200 in any HiDPI mode
+/// ("looks like" sizes included), 100 in a one-to-one one.
+pub fn display_scale_pct() -> Option<u16> {
+    use objc2_core_graphics::{CGDisplayCopyDisplayMode, CGDisplayMode, CGMainDisplayID};
+    let mode = CGDisplayCopyDisplayMode(CGMainDisplayID())?;
+    let (pixels, points) = (
+        CGDisplayMode::pixel_width(Some(&mode)),
+        CGDisplayMode::width(Some(&mode)),
+    );
+    (points > 0).then(|| (pixels * 100 / points) as u16)
+}
+
 struct SendLayer(Retained<CAMetalLayer>);
 // SAFETY: CAMetalLayer is documented as usable from a rendering thread; the
 // render thread is the only one that draws into it.

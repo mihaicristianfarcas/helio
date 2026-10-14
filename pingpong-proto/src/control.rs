@@ -97,6 +97,12 @@ pub struct SessionStart {
     /// a 0.7 Windows host refused a fractional one there. Absent from older
     /// clients (0).
     pub exact_refresh_mhz: u32,
+    /// The client display's scale, in percent: 200 on a Retina Mac, the
+    /// Windows scaling (100, 125, 150…) elsewhere; 0 = unknown. A host that
+    /// makes a display for the session gives it the same density, so its
+    /// interface comes out the size the client's own does (a Mac host makes
+    /// it HiDPI only for a client that is). Absent from older clients (0).
+    pub scale_pct: u16,
 }
 
 /// `SessionStart::video` (what the client can show and asks for) and
@@ -622,6 +628,7 @@ impl Control {
                 w.u16(s.repeat_interval_ms);
                 w.u8(s.video);
                 w.u32(s.exact_refresh_mhz);
+                w.u16(s.scale_pct);
             }
             Control::SessionAck(a) => {
                 w.u8(OP_SESSION_ACK);
@@ -795,6 +802,7 @@ impl Control {
                 repeat_interval_ms: r.u16().unwrap_or(0),
                 video: r.u8().unwrap_or(0),
                 exact_refresh_mhz: r.u32().unwrap_or(0),
+                scale_pct: r.u16().unwrap_or(0),
             }),
             OP_SESSION_ACK => Control::SessionAck(SessionAck {
                 status: AckStatus::from_code(r.u8()?),
@@ -931,6 +939,7 @@ mod tests {
             repeat_interval_ms: 30,
             video: video::HDR | video::YUV444,
             exact_refresh_mhz: 119_880,
+            scale_pct: 200,
         }));
         round_trip(Control::SessionAck(SessionAck {
             status: AckStatus::Ok,
@@ -1063,10 +1072,11 @@ mod tests {
             repeat_interval_ms: 40,
             video: video::YUV444,
             exact_refresh_mhz: 59_940,
+            scale_pct: 125,
         })
         .encode(0, &mut out);
         // What follows the nonce is optional: an older client's request.
-        let optional = 1 + 2 + 2 + 1 + 4;
+        let optional = 1 + 2 + 2 + 1 + 4 + 2;
         for cut in HEADER_LEN..n - optional {
             assert_eq!(Control::decode(&out[HEADER_LEN..cut]), None);
         }
@@ -1077,26 +1087,33 @@ mod tests {
             ),
             other => panic!("{other:?}"),
         }
-        match Control::decode(&out[HEADER_LEN..n - 4 - 3]) {
+        match Control::decode(&out[HEADER_LEN..n - 2 - 4 - 3]) {
             Some(Control::SessionStart(s)) => assert_eq!(
                 (s.app, s.repeat_delay_ms, s.repeat_interval_ms, s.video),
                 (app::STEAM_BIG_PICTURE, 500, 0, 0)
             ),
             other => panic!("{other:?}"),
         }
-        match Control::decode(&out[HEADER_LEN..n - 4 - 1]) {
+        match Control::decode(&out[HEADER_LEN..n - 2 - 4 - 1]) {
             Some(Control::SessionStart(s)) => assert_eq!((s.repeat_interval_ms, s.video), (40, 0)),
             other => panic!("{other:?}"),
         }
         // A client from before the exact refresh: the whole rate alone.
-        match Control::decode(&out[HEADER_LEN..n - 4]) {
+        match Control::decode(&out[HEADER_LEN..n - 2 - 4]) {
             Some(Control::SessionStart(s)) => {
                 assert_eq!((s.video, s.exact_refresh_mhz), (video::YUV444, 0))
             }
             other => panic!("{other:?}"),
         }
+        // One from before the scale: unknown.
+        match Control::decode(&out[HEADER_LEN..n - 2]) {
+            Some(Control::SessionStart(s)) => {
+                assert_eq!((s.exact_refresh_mhz, s.scale_pct), (59_940, 0))
+            }
+            other => panic!("{other:?}"),
+        }
         match Control::decode(&out[HEADER_LEN..n]) {
-            Some(Control::SessionStart(s)) => assert_eq!(s.exact_refresh_mhz, 59_940),
+            Some(Control::SessionStart(s)) => assert_eq!(s.scale_pct, 125),
             other => panic!("{other:?}"),
         }
         // So is the ack's last (the host's system): an older host is Windows.

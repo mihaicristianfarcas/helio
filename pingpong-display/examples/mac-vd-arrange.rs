@@ -20,6 +20,8 @@ fn main() {
         },
         "Pong",
         false,
+        // HiDPI as for a Retina client.
+        pingpong_display::mac_hidpi(1280, 200),
     )
     .expect("virtual display");
     vd.make_main(mirror).expect("arrange");

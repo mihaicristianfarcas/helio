@@ -36,6 +36,7 @@ fn main() {
             },
             "Pong",
             false,
+            false,
         )
         .expect("virtual display")
     });

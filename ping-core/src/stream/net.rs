@@ -961,6 +961,7 @@ fn session_start(settings: &StreamSettings, nonce: u32) -> SessionStart {
         repeat_interval_ms,
         video: settings.video,
         exact_refresh_mhz: exact_rate(settings.fps, display_refresh_mhz()),
+        scale_pct: display_scale_pct().unwrap_or(0),
     }
 }
 
@@ -974,6 +975,23 @@ fn display_refresh_mhz() -> Option<u32> {
     #[cfg(windows)]
     {
         crate::win::display_refresh_mhz()
+    }
+    #[cfg(not(any(target_os = "macos", windows)))]
+    {
+        None
+    }
+}
+
+/// This computer's display scale in percent (200 on a Retina Mac), where
+/// the platform says: the host's display for the session takes the same.
+fn display_scale_pct() -> Option<u16> {
+    #[cfg(target_os = "macos")]
+    {
+        crate::mac::display_scale_pct()
+    }
+    #[cfg(windows)]
+    {
+        crate::win::display_scale_pct()
     }
     #[cfg(not(any(target_os = "macos", windows)))]
     {
