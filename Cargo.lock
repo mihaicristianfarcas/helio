@@ -5884,9 +5884,11 @@ dependencies = [
  "objc2-foundation 0.3.2",
  "objc2-screen-capture-kit",
  "parking_lot",
+ "pingpong-display",
  "pipewire",
  "png 0.18.1",
  "tracing",
+ "tracing-subscriber",
  "windows 0.61.3",
  "x11rb",
 ]

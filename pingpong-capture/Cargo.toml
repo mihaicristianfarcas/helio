@@ -51,6 +51,11 @@ parking_lot = "0.12"
 pipewire = "0.10"
 x11rb = { version = "0.13", features = ["shm", "damage", "xfixes"] }
 
+[target.'cfg(target_os = "macos")'.dev-dependencies]
+# The examples' log, and a display of their own to capture (sck-restart).
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+pingpong-display = { path = "../pingpong-display" }
+
 [target.'cfg(target_os = "linux")'.dev-dependencies]
 png = "0.18"
 x11rb = { version = "0.13", features = ["xtest"] }
