@@ -903,6 +903,43 @@ pub struct Window {
     pub view: Retained<StreamView>,
     pub layer: Retained<CAMetalLayer>,
     _delegate: Retained<WindowDelegate>,
+    /// The monitor that hears key-ups AppKit keeps from the view
+    /// (`watch_command_key_ups`), until the window closes.
+    key_ups: RefCell<Option<Retained<objc2::runtime::AnyObject>>>,
+}
+
+/// AppKit never hands a window the key-up of a key pressed while Command is
+/// held: -[NSApplication sendEvent:] keeps it (Cmd+V's V). The host then
+/// holds that key down for good and repeats it -- Cmd+V typed "vvvv…" into a
+/// Windows host's search box. A local monitor sees each event before
+/// `sendEvent:` does, so the stream hears those key-ups there, as GLFW's
+/// does (`cocoa_init.m`, `keyUpMonitor`). One that reaches the view as well
+/// is harmless: a key up is sent only for a key held.
+fn watch_command_key_ups(
+    view: &Retained<StreamView>,
+) -> Option<Retained<objc2::runtime::AnyObject>> {
+    let weak = objc2::rc::Weak::from_retained(view);
+    let block = block2::RcBlock::new(move |event: std::ptr::NonNull<NSEvent>| -> *mut NSEvent {
+        // SAFETY: AppKit hands the monitor a live event for the call.
+        let e = unsafe { event.as_ref() };
+        if e.modifierFlags().contains(NSEventModifierFlags::Command) {
+            if let Some(view) = weak.load() {
+                if view.window().is_some_and(|w| w.isKeyWindow()) {
+                    view.with(|h| h.key(e, false));
+                }
+            }
+        }
+        // On to the app as usual.
+        event.as_ptr()
+    });
+    // SAFETY: the block lives as long as the monitor (AppKit copies it), and
+    // only reads the event it is given on the main thread.
+    unsafe {
+        NSEvent::addLocalMonitorForEventsMatchingMask_handler(
+            objc2_app_kit::NSEventMask::KeyUp,
+            &block,
+        )
+    }
 }
 
 impl Window {
@@ -978,16 +1015,23 @@ impl Window {
             retry_fullscreen(FULLSCREEN_TRIES);
         }
         view.publish_layout();
+        let key_ups = RefCell::new(watch_command_key_ups(&view));
         Window {
             window,
             view,
             layer,
             _delegate: delegate,
+            key_ups,
         }
     }
 
     pub fn close(&self) {
         FULLSCREEN_WANTED.store(false, Ordering::Relaxed);
+        if let Some(monitor) = self.key_ups.borrow_mut().take() {
+            // SAFETY: a monitor `addLocalMonitorForEventsMatchingMask` gave,
+            // removed once (taken).
+            unsafe { NSEvent::removeMonitor(&monitor) };
+        }
         self.view.with(|h| set_capture(h, false));
         // Either way: Ctrl+Alt+Shift+X may have made a window full screen.
         if let Some(mtm) = MainThreadMarker::new() {
