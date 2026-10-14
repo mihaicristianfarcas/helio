@@ -79,7 +79,7 @@ says which system the host runs (so Ping forwards Command as Command).
 
 | | Windows host | macOS host |
 |---|---|---|
-| Display for the session | SudoVDA virtual display, primary, others off | `CGVirtualDisplay` (private CoreGraphics) in the stream's mode (HiDPI from 2560 px wide), main, the Mac's own displays mirroring it |
+| Display for the session | SudoVDA virtual display, primary, others off | `CGVirtualDisplay` (private CoreGraphics) in the stream's mode (HiDPI when the client's own screen is, see below), main, the Mac's own displays mirroring it |
 | Capture | Desktop Duplication | ScreenCaptureKit, NV12 video range, BT.709; for HDR its HDR10 capture (`x420`, BT.2100 PQ) |
 | Colour conversion | D3D11 shaders | none (ScreenCaptureKit delivers NV12) |
 | Encoder | NVENC, reference invalidation | VideoToolbox hardware HEVC/H.264 (HEVC Main10 for HDR), low-latency rate control, recovery from long-term references |
@@ -205,6 +205,14 @@ seconds and prints each channel's level.
   is a stopped capture. The client keeps the last picture meanwhile.
   Measured with `replayd` (which serves every capture) killed mid-capture:
   the picture and the sound ran again 0.2 s after the 2 s.
+- **The display's density follows the client's screen.** A client says its
+  scale (200% for a Retina Mac, Windows' Scale setting), and the session's
+  display is HiDPI (two pixels a point) for a client at 150% or more, at
+  2560 px across or wider: a Retina Mac sees the host at its own scale, a
+  1440p monitor at 100% gets a 2560x1440 desktop rather than one that
+  looks like 1280x720. A client that does not say gets HiDPI from 3840 px
+  across. Another resolution picked in System Settings mid-session is
+  followed by the keyboard and mouse at once.
 - **Loss recovery** uses VideoToolbox's long-term references. The protocol
   has no per-frame acknowledgement, so Pong counts a frame as arrived once
   200 ms pass with no loss reported for it, and acknowledges it to the

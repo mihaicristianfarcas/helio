@@ -471,6 +471,25 @@ pub fn display_refresh_mhz() -> Option<u32> {
     }
 }
 
+/// The scaling Windows gives the monitor the pointer is on (Settings >
+/// Display > Scale), in percent: 100 at 96 DPI. Read per-monitor aware
+/// (`Session::open` says so first); a process that is not gets 96 always.
+pub fn display_scale_pct() -> Option<u16> {
+    use windows::Win32::Foundation::POINT;
+    use windows::Win32::Graphics::Gdi::{MonitorFromPoint, MONITOR_DEFAULTTOPRIMARY};
+    use windows::Win32::UI::HiDpi::{GetDpiForMonitor, MDT_EFFECTIVE_DPI};
+    use windows::Win32::UI::WindowsAndMessaging::GetCursorPos;
+    // SAFETY: plain Win32 queries into locals.
+    unsafe {
+        let mut p = POINT::default();
+        let _ = GetCursorPos(&mut p);
+        let monitor = MonitorFromPoint(p, MONITOR_DEFAULTTOPRIMARY);
+        let (mut x, mut y) = (0u32, 0u32);
+        GetDpiForMonitor(monitor, MDT_EFFECTIVE_DPI, &mut x, &mut y).ok()?;
+        (x > 0).then(|| (x * 100 / 96).min(u16::MAX as u32) as u16)
+    }
+}
+
 /// The display a stream would fill: the monitor the pointer is on, at its
 /// current mode (Moonlight's "native" resolution and its refresh rate).
 pub fn native_mode() -> NativeMode {

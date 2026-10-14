@@ -39,6 +39,8 @@ fn main() {
             },
             "Pong",
             false,
+            // HiDPI as for a Retina client.
+            pingpong_display::mac_hidpi(w as u32, 200),
         ) {
             Ok(vd) => vd,
             Err(e) => {
