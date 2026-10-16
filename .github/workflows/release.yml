@@ -1,11 +1,12 @@
 # A release, from every push to main that changes the programs: Ping and Pong
 # built on macOS (Apple silicon and Intel), Windows and Linux, and published
 # as the website's downloads (tools/publish-downloads: Cloudflare R2, served
-# at downloads.ping-pong.sh; the website is on the landing-page branch). When the workspace's version (Cargo.toml's
-# [workspace.package]) has no tag yet, the same archives become the GitHub
-# release vVERSION too, and a pull request brings the Homebrew casks
-# (Casks/) to it (main takes changes only through pull requests). So
-# releasing a version is merging the change that sets it.
+# at download.pingpong.mihaicristian.dev; the website is on the landing-page
+# branch). When the workspace's version (Cargo.toml's [workspace.package])
+# has no tag yet, the same archives become the GitHub release vVERSION too,
+# and a pull request brings the Homebrew casks (Casks/) to it (main takes
+# changes only through pull requests). So releasing a version is merging the
+# change that sets it.
 #
 # workflow_dispatch: to run it by hand. On main it publishes as a push does;
 # on another branch it only builds, and the archives are the run's

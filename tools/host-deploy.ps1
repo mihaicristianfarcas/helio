@@ -86,7 +86,7 @@ function Write-Entry {
         DisplayIcon     = $icon
         InstallLocation = $dest
         InstallDate     = Get-Date -Format 'yyyyMMdd'
-        URLInfoAbout    = 'https://ping-pong.sh'
+        URLInfoAbout    = 'https://pingpong.mihaicristian.dev'
         # Started by Settings as the user: the script asks for an
         # administrator itself, as "Install Pong.cmd" does.
         UninstallString = '"{0}" -NoProfile -ExecutionPolicy Bypass -File "{1}" -Uninstall' -f

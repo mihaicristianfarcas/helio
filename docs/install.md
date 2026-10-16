@@ -3,9 +3,10 @@
 pingpong has two programs: **Ping**, the client, on the computer you sit at,
 and **Pong**, the host, on the computer you stream. Every system has them
 ready to [download](#from-the-website) from
-[ping-pong.sh](https://ping-pong.sh/#install); on a Mac they also install
-with [Homebrew](#with-homebrew-macos), and everywhere they build from this
-repository with Rust. Pick the sections for your systems:
+[pingpong.mihaicristian.dev](https://pingpong.mihaicristian.dev/#install);
+on a Mac they also install with [Homebrew](#with-homebrew-macos), and
+everywhere they build from this repository with Rust. Pick the sections for
+your systems:
 
 | | macOS 14+ | Windows 10/11 | Linux |
 |---|---|---|---|
@@ -16,12 +17,12 @@ Then [pair them](#pairing).
 
 ## From the website
 
-[ping-pong.sh](https://ping-pong.sh/#install) asks which computer you are
-installing on and what it runs, and gives you its download: the newest
-build of the `main` branch, made by the release workflow
-([development.md](development.md#releases)). The files keep their
+[pingpong.mihaicristian.dev](https://pingpong.mihaicristian.dev/#install)
+asks which computer you are installing on and what it runs, and gives you
+its download: the newest build of the `main` branch, made by the release
+workflow ([development.md](development.md#releases)). The files keep their
 addresses from one build to the next, for scripts, under
-`https://downloads.ping-pong.sh/latest/`:
+`https://download.pingpong.mihaicristian.dev/latest/`:
 
 | | macOS, Apple silicon | macOS, Intel | Windows, x86_64 | Linux, x86_64 |
 |---|---|---|---|---|
