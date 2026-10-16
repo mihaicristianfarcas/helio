@@ -7,7 +7,7 @@ import { defineConfig, fontProviders } from 'astro/config';
 // A normal build targets the public domain, so its canonical URL and crawl
 // files do not depend on the deployment's environment.
 export default defineConfig({
-  site: process.env.SITE_URL || 'https://ping-pong.sh',
+  site: process.env.SITE_URL || 'https://pingpong.mihaicristian.dev',
   base: process.env.BASE_PATH || '/',
   // HTML's whitespace rules rather than JSX's (Astro's default), so prose
   // can wrap in the source without losing the space before a link.
