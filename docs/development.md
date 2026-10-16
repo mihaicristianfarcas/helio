@@ -266,10 +266,16 @@ release in `Casks/ping.rb`, so a new release shows on its next build. Its
 downloads are the newest build of `main` ([Releases](#releases)): the page
 links their fixed names (`src/lib/downloads.ts`) and, as it loads, reads
 `latest.json` for the version and the sizes. The page lives on the
-`landing-page` branch only, rebased on `main` and never merged into it;
-Cloudflare Pages builds
-[pingpong.mihaicristian.dev](https://pingpong.mihaicristian.dev) from
-there.
+`landing-page` branch only, rebased on `main` and never merged into it.
+Each push to that branch that changes `site/`, `Casks/` or the icons runs
+`.github/workflows/site.yml`, which builds the page and deploys it with
+wrangler to the Cloudflare Worker `pingpong-site` (`site/wrangler.jsonc`):
+static assets only, at
+[pingpong.mihaicristian.dev](https://pingpong.mihaicristian.dev), a custom
+domain whose DNS record the Worker owns. The workflow signs in with the
+repository's secret `CLOUDFLARE_SITE_TOKEN`, an API token from the **Edit
+Cloudflare Workers** template for the account and the zone
+`mihaicristian.dev`.
 
 ```sh
 cd site
@@ -278,14 +284,16 @@ npm run dev       # http://localhost:4321, reloading as you edit
 npm run build     # astro check, then the page in site/dist/
 npm run preview   # serves site/dist/
 npm test          # builds the page, then checks its DOM keyboard behaviour
+npx wrangler deploy   # after a build: deploys site/dist/, as the workflow does
 ```
 
 `SITE_URL` (default `https://pingpong.mihaicristian.dev`) and `BASE_PATH`
-(default `/`) set the deployment URL and path. The canonical URL, link-preview image
-URLs, software structured data, `robots.txt` and `sitemap.xml` all use that
-deployment URL. The sitemap lists the landing page, without section anchors or a
-build-time last-modified date. Preview deployments should use their host’s
-indexing controls to keep previews out of search results.
+(default `/`) set the deployment URL and path. The canonical URL,
+link-preview image URLs, software structured data, `robots.txt` and
+`sitemap.xml` all use that deployment URL. The sitemap lists the landing
+page, without section anchors or a build-time last-modified date. Preview
+deployments should use their host’s indexing controls to keep previews out
+of search results.
 
 What it shows is made from the apps, by scripts in `site/scripts/`:
 
