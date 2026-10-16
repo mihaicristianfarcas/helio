@@ -3,10 +3,10 @@
 One page, built with [Astro](https://astro.build): real screenshots of the
 apps, and a real stream recorded in the Linux container.
 
-Builds target `https://ping-pong.sh` by default, including the canonical
-URL, link previews, software structured data, `robots.txt` and
-`sitemap.xml`. Set `SITE_URL` and `BASE_PATH` when building for another
-domain or a project path.
+Builds target `https://pingpong.mihaicristian.dev` by default, including
+the canonical URL, link previews, software structured data, `robots.txt`
+and `sitemap.xml`. Set `SITE_URL` and `BASE_PATH` when building for
+another domain or a project path.
 
 ```sh
 npm install
