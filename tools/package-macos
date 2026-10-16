@@ -50,7 +50,18 @@ if [[ -n ${APPLE_API_KEY_PATH:-} ]]; then
         exit 1
     fi
     for app in "${APPS[@]}"; do
-        xcrun stapler staple -q "$app"
+        # stapler fetches each app's ticket from Apple's servers, and a
+        # runner sometimes cannot reach them: exit 68 (EX_NOHOST) for one of
+        # the three apps, a different one each time, right after the
+        # submission was accepted. Ask again, waiting longer each time.
+        for attempt in 1 2 3 4 5; do
+            xcrun stapler staple "$app" && break
+            if ((attempt == 5)); then
+                echo "stapler: no ticket for $app after $attempt attempts" >&2
+                exit 1
+            fi
+            sleep $((attempt * 15))
+        done
         # What Gatekeeper will say of the download: "Notarized Developer ID".
         spctl --assess --type execute -vv "$app"
     done
