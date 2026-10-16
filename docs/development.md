@@ -174,16 +174,17 @@ Every push to `main` that changes the programs is built and published:
 `.github/workflows/release.yml` builds Ping and Pong on an Apple silicon
 and an Intel Mac, on Windows and on Linux, and publishes the archives as
 the website's downloads. Pushes that change only `docs/`, `Casks/` or
-Markdown files build nothing. The website, [ping-pong.sh](https://ping-pong.sh),
-is not on `main`: it lives on the `landing-page` branch, which is rebased
-on `main` when it needs to be and never merged into it.
+Markdown files build nothing. The website,
+[pingpong.mihaicristian.dev](https://pingpong.mihaicristian.dev), is not on
+`main`: it lives on the `landing-page` branch, which is rebased on `main`
+when it needs to be and never merged into it.
 
 | Script | Makes |
 |---|---|
 | `tools/package-macos` | `Ping-VERSION-macos-ARCH.zip` (Ping.app) and `Pong-VERSION-macos-ARCH.zip` (Pong.app, Pong Control.app) |
 | `tools/package-windows.ps1` | `Ping-VERSION-windows-x86_64.zip` (Ping.exe beside FFmpeg's DLLs, `install.ps1`, which is `tools/install-ping.ps1`, and `Install Ping.cmd`) and `Pong-VERSION-windows-x86_64.zip` (pong.exe, Pong Control.exe, `install.ps1`, which is `tools/host-deploy.ps1`, and `Install Pong.cmd`). Each `install.ps1` copies itself beside the programs and lists them in Settings > Apps, whose **Uninstall** runs it with `-Uninstall` |
 | `tools/linux/package` | `Ping-VERSION-linux-ARCH.tar.gz` and `Pong-VERSION-linux-ARCH.tar.gz`, each a folder with the programs, launcher entries, icons and `install.sh` (`tools/linux/install-release`) |
-| `tools/publish-downloads DIST` | The downloads: each archive at `https://downloads.ping-pong.sh/latest/APP-OS-ARCH.EXT`, then `latest/SHA256SUMS` and `latest.json` (version, commit, sizes, checksums), in the Cloudflare R2 bucket `pingpong-downloads`, with wrangler |
+| `tools/publish-downloads DIST` | The downloads: each archive at `https://download.pingpong.mihaicristian.dev/latest/APP-OS-ARCH.EXT`, then `latest/SHA256SUMS` and `latest.json` (version, commit, sizes, checksums), in the Cloudflare R2 bucket `pingpong-downloads`, with wrangler |
 
 All of them build with `PINGPONG_RELEASE=1`, so the programs follow
 releases, not `main`. The downloads keep their names from one build to the

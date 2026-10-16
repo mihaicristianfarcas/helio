@@ -89,7 +89,7 @@ function Write-Entry {
         DisplayIcon     = $exe
         InstallLocation = $dest
         InstallDate     = Get-Date -Format 'yyyyMMdd'
-        URLInfoAbout    = 'https://ping-pong.sh'
+        URLInfoAbout    = 'https://pingpong.mihaicristian.dev'
         # Its window stays open to show how it went, as Pong's installer's.
         UninstallString = '"{0}" -NoProfile -ExecutionPolicy Bypass -NoExit -File "{1}" -Uninstall' -f
             $powershell, (Join-Path $dest 'install.ps1')

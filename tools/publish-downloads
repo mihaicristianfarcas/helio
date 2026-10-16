@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Publish a release's archives as the website's downloads: Cloudflare R2
-# (the bucket pingpong-downloads, served at downloads.ping-pong.sh), with
-# wrangler.
+# (the bucket pingpong-downloads, served at
+# download.pingpong.mihaicristian.dev), with wrangler.
 #
 #   tools/publish-downloads DIST_DIR
 #
@@ -24,7 +24,7 @@ set -euo pipefail
 REPO=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 DIST=${1:?usage: publish-downloads DIST_DIR}
 BUCKET=${DOWNLOADS_BUCKET:-pingpong-downloads}
-BASE=${DOWNLOADS_URL:-https://downloads.ping-pong.sh}
+BASE=${DOWNLOADS_URL:-https://download.pingpong.mihaicristian.dev}
 VERSION=$(sed -n '/^\[workspace.package\]/,/^\[/ s/^version = "\(.*\)"/\1/p' "$REPO/Cargo.toml")
 COMMIT=${PINGPONG_COMMIT:-$(git -C "$REPO" rev-parse HEAD)}
 export WRANGLER_SEND_METRICS=false
