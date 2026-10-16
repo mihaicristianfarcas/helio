@@ -3,7 +3,7 @@
 // same from one release to the next, so the page links them as they are;
 // latest.json says which build they are, and the page reads it as it loads.
 
-export const DOWNLOADS = 'https://downloads.ping-pong.sh';
+export const DOWNLOADS = 'https://download.pingpong.mihaicristian.dev';
 
 /** What the archives are: version, commit, and each file's size and SHA-256. */
 export const MANIFEST = `${DOWNLOADS}/latest.json`;
