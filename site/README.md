@@ -13,7 +13,12 @@ npm install
 npm run dev       # http://localhost:4321
 npm run build     # astro check, then site/dist/
 npm test          # build and DOM keyboard regressions
+npx wrangler deploy   # after a build: site/dist/ to pingpong.mihaicristian.dev
 ```
+
+A push to the `landing-page` branch deploys it by itself
+(`.github/workflows/site.yml`), to the Cloudflare Worker that
+`wrangler.jsonc` describes.
 
 Tab and Shift+Tab visit clickable links, buttons and FAQ toggles in page
 order, from the header to the footer. Every gallery choice and download

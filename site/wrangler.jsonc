@@ -1,0 +1,19 @@
+// The website as a Cloudflare Worker that serves only static assets: the
+// page Astro builds into dist/ (npm run build), at pingpong.mihaicristian.dev.
+// The custom domain makes wrangler create and own the hostname's DNS record
+// and certificate. .github/workflows/site.yml deploys it on each push to
+// landing-page; `npx wrangler deploy` here does the same by hand.
+{
+  "name": "pingpong-site",
+  "compatibility_date": "2026-10-01",
+  "assets": {
+    "directory": "./dist"
+  },
+  "routes": [
+    { "pattern": "pingpong.mihaicristian.dev", "custom_domain": true }
+  ],
+  // Only the custom domain: no *.workers.dev address and no preview URLs,
+  // so the page is never served, or indexed, under a second name.
+  "workers_dev": false,
+  "preview_urls": false
+}
