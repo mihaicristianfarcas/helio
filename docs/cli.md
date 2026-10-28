@@ -57,7 +57,7 @@ reason other than you quitting.
 
 | Command | Does |
 |---|---|
-| `pong` or `pong host` | Run the host in this session |
+| `pong` or `pong host` | Run the host in this session. On a Mac the host's LaunchAgent adds `--app PATH`, the app the host came with: the host follows it when it is replaced and turns hosting off when it is gone ([platforms/macos.md](platforms/macos.md#hosting-from-ping-and-its-menu-bar-icon)) |
 | `pong enable` | Turn hosting on: the host starts now and at every start after (see [usage.md](usage.md#hosting-on-and-off)). Windows: as administrator |
 | `pong disable` | Turn hosting off: the host stops and no longer starts. Windows: as administrator |
 | `pong status [--json]` | `off`, `starting`, `on` or `failed` (with why); for `on`, whether the host's web API answers on this computer |

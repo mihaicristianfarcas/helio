@@ -10,7 +10,8 @@
 //!   administrator: without one, the command changes nothing and exits with
 //!   [`NEEDS_ELEVATION`], and the app runs it again through UAC.
 //! - macOS: a LaunchAgent that runs `pong host` from a copy of the helper
-//!   app this `pong` is in (`hosting/mac.rs`).
+//!   app this `pong` is in, which follows that app when it is replaced
+//!   (an update) and stops when it is gone (`hosting/mac.rs`).
 //! - Linux: the systemd user unit `pong.service`
 //!   (`tools/linux/pong.service`), `systemctl --user enable|disable --now`
 //!   (`hosting/linux.rs`).
