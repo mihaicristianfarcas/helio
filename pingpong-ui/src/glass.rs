@@ -10,9 +10,12 @@
 //!   1809 and later), the nearest Windows has to blur behind a window. Mica
 //!   is Windows 11's own material, but it tints with the wallpaper rather
 //!   than blurring what is behind.
-//! - Linux: GPUI blurs through KDE's `org_kde_kwin_blur`, on Plasma under
-//!   Wayland only. Elsewhere (GNOME, X11) a "blurred" window would just be
-//!   see-through, so it is opaque and the theme's surfaces are solid.
+//! - Linux: GPUI blurs through KDE's `org_kde_kwin_blur`, under Wayland,
+//!   where the compositor offers it: KWin does while it blurs (its blur
+//!   effect on, compositing with OpenGL), not when it draws with QPainter
+//!   (no GPU). Elsewhere (GNOME, X11, KWin without blur) a "blurred" window
+//!   would just be see-through, so it is opaque and the theme's surfaces
+//!   are solid. Whether it is offered is asked of the compositor once.
 //!
 //! No GPUI shadows on glass: under a translucent element a shadow fills
 //! under it too, and turned it near black (asides' AGENTS.md). Shadows stay
@@ -22,13 +25,54 @@ use gpui::WindowBackgroundAppearance;
 
 /// Whether this system's windows are glass (see the module's words).
 pub fn supported() -> bool {
-    if cfg!(any(target_os = "macos", windows)) {
-        return true;
+    #[cfg(target_os = "linux")]
+    {
+        static BLURS: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+        *BLURS.get_or_init(|| {
+            let blurs = compositor_blurs();
+            tracing::info!(glass = blurs, "the compositor's blur");
+            blurs
+        })
     }
-    let wayland = std::env::var_os("WAYLAND_DISPLAY").is_some_and(|v| !v.is_empty());
-    let kde = std::env::var("XDG_CURRENT_DESKTOP")
-        .is_ok_and(|d| d.split(':').any(|d| d.eq_ignore_ascii_case("KDE")));
-    wayland && kde
+    #[cfg(not(target_os = "linux"))]
+    true
+}
+
+/// Whether the Wayland compositor GPUI draws through offers KDE's blur
+/// (`org_kde_kwin_blur_manager`). Not under X11: GPUI takes Wayland when
+/// there is one.
+#[cfg(target_os = "linux")]
+fn compositor_blurs() -> bool {
+    use wayland_client::protocol::wl_registry::{self, WlRegistry};
+    use wayland_client::{Connection, Dispatch, QueueHandle};
+
+    struct Offered(bool);
+    impl Dispatch<WlRegistry, ()> for Offered {
+        fn event(
+            offered: &mut Self,
+            _: &WlRegistry,
+            event: wl_registry::Event,
+            _: &(),
+            _: &Connection,
+            _: &QueueHandle<Self>,
+        ) {
+            if let wl_registry::Event::Global { interface, .. } = event {
+                offered.0 |= interface == "org_kde_kwin_blur_manager";
+            }
+        }
+    }
+
+    if std::env::var_os("WAYLAND_DISPLAY").is_none_or(|v| v.is_empty()) {
+        return false;
+    }
+    let Ok(connection) = Connection::connect_to_env() else {
+        return false;
+    };
+    let mut queue = connection.new_event_queue();
+    let _registry = connection.display().get_registry(&queue.handle(), ());
+    let mut offered = Offered(false);
+    // One round trip: the registry has said every global by its end.
+    queue.roundtrip(&mut offered).is_ok() && offered.0
 }
 
 /// What a main window's background is: glass where [`supported`].

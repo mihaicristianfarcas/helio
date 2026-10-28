@@ -29,8 +29,10 @@ line of its standard output. That process is `ping_core::linux`:
   and an icon, named after the window's app id (`dev.pingpong.Ping`), so
   the dock and the task switcher show it under its own icon, under Wayland
   and X11.
-- **The window's glass.** GPUI blurs behind a window only on KDE Plasma
-  under Wayland; elsewhere the window is opaque, in the same colours
+- **The window's glass.** GPUI blurs behind a window only under Wayland,
+  where the compositor offers KDE's blur (KWin, its blur effect on and
+  compositing with OpenGL); elsewhere, KWin drawing without a GPU
+  included, the window is opaque, in the same colours
   ([../ui.md](../ui.md#the-glass-on-each-system)).
 - **No tray icon for hosting.** There is no one tray on Linux (the
   StatusNotifier protocol needs a D-Bus service and a menu protocol of its
