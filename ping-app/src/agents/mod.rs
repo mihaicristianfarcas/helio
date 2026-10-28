@@ -405,9 +405,12 @@ impl PingApp {
 
     /// No host lets the agent in yet: say what that means and offer it.
     fn agents_first_host(&mut self, t: Theme, cx: &mut Context<Self>) -> AnyElement {
+        let scroll = self.page_scroll.clone();
         page_body(
             "agents-first",
-            Metrics::FORM,
+            &scroll,
+            t,
+            Metrics::FORM + 60.0,
             div()
                 .flex()
                 .flex_col()
@@ -449,9 +452,12 @@ impl PingApp {
     ) -> AnyElement {
         let host = self.agents.host.clone();
         let existing = self.agents.chats.iter().any(|c| c.host == host);
+        let scroll = self.page_scroll.clone();
         page_body(
             "agents-new",
-            Metrics::FORM,
+            &scroll,
+            t,
+            Metrics::FORM + 60.0,
             div()
                 .flex()
                 .flex_col()
@@ -622,14 +628,14 @@ impl PingApp {
             .items_center()
             .justify_center()
             .bg(if can_run {
-                t.solid()
+                t.accent
             } else {
                 t.primary.alpha(0.12)
             })
             .child(icon(
                 IconName::ArrowUp,
                 16.0,
-                if can_run { t.on_solid() } else { t.quaternary },
+                if can_run { t.on_accent } else { t.quaternary },
             ))
             .when(can_run, |d| {
                 d.cursor_pointer()

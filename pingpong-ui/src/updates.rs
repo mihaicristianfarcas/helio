@@ -6,9 +6,7 @@
 
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use gpui::{
-    div, prelude::*, px, App, ClipboardItem, ElementId, FontWeight, SharedString, Stateful, Window,
-};
+use gpui::{div, prelude::*, px, App, ClipboardItem, FontWeight, SharedString, Stateful, Window};
 use pingpong_update::{Build, Channel, Install, Program, Status, Update};
 
 use crate::controls::{button, select, setting, spinner, Choice};
@@ -49,25 +47,25 @@ fn interrupts(program: Program) -> &'static str {
 /// there is nothing newer. The caller makes a click open the sheet.
 pub fn notice(app: &UpdateApp, status: &Status, t: Theme) -> Option<Stateful<gpui::Div>> {
     let update = status.update.as_ref()?;
+    // asides' foot: a row like the pages', the update in green.
+    let tint = t.ink(crate::Ink::FRESH);
     Some(
         div()
             .id("update-notice")
+            .flex_none()
             .mx(px(8.0))
+            .mb(px(4.0))
+            .h(px(crate::Metrics::NAV_ROW))
             .px(px(8.0))
-            .py(px(6.0))
             .flex()
             .items_center()
-            .gap(px(7.0))
+            .gap(px(8.0))
             .rounded(px(Radius::ROW))
-            .bg(t.accent.alpha(if t.dark { 0.12 } else { 0.10 }))
-            .border_1()
-            .border_color(t.accent.alpha(0.30))
-            .text_size(px(Type::META + 0.5))
-            .font_weight(FontWeight::MEDIUM)
-            .text_color(t.primary.alpha(0.9))
+            .text_size(px(12.0))
+            .text_color(tint)
             .cursor_pointer()
-            .hover(|s| s.bg(t.accent.alpha(0.18)))
-            .child(icon(IconName::Download, 13.0, t.accent))
+            .hover(|s| s.bg(t.hover))
+            .child(icon(IconName::Download, 14.0, tint))
             .child(
                 div()
                     .flex_1()
@@ -307,7 +305,7 @@ pub fn sheet_body(
                         t,
                     )
                     .icon(IconName::Download)
-                    .solid()
+                    .accent()
                     .on_click(move |_, window, cx| on_install(window, cx)),
                 );
         }
@@ -321,7 +319,7 @@ pub fn sheet_body(
                 .child(
                     button("update-open", update.link_label(), t)
                         .icon(IconName::ExternalLink)
-                        .solid()
+                        .accent()
                         .on_click(move |_, _, cx| cx.open_url(&url)),
                 );
         }
@@ -334,7 +332,7 @@ pub fn sheet_body(
                 )
                 .child(
                     button("update-close", "OK", t)
-                        .solid()
+                        .accent()
                         .on_click(move |_, window, cx| on_close(window, cx)),
                 );
         }
@@ -394,7 +392,7 @@ pub fn sheet_body(
 /// to compare (a packaged release's source, an archive) is not offered
 /// `main`.
 pub fn channel_setting(
-    id: impl Into<ElementId>,
+    id: impl Into<SharedString>,
     app: &UpdateApp,
     channel: Channel,
     t: Theme,

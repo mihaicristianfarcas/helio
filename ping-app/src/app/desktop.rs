@@ -59,7 +59,9 @@ impl PingApp {
             ]))
             .child(page_body(
                 "desktop-page",
-                pingpong_ui::Metrics::FORM,
+                &self.page_scroll,
+                t,
+                pingpong_ui::Metrics::FORM + 60.0,
                 div()
                     .flex()
                     .flex_col()

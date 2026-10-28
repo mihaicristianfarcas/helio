@@ -110,6 +110,11 @@ pub struct PingApp {
     /// The sheet that says what the update check found.
     update_sheet: bool,
     focus: FocusHandle,
+    /// The glass pill behind the page shown in the sidebar, sliding to the
+    /// next.
+    pub nav_glide: pingpong_ui::Glide,
+    /// Where the page shown is scrolled to (its bar).
+    pub page_scroll: gpui::ScrollHandle,
 }
 
 impl PingApp {
@@ -197,6 +202,8 @@ impl PingApp {
             update_status: pingpong_update::Status::default(),
             update_sheet: false,
             focus,
+            nav_glide: pingpong_ui::Glide::new(cx),
+            page_scroll: gpui::ScrollHandle::new(),
         }
     }
 
@@ -361,6 +368,7 @@ impl PingApp {
     pub fn set_page(&mut self, page: Page, cx: &mut Context<Self>) {
         if self.page != page {
             tracing::debug!(?page, "page");
+            self.page_scroll.set_offset(gpui::point(px(0.0), px(0.0)));
         }
         self.page = page;
         self.menu = None;
@@ -731,14 +739,28 @@ impl Render for PingApp {
         };
         let sheet = self.sheets(t, window, cx);
         let menu = self.host_menu(t, cx);
+        pingpong_ui::scroll_areas([self.page_scroll.clone()]);
+        // Each page fades in as it is picked, as the sidebar's pill slides to
+        // it (asides).
+        let shown = gpui::ElementId::Name(format!("page-{:?}", self.page).into());
+        let page =
+            pingpong_ui::fade_in(div().size_full().flex().flex_col().child(page), shown, 0.0);
         self.on_actions(div().key_context("PingApp").track_focus(&self.focus), cx)
             .size_full()
             .relative()
             .flex()
-            .bg(t.background)
             .font_family(pingpong_ui::ui_font())
             .text_color(t.primary)
             .text_size(px(Type::BODY))
+            // A click hides the ring the keyboard showed.
+            .on_mouse_down(
+                gpui::MouseButton::Left,
+                cx.listener(|_, _, _, cx| {
+                    if pingpong_ui::clicked() {
+                        cx.notify();
+                    }
+                }),
+            )
             .child(self.sidebar(t, cx))
             .child(
                 div()
@@ -747,6 +769,7 @@ impl Render for PingApp {
                     .h_full()
                     .flex()
                     .flex_col()
+                    .bg(t.background)
                     .child(page),
             )
             .children(menu)
@@ -756,16 +779,33 @@ impl Render for PingApp {
 
 pub use pingpong_ui::toolbar_row as toolbar;
 
-/// A page's scrolling body, its content in a centred column.
-pub fn page_body(id: &'static str, max_width: f32, content: impl IntoElement) -> impl IntoElement {
-    div().id(id).flex_1().min_h_0().overflow_y_scroll().child(
+/// A page's scrolling body, its content in a centred column, the bar beside
+/// it (asides' pages).
+pub fn page_body(
+    id: &'static str,
+    scroll: &gpui::ScrollHandle,
+    t: Theme,
+    max_width: f32,
+    content: impl IntoElement,
+) -> impl IntoElement {
+    pingpong_ui::scrolled(
         div()
-            .w_full()
-            .flex()
-            .justify_center()
-            .px(px(28.0))
-            .pb(px(32.0))
-            .child(div().w_full().max_w(px(max_width)).child(content)),
+            .id(id)
+            .size_full()
+            .overflow_y_scroll()
+            .track_scroll(scroll)
+            .child(
+                div()
+                    .w_full()
+                    .flex()
+                    .justify_center()
+                    .px(px(28.0))
+                    .pb(px(32.0))
+                    .child(div().w_full().min_w_0().max_w(px(max_width)).child(content)),
+            ),
+        gpui::ElementId::Name(format!("{id}-bar").into()),
+        scroll,
+        t,
     )
 }
 

@@ -1,7 +1,7 @@
 //! The sidebar: Hosts, Agents, the open sessions, the settings pages.
 
 use gpui::{div, prelude::*, px, AnyElement, Context, ElementId, FontWeight};
-use pingpong_ui::{dot, icon, spinner, IconName, Ink, Metrics, Radius, Theme, Type};
+use pingpong_ui::{dot, icon, spinner, IconName, Ink, Radius, Theme, Type};
 
 use crate::settings::Tab;
 
@@ -27,6 +27,7 @@ impl PingApp {
     pub(super) fn sidebar(&mut self, t: Theme, cx: &mut Context<Self>) -> impl IntoElement {
         let page = self.page;
         let paired = self.model.items.iter().filter(|i| i.is_paired()).count();
+        let glide = self.nav_glide.clone();
         let nav = |id: &'static str,
                    label: &'static str,
                    name: IconName,
@@ -34,53 +35,20 @@ impl PingApp {
                    trailing: Option<AnyElement>,
                    cx: &mut Context<Self>| {
             let on = page == target;
-            div()
-                .id(id)
-                .h(px(Metrics::NAV_ROW))
-                .px(px(8.0))
-                .flex()
-                .items_center()
-                .gap(px(8.0))
-                .rounded(px(Radius::ROW))
-                .border_1()
-                .border_color(pingpong_ui::rgba(0.0, 0.0, 0.0, 0.0))
-                .text_size(px(Type::BODY))
-                .text_color(if on { t.primary } else { t.primary.alpha(0.78) })
-                .when(on, |d| {
-                    d.bg(t.selected)
-                        .border_color(t.selected_stroke)
-                        .shadow(pingpong_ui::lift(0.06))
+            pingpong_ui::nav_row(id, label, name, on, nav_index(target), &glide, false, t)
+                .when(!on, |d| {
+                    d.on_click(cx.listener(move |this, _, _, cx| this.set_page(target, cx)))
                 })
-                .when(!on, |d| d.cursor_pointer().hover(|s| s.bg(t.hover)))
-                .on_click(cx.listener(move |this, _, _, cx| this.set_page(target, cx)))
-                .child(icon(name, 15.0, if on { t.primary } else { t.secondary }))
-                .child(div().flex_1().child(label))
                 .children(trailing)
         };
         let agent_badge = if self.agents.is_running() {
             Some(pingpong_ui::live_dot(Ink::FRESH).into_any_element())
         } else if self.agents.awaiting_answer() {
-            Some(dot(Ink::ATTENTION, 7.0).into_any_element())
+            Some(dot(t.attention, 7.0).into_any_element())
         } else {
             None
         };
-        let count = (paired > 0).then(|| {
-            div()
-                .text_size(px(Type::META))
-                .text_color(t.tertiary)
-                .child(paired.to_string())
-                .into_any_element()
-        });
-        let header = |label: &'static str| {
-            div()
-                .pt(px(14.0))
-                .pb(px(4.0))
-                .px(px(9.0))
-                .text_size(px(Type::META))
-                .font_weight(FontWeight::SEMIBOLD)
-                .text_color(t.tertiary)
-                .child(label)
-        };
+        let count = (paired > 0).then(|| pingpong_ui::nav_count(paired, t).into_any_element());
         let footer: AnyElement = if self.model.searching {
             div()
                 .flex()
@@ -98,30 +66,10 @@ impl PingApp {
                 .child(format!("Ping {}", env!("CARGO_PKG_VERSION")))
                 .into_any_element()
         };
-        div()
-            .flex_none()
-            .w(px(Metrics::SIDEBAR))
-            .h_full()
-            .flex()
-            .flex_col()
-            .bg(t.sidebar)
-            .border_r_1()
-            .border_color(t.hairline)
-            // The title bar's lane: the traffic lights on a Mac; elsewhere the
-            // system's title bar is above, and a little air does.
-            .child(div().flex_none().h(px(if cfg!(target_os = "macos") {
-                Metrics::TOOLBAR
-            } else {
-                10.0
-            })))
+        let sessions = self.session_rows(t, cx);
+        pingpong_ui::sidebar(t)
             .child(
-                div()
-                    .flex_1()
-                    .px(px(8.0))
-                    .pt(px(6.0))
-                    .flex()
-                    .flex_col()
-                    .gap(px(2.0))
+                pingpong_ui::nav_list(&glide, Some(nav_index(page)), t)
                     .child(nav(
                         "nav-hosts",
                         "Hosts",
@@ -138,8 +86,8 @@ impl PingApp {
                         agent_badge,
                         cx,
                     ))
-                    .children(self.session_rows(t, cx))
-                    .child(header("Settings"))
+                    .children(sessions)
+                    .child(pingpong_ui::sidebar_header("Settings", t))
                     .child(nav(
                         "nav-general",
                         "General",
@@ -188,15 +136,7 @@ impl PingApp {
                     },
                 ),
             )
-            .child(
-                div()
-                    .flex_none()
-                    .px(px(16.0))
-                    .py(px(12.0))
-                    .text_size(px(Type::META))
-                    .text_color(t.tertiary)
-                    .child(footer),
-            )
+            .child(pingpong_ui::sidebar_foot(t).child(footer))
     }
 
     /// The sidebar's open sessions: agents' and your desktops.
@@ -224,8 +164,10 @@ impl PingApp {
                 .child("Sessions")
                 .into_any_element(),
         );
+        let glide = self.nav_glide.clone();
         let row = |id: ElementId,
                    on: bool,
+                   index: usize,
                    glyph: IconName,
                    title: String,
                    sub: String,
@@ -239,14 +181,12 @@ impl PingApp {
                 .items_center()
                 .gap(px(8.0))
                 .rounded(px(Radius::ROW))
+                .relative()
                 .border_1()
                 .border_color(pingpong_ui::rgba(0.0, 0.0, 0.0, 0.0))
-                .when(on, |d| {
-                    d.bg(t.selected)
-                        .border_color(t.selected_stroke)
-                        .shadow(pingpong_ui::lift(0.06))
-                })
-                .when(!on, |d| d.cursor_pointer().hover(|s| s.bg(t.hover)))
+                .child(glide.item(index))
+                .hover(|s| s.bg(t.hover))
+                .when(!on, |d| d.cursor_pointer())
                 .child(icon(glyph, 15.0, if on { t.primary } else { t.secondary }))
                 .child(
                     div()
@@ -288,11 +228,8 @@ impl PingApp {
                     "Working",
                     pingpong_ui::live_dot(Ink::FRESH).into_any_element(),
                 ),
-                ChatState::Waiting => (
-                    "Waiting for you",
-                    dot(Ink::ATTENTION, 7.0).into_any_element(),
-                ),
-                ChatState::Paused => ("Paused", dot(Ink::ATTENTION, 7.0).into_any_element()),
+                ChatState::Waiting => ("Waiting for you", dot(t.attention, 7.0).into_any_element()),
+                ChatState::Paused => ("Paused", dot(t.attention, 7.0).into_any_element()),
                 ChatState::Connecting => (
                     "Connecting…",
                     spinner(
@@ -316,6 +253,7 @@ impl PingApp {
                 row(
                     ElementId::Name(format!("side-chat-{id}").into()),
                     page == Page::Chat(id),
+                    nav_index(Page::Chat(id)),
                     IconName::Agent,
                     title,
                     sub,
@@ -338,6 +276,7 @@ impl PingApp {
                 row(
                     ElementId::Name(format!("side-desk-{id}").into()),
                     page == Page::Desktop(id),
+                    nav_index(Page::Desktop(id)),
                     IconName::Display,
                     host,
                     sub,
@@ -348,5 +287,18 @@ impl PingApp {
             );
         }
         out
+    }
+}
+
+/// Where `page`'s row is among the sidebar's, for the pill that slides
+/// between them.
+fn nav_index(page: Page) -> usize {
+    match page {
+        Page::Hosts => 0,
+        Page::Agents => 1,
+        Page::Settings(tab) => 2 + tab as usize,
+        // Sessions, after the fixed rows; one id space each.
+        Page::Chat(id) => 100 + 2 * id as usize,
+        Page::Desktop(id) => 101 + 2 * id as usize,
     }
 }

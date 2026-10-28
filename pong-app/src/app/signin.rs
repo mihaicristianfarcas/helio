@@ -32,7 +32,7 @@ impl PongApp {
         };
         let start: AnyElement = if can_start {
             button("start-host", "Start Pong", t)
-                .solid()
+                .accent()
                 .on_click(cx.listener(|this, _, _, cx| {
                     this.start_error = host::start().err();
                     if let Some(e) = &this.start_error {
@@ -96,7 +96,7 @@ impl PongApp {
                     t,
                 )),
             );
-        page(t, [], "not-running-page", content)
+        page(&self.page_scroll, t, "not-running-page", content)
     }
 
     pub(super) fn sign_in_page(
@@ -179,12 +179,12 @@ impl PongApp {
                         },
                         t,
                     )
-                    .solid()
+                    .accent()
                     .disabled(!ok)
                     .on_click(cx.listener(|this, _, _, cx| this.sign_in(cx))),
                 ),
             );
-        page(t, [], "sign-in-page", content)
+        page(&self.page_scroll, t, "sign-in-page", content)
     }
 }
 
@@ -192,8 +192,8 @@ impl PongApp {
 /// answer): what, with a spinner, where a page's title goes.
 pub(super) fn waiting(id: &'static str, what: &'static str, t: Theme) -> AnyElement {
     page(
+        &gpui::ScrollHandle::new(),
         t,
-        [],
         id,
         div()
             .flex()
