@@ -135,7 +135,8 @@ fn init_logging_named(
 /// only administrators can change. What the host loads by name, NVENC
 /// (`nvEncodeAPI64.dll`) and NVAPI, the driver puts in System32.
 ///
-/// From the first line of `main`, before anything else loads.
+/// From the first line of `main`. The DLLs `pong.exe` imports are loaded
+/// before it: from System32 only, in an MSVC build (`build.rs`).
 #[cfg(windows)]
 fn restrict_dll_search() {
     use windows::Win32::System::LibraryLoader::{
