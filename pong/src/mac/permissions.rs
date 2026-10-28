@@ -1,14 +1,16 @@
 //! What a Mac host needs macOS to allow: Screen Recording, to capture at all,
 //! and Accessibility, for the client's keyboard and mouse to act. Both are
-//! granted per app in System Settings > Privacy & Security, to Pong.app, or,
-//! run from a terminal, to the terminal. Sound in surround (a Core Audio
+//! granted per app in System Settings > Privacy & Security, to the host's
+//! helper inside Ping.app (Pong Host), or, run from a terminal, to the
+//! terminal. Sound in surround (a Core Audio
 //! tap, see `sound`) needs System Audio Recording besides, asked for the
 //! first time a client wants surround.
 //!
-//! Checked at start. As Pong.app, missing ones are asked for with macOS's own
-//! prompts; from a terminal, only reported (the prompt would be for the
-//! terminal, which is the user's to decide). `PONG_NO_PROMPTS` has Pong.app
-//! only report them too (tests run it while someone works at the Mac).
+//! Checked at start. As the helper app, missing ones are asked for with
+//! macOS's own prompts; from a terminal, only reported (the prompt would be
+//! for the terminal, which is the user's to decide). `PONG_NO_PROMPTS` has
+//! the helper only report them too (tests run it while someone works at the
+//! Mac).
 
 use objc2_core_foundation::{CFBoolean, CFDictionary, CFString, CFType};
 
@@ -124,8 +126,8 @@ pub fn audio_capture() -> Consent {
     }
 }
 
-/// Ask for System Audio Recording with macOS's own prompt: as Pong.app
-/// only, as `check` asks for the others. The answer is for the next
+/// Ask for System Audio Recording with macOS's own prompt: as the helper
+/// app only, as `check` asks for the others. The answer is for the next
 /// session.
 pub fn ask_audio_capture() {
     let bundled = bundled() && std::env::var_os("PONG_NO_PROMPTS").is_none();

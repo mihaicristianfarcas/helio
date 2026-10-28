@@ -155,7 +155,7 @@ fn main() -> ExitCode {
     restrict_dll_search();
     let args: Vec<String> = std::env::args().skip(1).collect();
     let dir = config::data_dir();
-    // Pong.app opened from the Finder: the host, with its icon.
+    // The host's helper app opened by hand (a Mac): the host, with its icon.
     #[cfg(target_os = "macos")]
     let opened_by_hand = icon::opened_by_hand(&args);
     #[cfg(not(target_os = "macos"))]
@@ -212,8 +212,8 @@ fn fail(e: impl std::fmt::Display) -> ExitCode {
 }
 
 /// `pong host`: run the host in this session until it is asked to stop.
-/// `opened_by_hand`: Pong.app opened from the Finder (a Mac), which brings
-/// its icon up too. `secured`: what making the data folder private did
+/// `opened_by_hand`: the host's helper app opened by hand (a Mac), which
+/// brings its icon up too. `secured`: what making the data folder private did
 /// that the log should say.
 fn run_host(dir: std::path::PathBuf, opened_by_hand: bool, secured: Option<String>) -> ExitCode {
     let _guard = init_logging(&dir);

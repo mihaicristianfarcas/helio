@@ -25,7 +25,7 @@ line of its standard output. That process is `ping_core::linux`:
 - **Controllers.** gilrs (evdev), rumble included.
 - **Sound.** cpal (ALSA; PipeWire and PulseAudio through it).
 - **In the launcher.** `tools/linux/install-apps` (from a checkout) and the
-  downloads' `install.sh` install Ping for the user with a desktop entry
+  download's `install.sh` install Ping for the user with a desktop entry
   and an icon, named after the window's app id (`dev.pingpong.Ping`), so
   the dock and the task switcher show it under its own icon, under Wayland
   and X11.
@@ -89,9 +89,10 @@ environment does not make it clear.
 ### Running it
 
 Pong runs in the desktop session, as the user: `tools/linux/pong.service` is
-a systemd user unit for that (installation in [../install.md](../install.md#pong-on-linux)),
-which `pong enable` and `pong disable` turn on and off (`systemctl --user
-enable|disable --now pong`; no root).
+a systemd user unit for that, which Ping's `install.sh` installs beside the
+app without turning it on ([../install.md](../install.md#hosting-on-linux)),
+and which `pong enable` and `pong disable` turn on and off (`systemctl
+--user enable|disable --now pong`; no root).
 Data and logs are in `~/.config/pong`.
 
 ## Measured (in the container)

@@ -1,7 +1,7 @@
 //! Hosting on Linux: the systemd user unit `pong.service`
-//! (`tools/linux/pong.service`, which `install.sh` puts in
-//! `~/.config/systemd/user`), started in the user's desktop session, where
-//! the host can reach the display.
+//! (`tools/linux/pong.service`, which Ping's `install.sh` puts in
+//! `~/.config/systemd/user`, not enabled), started in the user's desktop
+//! session, where the host can reach the display.
 //!
 //! On and off are `systemctl --user enable --now` and `disable --now`: the
 //! user's own service manager, never root. Both wait for systemd to have
@@ -35,7 +35,7 @@ pub fn enable() -> Result<String, Error> {
     if !installed()? {
         return Err(Error::Failed(format!(
             "The host's unit is not installed ({UNIT} in ~/.config/systemd/user): \
-                install Pong with the install.sh in its download."
+                install Ping with the install.sh in its download, which installs it."
         )));
     }
     let out = systemctl(&["enable", "--now", UNIT])?;

@@ -145,9 +145,9 @@ pong status     # off, starting, on or failed (with why)
 
 | | `pong enable` | `pong disable` |
 |---|---|---|
-| macOS | Writes the LaunchAgent `~/Library/LaunchAgents/dev.pingpong.Pong.plist`, which runs the host from the app bundle `pong` is in, whenever you are logged in, and starts it now. `pong` outside an app bundle refuses: macOS's Screen Recording and Accessibility permissions belong to the app | Stops the host and deletes the LaunchAgent |
+| macOS | Writes the LaunchAgent `~/Library/LaunchAgents/dev.pingpong.Pong.plist`, which runs the host from the app bundle `pong` is in (`Ping.app/Contents/Helpers/Pong Host.app`), whenever you are logged in, and starts it now. `pong` outside an app bundle refuses: macOS's Screen Recording and Accessibility permissions belong to that helper app, not to Ping | Stops the host and deletes the LaunchAgent |
 | Windows | As administrator: copies `pong.exe` to `C:\Program Files\Pong` (only administrators can change that folder), checks its signature, and runs it as **PongService**, which starts at boot, before anyone signs in, with Windows Firewall rules for it | As administrator: stops and deletes PongService, its firewall rules and the copy in `C:\Program Files\Pong` |
-| Linux | `systemctl --user enable --now pong`: the host runs in your desktop session, now and at each login (the unit comes with the install) | `systemctl --user disable --now pong` |
+| Linux | `systemctl --user enable --now pong`: the host runs in your desktop session, now and at each login (the unit comes with the install, not turned on) | `systemctl --user disable --now pong` |
 
 On Windows the service runs as SYSTEM, the only account that can show and
 control the sign-in screen and UAC prompts. That is why it runs only from
@@ -160,12 +160,13 @@ after that, `pong enable` refuses an engine that is unsigned or was changed
 after signing.
 
 On a Mac the host asks for Screen Recording and Accessibility with macOS's
-own prompts as it first starts. Ping's Hosting page says, for each, whether
+own prompts as it first starts, as **Pong Host**: System Settings lists it,
+not Ping, under both. Ping's Hosting page says, for each, whether
 macOS allows it, with a button to its pane of System Settings, and notices
 when it is allowed. After Screen Recording is turned on there, macOS asks
 to quit and reopen the host.
 
-Quitting Ping never stops the host: only the switch does. Uninstalling Pong
+Quitting Ping never stops the host: only the switch does. Uninstalling Ping
 turns hosting off first ([install.md](install.md#uninstalling)). Your
 pairings and settings stay in the data folder either way.
 
@@ -374,8 +375,8 @@ same.
   Settings > Privacy & Security > Local Network.
 - **Windows asks about the firewall.** Allow Ping (and `ping.exe`) on private
   networks. The host's firewall rules are added by `pong enable`.
-- **"The host did not answer."** Is Pong running (its window says; on
-  Windows, `PongService` in Services)? Is this device still paired (the host's
+- **"The host did not answer."** Is hosting on there (Ping's **Settings →
+  Hosting** on the host; on Windows, `PongService` in Services)? Is this device still paired (the host's
   **Devices**)?
 - **The host ignores your keyboard or mouse**, and Ping says so: this
   device may not use them there. In Pong on the host, **Devices**, give it
@@ -388,8 +389,8 @@ same.
 - **"The host could not create its virtual display"** (Windows): SudoVDA is
   not installed, or Apollo's service is holding it — stop ApolloService.
 - **A Mac host ignores the keyboard and mouse**, or streams nothing: give
-  Pong Accessibility and Screen Recording in System Settings > Privacy &
-  Security, then restart it.
+  Pong Host Accessibility and Screen Recording in System Settings > Privacy
+  & Security, then turn hosting off and on.
 - **A Linux host under Wayland shows a dialog every time**, or ignores input:
   answer the desktop's sharing dialog with **Allow Remote Interaction** on;
   the restore token then saves asking again.

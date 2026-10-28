@@ -5,13 +5,15 @@
 //! The host runs from the app bundle this `pong` is the main program of,
 //! never from a bare executable: macOS grants Screen Recording and
 //! Accessibility to an app, by its bundle and signature, so a host outside
-//! one could neither capture nor control anything. That bundle is Pong.app
-//! today, a helper inside the app later; either way it is found from this
-//! `pong`, and `pong enable` from anywhere else fails and says so.
+//! one could neither capture nor control anything. That bundle is the
+//! helper inside Ping.app (`Contents/Helpers/Pong Host.app`,
+//! `tools/build-ping-app`), found from this `pong`, so the agent runs the
+//! helper of the app that turned hosting on; `pong enable` from anywhere
+//! else fails and says so.
 //!
 //! The agent is in `~/Library/LaunchAgents`, the user's own: nothing here
 //! needs an administrator. The Homebrew cask's uninstall unloads the same
-//! label (`Casks/pong.rb`).
+//! label (`tools/update-casks`).
 
 use std::path::{Path, PathBuf};
 use std::process::Output;
@@ -66,8 +68,9 @@ fn host() -> Result<(PathBuf, PathBuf), String> {
         None => Err(format!(
             "The host runs from its app bundle, so that macOS's Screen Recording and \
                 Accessibility permissions apply to it, and this pong is not in one \
-                ({}). Run the pong inside Pong.app (Pong.app/Contents/MacOS/pong), \
-                or build it with tools/build-pong-app.",
+                ({}). Turn hosting on in Ping, which runs the pong inside it \
+                (Ping.app/Contents/Helpers/Pong Host.app/Contents/MacOS/pong), or build the \
+                app with tools/build-ping-app.",
             exe.display()
         )),
     }

@@ -1,55 +1,95 @@
 #!/usr/bin/env bash
-# Build Ping.app: the Rust app (ping-app) in a bundle with its icon, signed
-# with a Developer ID when PINGPONG_SIGN_IDENTITY names one (a release), else
-# with the dev identity when there is one, else ad hoc.
+# Build Ping.app: the app (ping-app) and, inside it, the host it runs when
+# hosting is on (pong), as a helper app of its own:
+#
+#   Ping.app/Contents/MacOS/Ping                        the app
+#   Ping.app/Contents/Helpers/Pong Host.app             the host
+#       Contents/MacOS/pong
+#
+# The helper has its own bundle identifier (dev.pingpong.Pong) and usage
+# strings, so the permissions the host needs (Screen Recording,
+# Accessibility, System Audio Recording) are granted to it, and the app
+# itself never asks for them. `pong enable` points the host's LaunchAgent at
+# the helper (pong/src/hosting/mac.rs).
 #
 #   tools/build-ping-app            -> target/Ping.app
 #   tools/build-ping-app --install  -> also copy it to /Applications
 #
-# The bundle's version is the workspace's (Cargo.toml). PINGPONG_RELEASE=1
-# makes it a release build, as tools/package-macos does.
+# Signed inside out, as codesign requires of nested code (never --deep): the
+# helper, then the app around it. With the Developer ID that
+# PINGPONG_SIGN_IDENTITY names (a release), else the dev identity when there
+# is one, else ad hoc. The bundles' version is the workspace's (Cargo.toml).
+# PINGPONG_RELEASE=1 makes it a release build, as tools/package-macos does;
+# PINGPONG_PROFILE=dev builds the debug profile instead (CI's check that the
+# app still packages, without a release build's time).
 set -euo pipefail
 REPO=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 APP="$REPO/target/Ping.app"
+HELPER="$APP/Contents/Helpers/Pong Host.app"
 VERSION=$(sed -n '/^\[workspace.package\]/,/^\[/ s/^version = "\(.*\)"/\1/p' "$REPO/Cargo.toml")
+PROFILE=${PINGPONG_PROFILE:-release}
+case $PROFILE in
+    dev) OUT="$REPO/target/debug" ;;
+    *) OUT="$REPO/target/$PROFILE" ;;
+esac
 
 export MACOSX_DEPLOYMENT_TARGET=14.0
-# Xcode's Metal compiler, when it is installed: the bundle then carries GPUI's
-# shaders compiled, not their source to compile at every launch.
+# Xcode's Metal compiler, for a release when it is installed: the bundle then
+# carries GPUI's shaders compiled, not their source to compile at every
+# launch. A debug build keeps the default features, as the tests build them.
 FEATURES=()
 XCODE=/Applications/Xcode.app/Contents/Developer
-if DEVELOPER_DIR=$XCODE xcrun metal --version >/dev/null 2>&1; then
+if [[ $PROFILE != dev ]] && DEVELOPER_DIR=$XCODE xcrun metal --version >/dev/null 2>&1; then
     export DEVELOPER_DIR=$XCODE
     FEATURES=(--no-default-features)
 fi
-cargo build --release -p ping-app ${FEATURES[@]+"${FEATURES[@]}"} --manifest-path "$REPO/Cargo.toml"
+cargo build --profile "$PROFILE" -p ping-app -p pong ${FEATURES[@]+"${FEATURES[@]}"} \
+    --manifest-path "$REPO/Cargo.toml"
 
-ICNS="$REPO/target/AppIcon.icns"
+# The icons, drawn by code (ping-app/examples/make-icon.rs): Ping's for the
+# app, Pong's for the host, which System Settings shows beside its name.
+ICONS="$REPO/target/icon"
 MAKE_ICON="$REPO/ping-app/examples/make-icon.rs"
-if [[ ! -f $ICNS || $MAKE_ICON -nt $ICNS ]]; then
-    cargo run --release -q -p ping-app --example make-icon --manifest-path "$REPO/Cargo.toml" -- "$REPO/target/icon"
-    iconutil -c icns "$REPO/target/icon/AppIcon.iconset" -o "$ICNS"
+if [[ ! -f $REPO/target/AppIcon.icns || ! -f $REPO/target/Pong.icns ||
+    $MAKE_ICON -nt $REPO/target/AppIcon.icns ]]; then
+    cargo run --profile "$PROFILE" -q -p ping-app --example make-icon \
+        --manifest-path "$REPO/Cargo.toml" -- "$ICONS"
+    iconutil -c icns "$ICONS/AppIcon.iconset" -o "$REPO/target/AppIcon.icns"
+    iconutil -c icns "$ICONS/Pong.iconset" -o "$REPO/target/Pong.icns"
 fi
 
+# bundle DIR PLIST PROGRAM NAME ICON: an app bundle with its Info.plist at
+# the workspace's version, its program as NAME and its icon.
+bundle() {
+    mkdir -p "$1/Contents/MacOS" "$1/Contents/Resources"
+    cp "$2" "$1/Contents/Info.plist"
+    /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" \
+        -c "Set :CFBundleVersion $VERSION" "$1/Contents/Info.plist"
+    cp "$3" "$1/Contents/MacOS/$4"
+    cp "$5" "$1/Contents/Resources/"
+}
+
 rm -rf "$APP"
-mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
-cp "$REPO/target/release/ping-app" "$APP/Contents/MacOS/Ping"
-cp "$REPO/ping-app/macos/Info.plist" "$APP/Contents/Info.plist"
-/usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" -c "Set :CFBundleVersion $VERSION" "$APP/Contents/Info.plist"
-cp "$ICNS" "$APP/Contents/Resources/AppIcon.icns"
+bundle "$APP" "$REPO/ping-app/macos/Info.plist" "$OUT/ping-app" Ping "$REPO/target/AppIcon.icns"
+bundle "$HELPER" "$REPO/pong/macos/Info.plist" "$OUT/pong" pong "$REPO/target/Pong.icns"
+
 # A Developer ID (PINGPONG_SIGN_IDENTITY, as the release workflow sets it)
 # with the hardened runtime and a secure timestamp, which notarization
 # requires. Else the dev identity when there is one (see
-# tools/dev-signing-identity), so the permissions macOS grants survive a
-# rebuild; else ad hoc.
+# tools/dev-signing-identity), so the permissions macOS grants the host
+# survive a rebuild; else ad hoc.
 if [[ -n ${PINGPONG_SIGN_IDENTITY:-} ]]; then
     SIGN=(--sign "$PINGPONG_SIGN_IDENTITY" --options runtime --timestamp)
 else
     DEV=$("$REPO/tools/dev-signing-identity" --check)
     SIGN=(--sign "${DEV:--}")
 fi
+codesign --force "${SIGN[@]}" --identifier dev.pingpong.Pong "$HELPER" >/dev/null
 codesign --force "${SIGN[@]}" --identifier dev.pingpong.Ping "$APP" >/dev/null
-echo "built $APP ($VERSION)"
+# What Gatekeeper and an update check of the bundle: every nested signature
+# whole, and sealed into the app's.
+codesign --verify --deep --strict "$APP"
+echo "built $APP ($VERSION, $PROFILE)"
 
 if [[ ${1:-} == --install ]]; then
     rm -rf /Applications/Ping.app

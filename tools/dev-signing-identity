@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# A stable code-signing identity for development builds of Ping.app and
-# Pong.app. Ad hoc signatures change with every build, and macOS ties the
-# permissions it grants (Screen Recording, Accessibility) to the signature,
-# so each rebuild lost them. Signed with one self-signed certificate, an app
+# A stable code-signing identity for development builds of Ping.app and the
+# host's helper inside it. Ad hoc signatures change with every build, and
+# macOS ties the permissions it grants (Screen Recording, Accessibility) to
+# the signature, so each rebuild lost them. Signed with one self-signed certificate, an app
 # keeps its identity (its bundle id and this certificate) across builds.
 #
 # Prints the identity's SHA-1 for `codesign --sign`, creating it in the login

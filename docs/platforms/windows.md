@@ -51,9 +51,9 @@ an administrator neither creates nor moves it.
 `pong status` reports `failed` while PongService runs but its host does not
 (the host exited; the service starts it again 3 s later), as it does for a
 LaunchAgent or a unit that keeps restarting.
-`tools/host-deploy.ps1` installs a build as the service, adds Pong's
-window to the Start menu and lists Pong in Settings > Apps (whose
-**Uninstall** runs it with `-Uninstall`); see [../install.md](../install.md).
+The engine comes with Ping, `pong.exe` beside `Ping.exe`; `pong enable`,
+from the app's switch or an administrator's terminal, installs it as the
+service ([../install.md](../install.md#hosting-on-windows)).
 
 ### Hosting from Ping, and its icon in the notification area
 
@@ -254,14 +254,15 @@ As Moonlight does it on Windows:
 
 **Install Ping.cmd** (`tools/install-ping.ps1`, the download's
 `install.ps1`) installs Ping for the user who runs it, with no
-administrator: in `%LOCALAPPDATA%\Programs\Ping` with the script beside
-it, in the Start menu, and in Settings > Apps (the key
+administrator: Ping and the host's engine in
+`%LOCALAPPDATA%\Programs\Ping` with the script beside it, in the Start
+menu, and in Settings > Apps (the key
 `HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\dev.pingpong.Ping`),
 whose **Uninstall** runs the script with `-Uninstall`. When Ping starts
 from that folder and its entry is missing or names another version, as
 after an update installed by 0.9.4 or older, the script beside it writes
-the entry again. Pong's entry is `dev.pingpong.Pong`, under
-`HKEY_LOCAL_MACHINE`.
+the entry again. Uninstalling turns hosting off first, while it is on
+(`pong disable`, as an administrator: Windows asks).
 
 Building it needs an FFmpeg 8 shared build and LLVM (for the FFmpeg
 bindings): see [../install.md](../install.md#ping-on-windows).
