@@ -158,7 +158,7 @@ window is an ordinary app: closing it quits it.
 | | Maximum bitrate, maximum frame rate | the client's choice | `max_bitrate_kbps`, `max_fps` |
 | | Send pacing | 800 Mbit/s | `pace_mbps` |
 | | Adapt the bitrate to the network | on | `adaptive_bitrate` |
-| Network | Allow streaming over the internet | on | `internet_access` |
+| Network | Allow streaming over the internet (off: the host is on the local network only, and not on the DHT at all) | on | `internet_access` |
 | | Ask the router to forward the port | on | `port_mapping` |
 | | Ports: tunnel (UDP), pairing, web UI | 47800, 47801, 47802 | `port`, `pairing_port`, `web_port` |
 | AI agents | Allow paired AI agents | on | `agents` |
