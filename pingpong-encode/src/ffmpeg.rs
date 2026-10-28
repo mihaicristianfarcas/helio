@@ -78,6 +78,11 @@ fn err(what: &str, status: i32) -> EncodeError {
 /// AVERROR(EAGAIN) with Linux's EAGAIN.
 const EAGAIN: i32 = -11;
 
+/// swscale's `SWS_BILINEAR`: a `#define` up to FFmpeg 7, a member of `enum
+/// SwsFlags` from FFmpeg 8 (Ubuntu 26.04's), so the bindings name it
+/// differently; it is 2 in both.
+const SWS_BILINEAR: i32 = 2;
+
 pub struct FfmpegEncoder {
     ctx: *mut ff::AVCodecContext,
     backend: Backend,
@@ -393,7 +398,7 @@ impl FfmpegEncoder {
                     w as i32,
                     h as i32,
                     self.sw_format,
-                    ff::SWS_BILINEAR,
+                    SWS_BILINEAR,
                     std::ptr::null_mut(),
                     std::ptr::null_mut(),
                     std::ptr::null(),
