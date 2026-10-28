@@ -75,6 +75,8 @@ pub struct Hosting {
     seen: Option<Conn>,
     /// `pong`, when there is one to run.
     program: Option<PathBuf>,
+    /// Switches made: a state asked for before the last one is stale.
+    switches: u64,
     /// A check made the state up (`hosting=…` in PING_UI_DEMO): nothing is run.
     pretend: bool,
 }
@@ -90,6 +92,7 @@ impl Hosting {
             link: None,
             seen: None,
             program: host_program(),
+            switches: 0,
             pretend: pretended.is_some(),
         });
         hosting.update(cx, |h, cx| match pretended {
@@ -107,29 +110,40 @@ impl Hosting {
         self.program.as_deref()
     }
 
-    /// Ask `pong status --json` again.
+    /// Ask `pong status --json` again. Not while a switch is made: it asks
+    /// once it is done.
     pub fn refresh(&mut self, cx: &mut Context<Self>) {
-        if self.pretend {
+        if self.pretend || self.busy.is_some() {
             return;
         }
         let Some(program) = self.program.clone() else {
             self.set_state(State::Off, cx);
             return;
         };
+        let switches = self.switches;
         let task = cx
             .background_executor()
             .spawn(async move { status(&program) });
         cx.spawn(async move |this, cx| {
             let state = task.await;
-            let _ = this.update(cx, |this, cx| match state {
-                Ok(state) => this.set_state(state, cx),
-                Err(e) => {
-                    tracing::warn!(error = e, "hosting: no status");
-                    this.set_state(State::Off, cx);
+            let _ = this.update(cx, |this, cx| {
+                if this.switches == switches && this.busy.is_none() {
+                    this.take_status(state, cx);
                 }
             });
         })
         .detach();
+    }
+
+    /// What `pong status` said, taken in.
+    fn take_status(&mut self, said: Result<State, String>, cx: &mut Context<Self>) {
+        match said {
+            Ok(state) => self.set_state(state, cx),
+            Err(e) => {
+                tracing::warn!(error = e, "hosting: no status");
+                self.set_state(State::Off, cx);
+            }
+        }
     }
 
     /// Turn hosting on or off.
@@ -169,13 +183,22 @@ impl Hosting {
                     cx.notify();
                 });
                 tracing::info!(on, "hosting: asking Windows for an administrator");
+                let program = program.clone();
                 done = cx
                     .background_executor()
                     .spawn(async move { switch_elevated(&program, on) })
                     .await;
             }
+            // The state after, asked before the switch is done with: till
+            // then the switch shows where it is going, not where it was
+            // (it went back for a moment, then forward again).
+            let state = cx
+                .background_executor()
+                .spawn(async move { status(&program) })
+                .await;
             let _ = this.update(cx, |this, cx| {
                 this.busy = None;
+                this.switches += 1;
                 match done {
                     Ok(()) => tracing::info!(on, "hosting: switched"),
                     Err(e) => {
@@ -184,8 +207,7 @@ impl Hosting {
                         this.error = Some(e);
                     }
                 }
-                this.refresh(cx);
-                cx.notify();
+                this.take_status(state, cx);
             });
         })
         .detach();

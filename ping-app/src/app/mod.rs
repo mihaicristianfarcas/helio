@@ -903,7 +903,7 @@ impl PingApp {
 
     fn dismiss(&mut self, cx: &mut Context<Self>) {
         // The topmost thing open closes: a menu, a sheet, pairing, a page.
-        let host_sheet = matches!(self.page, Page::Host(_))
+        let host_sheet = self.shows_host_sheets()
             && self
                 .host
                 .clone()
@@ -974,7 +974,7 @@ impl Render for PingApp {
             Page::Setup => self.render_setup(t, window, cx),
         };
         let mut sheet = self.sheets(t, window, cx);
-        if sheet.is_none() && matches!(self.page, Page::Host(_)) {
+        if sheet.is_none() && self.shows_host_sheets() {
             sheet = self
                 .host
                 .clone()
@@ -1028,6 +1028,12 @@ impl Render for PingApp {
 }
 
 impl PingApp {
+    /// Whether the host's sheets (a device's permissions, unpairing) open
+    /// over this page: the host's pages', and setup's pairing step's.
+    fn shows_host_sheets(&self) -> bool {
+        matches!(self.page, Page::Host(_) | Page::Setup)
+    }
+
     /// The host's connection, while there is a host: its pages change with
     /// it (signed out, not running, ready).
     fn host_conn(&self, cx: &App) -> Option<crate::host::worker::Conn> {

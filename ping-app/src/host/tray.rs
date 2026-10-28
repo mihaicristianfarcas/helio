@@ -47,20 +47,22 @@ fn pairing_tag(id: u32) -> String {
     format!("pong-pair-{id}")
 }
 
-/// The menu's first line, and what hovering over the icon says.
+/// The menu's first line, and what hovering over the icon says: whose icon
+/// it is, that hosting is on, and what the host is doing.
 pub fn state_line(state: &State, snap: &Snapshot) -> String {
-    match (state, &snap.conn) {
-        (State::Failed(_), _) => "The host stopped".into(),
-        (_, Conn::Connecting) | (_, Conn::NotRunning) => "The host is starting…".into(),
-        (_, Conn::SignIn { .. }) => "Signed out of the host".into(),
+    let doing = match (state, &snap.conn) {
+        (State::Failed(_), _) => return "Ping hosting: on, but the host stopped".into(),
+        (_, Conn::Connecting) | (_, Conn::NotRunning) => "starting…".into(),
+        (_, Conn::SignIn { .. }) => "signed out of the host".into(),
         (_, Conn::Ready) => match snap.status.as_ref().and_then(|s| s.session.as_ref()) {
             Some(session) if session.agent.is_some() => {
-                format!("An AI agent is at work ({})", session.client)
+                format!("an AI agent is at work: {}", session.client)
             }
-            Some(session) => format!("Streaming to {}", session.client),
-            None => "Hosting: ready for your devices".into(),
+            Some(session) => format!("streaming to {}", session.client),
+            None => "ready for your devices".into(),
         },
-    }
+    };
+    format!("Ping hosting: on ({doing})")
 }
 
 /// The icon's menu for the host's state and the update check's.
@@ -290,7 +292,10 @@ mod tests {
     #[test]
     fn the_menu_says_what_the_host_is_doing() {
         let idle = ready(Status::default());
-        assert_eq!(state_line(&ON, &idle), "Hosting: ready for your devices");
+        assert_eq!(
+            state_line(&ON, &idle),
+            "Ping hosting: on (ready for your devices)"
+        );
         let streaming = ready(Status {
             session: Some(Session {
                 client: "macbook".into(),
@@ -298,7 +303,10 @@ mod tests {
             }),
             ..Status::default()
         });
-        assert_eq!(state_line(&ON, &streaming), "Streaming to macbook");
+        assert_eq!(
+            state_line(&ON, &streaming),
+            "Ping hosting: on (streaming to macbook)"
+        );
         let agent = ready(Status {
             session: Some(Session {
                 client: "macbook agent".into(),
@@ -309,7 +317,7 @@ mod tests {
         });
         assert_eq!(
             state_line(&ON, &agent),
-            "An AI agent is at work (macbook agent)"
+            "Ping hosting: on (an AI agent is at work: macbook agent)"
         );
         let starting = Snapshot {
             conn: Conn::NotRunning,
@@ -317,16 +325,16 @@ mod tests {
         };
         assert_eq!(
             state_line(&State::Starting, &starting),
-            "The host is starting…"
+            "Ping hosting: on (starting…)"
         );
         assert_eq!(
             state_line(&State::Failed("exit 3".into()), &starting),
-            "The host stopped"
+            "Ping hosting: on, but the host stopped"
         );
         assert_eq!(
             titles(&menu(&ON, &idle, &UpdateStatus::default())),
             [
-                "Hosting: ready for your devices",
+                "Ping hosting: on (ready for your devices)",
                 "-",
                 "Open Ping",
                 "-",

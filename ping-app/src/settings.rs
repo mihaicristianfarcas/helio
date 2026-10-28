@@ -35,7 +35,6 @@ impl Tab {
     }
 }
 
-/// Moonlight's streaming shortcut chord, as this platform writes it.
 /// The app at login, without its window: only the host's icon, with
 /// hosting on (`--background`); nothing, and it quits, with hosting off.
 const AT_LOGIN: LoginItem = LoginItem {
@@ -44,6 +43,7 @@ const AT_LOGIN: LoginItem = LoginItem {
     args: &["--background"],
 };
 
+/// Moonlight's streaming shortcut chord, as this platform writes it.
 pub fn chord(key: &str) -> String {
     if cfg!(target_os = "macos") {
         format!("⌃⌥⇧{key}")

@@ -1,5 +1,5 @@
-//! Starting a program when the user signs in: Pong's icon, which should be
-//! in the tray without anyone opening it. (The host starts itself:
+//! Starting a program when the user signs in: the app, without its window,
+//! for the host's icon in the tray. (The host starts itself:
 //! `pong enable`.)
 //!
 //! - macOS: a LaunchAgent in `~/Library/LaunchAgents`. Turning it on or off
@@ -15,7 +15,7 @@
 
 use std::path::Path;
 
-/// What starts at login: `name` to the user ("Pong"), `id` to the system
+/// What starts at login: `name` to the user ("Ping"), `id` to the system
 /// (the LaunchAgent's label), and the arguments the program gets (so the
 /// app starts without its window). Started once: an app the user quit
 /// stays quit.
