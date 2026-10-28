@@ -20,7 +20,6 @@ const AT_LOGIN: LoginItem = LoginItem {
     id: crate::background::APP_ID,
     name: "Pong",
     args: &["--background"],
-    keep_alive: false,
 };
 
 /// Whether this copy of the app starts at login as things stand.

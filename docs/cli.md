@@ -58,14 +58,35 @@ reason other than you quitting.
 | Command | Does |
 |---|---|
 | `pong` or `pong host` | Run the host in this session |
+| `pong enable` | Turn hosting on: the host starts now and at every start after (see [usage.md](usage.md#hosting-on-and-off)). Windows: as administrator |
+| `pong disable` | Turn hosting off: the host stops and no longer starts. Windows: as administrator |
+| `pong status [--json]` | `off`, `starting`, `on` or `failed` (with why); for `on`, whether the host's web API answers on this computer |
 | `pong identity` | Print the host's public keys |
 | `pong clients` | List paired clients and agents, with what each may do |
 | `pong add-client NAME X25519 MLKEM [--agent] [--permissions LIST]` | Pair a client by hand (headless setups), with the keys from `ping identity` or `ping-agent identity`. Without `--permissions` it gets what pairing gives: everything for the first person's device, see only after it; an agent sees and acts |
 | `pong remove-client X25519` | Unpair a client |
 | `pong permissions X25519 [LIST]` | Show what a paired client may do, or set it. `LIST`: `all`, `none`, `see-only`, or names joined by commas (`view,keyboard,mouse`; the names are in [usage.md](usage.md#what-each-device-may-do)). What a client of its kind cannot have is left out |
-| `pong install`, `pong uninstall` | Windows: install or remove `PongService` and its firewall rules (as administrator) |
 | `pong service` | Windows: the service itself (started by Windows) |
 | `pong clipboard-agent` | Windows: clipboard sharing as the signed-in user (started by the host for a session) |
+
+`pong enable` and `pong disable` exit with 0 when done, and 1 when they
+failed (with why on stderr). On Windows, run without an administrator, they
+change nothing and exit with **740** (Windows's `ERROR_ELEVATION_REQUIRED`):
+run the same command again elevated. Where the host runs from on each
+system is in [usage.md](usage.md#hosting-on-and-off).
+
+`pong status --json` prints one line for programs (always exit 0):
+
+```json
+{"state":"off"}
+{"state":"starting"}
+{"state":"on","api":true}
+{"state":"failed","reason":"the host exited with code 1; systemd starts it again"}
+```
+
+`api` says whether the host answered `GET /api/state` on
+`https://localhost:WEB_PORT` with the certificate it made for itself. A host
+that has just started takes a moment to answer.
 
 Changes made with `add-client`, `remove-client` and `permissions` apply to
 a running host after it restarts; the window and the web UI apply theirs at
@@ -129,7 +150,7 @@ For everyone:
 |---|---|---|
 | `RUST_LOG` | all | Log filter, e.g. `info,ping_core::stats=debug` |
 | `PING_DATA_DIR` | Ping, `ping`, `ping-agent` | Ping's data folder |
-| `PONG_DATA_DIR` | Pong, Pong's window | Pong's data folder |
+| `PONG_DATA_DIR` | Pong, Pong's window | Pong's data folder. On a Mac, `pong enable` hands it on to the host it starts |
 | `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `OPENROUTER_API_KEY`, `PING_AGENT_API_KEY` (a custom endpoint) | agents | API keys; win over saved keys |
 | `ANTHROPIC_BASE_URL`, `OPENAI_BASE_URL` | agents | Point the API loops at a gateway or proxy |
 | `CLOUDFLARE_AUTH_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` | agents | The Workers AI token and account clef's screen checks use; win over Agent setup's |

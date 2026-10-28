@@ -83,7 +83,9 @@ environment does not make it clear.
 ### Running it
 
 Pong runs in the desktop session, as the user: `tools/linux/pong.service` is
-a systemd user unit for that (installation in [../install.md](../install.md#pong-on-linux)).
+a systemd user unit for that (installation in [../install.md](../install.md#pong-on-linux)),
+which `pong enable` and `pong disable` turn on and off (`systemctl --user
+enable|disable --now pong`; no root).
 Data and logs are in `~/.config/pong`.
 
 ## Measured (in the container)

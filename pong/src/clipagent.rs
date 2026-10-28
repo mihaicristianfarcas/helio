@@ -16,6 +16,10 @@
 //! The ways copies go at the start are on its command line.
 //!
 //! The agent ends when its input closes (the session ended).
+//!
+//! It is the engine in `C:\Program Files\Pong` (`hosting`), started as the
+//! user from there only: a host running from anywhere else shares no
+//! clipboard.
 
 use std::io::{Read, Write};
 use std::os::windows::io::{FromRawHandle, RawHandle};
@@ -88,7 +92,7 @@ impl ClipAgent {
         directions: pingpong_clipboard::Directions,
         send: impl Fn(&[u8]) + Send + 'static,
     ) -> Result<ClipAgent, String> {
-        let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+        let exe = crate::hosting::trusted_engine()?;
         let cmdline = format!(
             "\"{}\" clipboard-agent {rate} {}",
             exe.display(),

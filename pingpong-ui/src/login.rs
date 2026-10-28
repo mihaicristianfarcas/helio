@@ -1,10 +1,10 @@
 //! Starting a program when the user signs in: Pong's icon, which should be
-//! in the tray without anyone opening it, and on a Mac the host itself.
+//! in the tray without anyone opening it. (The host starts itself:
+//! `pong enable`.)
 //!
 //! - macOS: a LaunchAgent in `~/Library/LaunchAgents`. Turning it on or off
 //!   changes what the next sign-in does and nothing now (unloading would
-//!   end the running app, were it launchd that started it);
-//!   [`LoginItem::start_now`] is for starting it at once as well.
+//!   end the running app, were it launchd that started it).
 //! - Windows: a value under the user's own `Run` key.
 //! - Linux: none. There is no tray there (see `tray`), so there is nothing
 //!   to show at sign-in; the desktop's own "startup applications" can start
@@ -17,16 +17,13 @@ use std::path::Path;
 
 /// What starts at login: `name` to the user ("Pong"), `id` to the system
 /// (the LaunchAgent's label), and the arguments the program gets (so the
-/// app starts without its window, the host as a host).
+/// app starts without its window). Started once: an app the user quit
+/// stays quit.
 #[derive(Debug, Clone, Copy)]
 pub struct LoginItem {
     pub id: &'static str,
     pub name: &'static str,
     pub args: &'static [&'static str],
-    /// Started again whenever it exits (a host, not an app: an app the user
-    /// quit stays quit). A Mac's LaunchAgent only; elsewhere services do
-    /// this.
-    pub keep_alive: bool,
 }
 
 /// Whether this system can start the app at login at all.
@@ -43,14 +40,6 @@ impl LoginItem {
     /// Make `exe` start at login, or stop it from doing so.
     pub fn set(&self, exe: &Path, on: bool) -> Result<(), String> {
         platform::set(self, exe, on)
-    }
-
-    /// Start it now, as the next sign-in would (after [`LoginItem::set`]):
-    /// launchd loads the agent into this user's session. A Mac only: the
-    /// other systems start their hosts as services.
-    #[cfg(target_os = "macos")]
-    pub fn start_now(&self) -> Result<(), String> {
-        platform::start_now(self)
     }
 }
 
@@ -83,17 +72,11 @@ fn launch_agent(item: &LoginItem, exe: &Path) -> String {
          \t</array>\n\
          \t<key>RunAtLoad</key>\n\
          \t<true/>\n\
-         {keep_alive}\
          \t<key>ProcessType</key>\n\
          \t<string>Interactive</string>\n\
          </dict>\n\
          </plist>\n",
         label = xml(item.id),
-        keep_alive = if item.keep_alive {
-            "\t<key>KeepAlive</key>\n\t<true/>\n"
-        } else {
-            ""
-        },
     )
 }
 
@@ -147,33 +130,6 @@ mod platform {
                 Err(e) if e.kind() != std::io::ErrorKind::NotFound => Err(e.to_string()),
                 _ => Ok(()),
             }
-        }
-    }
-
-    pub(super) fn start_now(item: &LoginItem) -> Result<(), String> {
-        use std::os::unix::fs::MetadataExt;
-        let path = plist(item).ok_or("There is no home folder to keep it in.")?;
-        // The user's own session is named by their number: the home
-        // folder's owner.
-        let home = std::env::var_os("HOME").ok_or("There is no home folder.")?;
-        let uid = std::fs::metadata(home).map_err(|e| e.to_string())?.uid();
-        let launchctl = |args: &[&str]| {
-            std::process::Command::new("/bin/launchctl")
-                .args(args)
-                .output()
-                .map_err(|e| format!("launchctl did not run: {e}"))
-        };
-        // An agent of this name already loaded (an older one) goes first:
-        // launchd refuses to load a second. Not loaded is the usual case.
-        let _ = launchctl(&["bootout", &format!("gui/{uid}/{}", item.id)]);
-        let out = launchctl(&["bootstrap", &format!("gui/{uid}"), &path.to_string_lossy()])?;
-        if out.status.success() {
-            Ok(())
-        } else {
-            Err(format!(
-                "launchd did not start it: {}",
-                String::from_utf8_lossy(&out.stderr).trim()
-            ))
         }
     }
 }
@@ -290,7 +246,6 @@ mod tests {
         id: "dev.example.App",
         name: "App",
         args: &["--background"],
-        keep_alive: false,
     };
 
     #[test]
@@ -305,13 +260,6 @@ mod tests {
         assert!(text.contains("<key>RunAtLoad</key>\n\t<true/>"));
         // An app the user quit stays quit.
         assert!(!text.contains("KeepAlive"));
-        // A host is started again when it exits.
-        let host = LoginItem {
-            keep_alive: true,
-            ..ITEM
-        };
-        let text = launch_agent(&host, Path::new("/Applications/App.app/Contents/MacOS/app"));
-        assert!(text.contains("<key>KeepAlive</key>\n\t<true/>"));
     }
 
     #[test]

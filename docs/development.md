@@ -117,8 +117,9 @@ tools/linux-dev tools/linux/loopback-test        # a Linux host streaming to a L
   `PINGPONG_HOST_DIR` in the environment or in `tools/dev.env` (not
   committed).
 - `tools/host-deploy.ps1` (on the host; it asks for an administrator when
-  not run as one) installs the built `pong.exe` as `PongService`, and
-  Pong's window; `-Uninstall` removes them.
+  not run as one) installs the built `pong.exe` as `PongService` (with
+  `pong enable`, which copies it to `C:\Program Files\Pong`), and Pong's
+  window; `-Uninstall` removes them, `pong disable` first.
 - `tools/host-run.ps1 -Command '…'` runs a command in the interactive
   console session and prints its output: SSH lands in session 0, where there
   is no desktop to capture and no display to configure.
@@ -193,6 +194,18 @@ what they are. The workflow signs in to Cloudflare with the repository's
 secret `CLOUDFLARE_API_TOKEN` (an API token with **Workers R2 Storage:
 Edit**) and variable `CLOUDFLARE_ACCOUNT_ID`; by hand, `wrangler login` is
 enough.
+
+On Windows, `pong enable` checks the Authenticode signature of the engine
+it copies to `C:\Program Files\Pong` before PongService runs it as SYSTEM.
+Windows releases are not signed yet, so a failed check only prints a
+warning. Once they are, the release build turns the check on:
+`cargo build --release -p pong --features require-signature` with
+`PONG_WINDOWS_PUBLISHER` set to the signing certificate's whole subject,
+as `(Get-AuthenticodeSignature pong.exe).SignerCertificate.Subject` prints
+it (`CN=…, O=…, L=…, S=…, C=…`), and `pong enable` then refuses an unsigned,
+changed or otherwise-signed engine, including one whose certificate shares
+only the common name. The feature does not build without the publisher; a
+debug build never requires the signature.
 
 A **version** is released by merging the change that sets it: the
 workspace's version in `Cargo.toml` (`[workspace.package]`), which every

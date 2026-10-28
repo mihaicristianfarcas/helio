@@ -1,5 +1,6 @@
-# Install (or update) the freshly built pong.exe as the PongService, and
-# Pong's window (pong-app.exe, as "Pong Control.exe") with a Start menu entry
+# Install (or update) the freshly built pong.exe as the PongService (with
+# `pong enable`, which copies it to C:\Program Files\Pong, checks it, and runs
+# the service from that copy), and Pong's window (pong-app.exe, as "Pong Control.exe") with a Start menu entry
 # and its icon in the notification area from the next sign-in on (for the
 # user running this; "Show Pong's icon at login" in the window turns it off),
 # and Pong in Windows' list of installed apps (Settings > Apps), whose
@@ -14,7 +15,8 @@
 # archive's install.ps1 to install an update (pingpong-update), with -Log:
 # why it failed, if it does, goes there for the window to show.
 #
-# Uninstalling removes the service, its firewall rules and the programs, and
+# Uninstalling turns hosting off first (`pong disable`: the service, its
+# firewall rules and the engine's copy), then removes the programs, and
 # leaves the host's identity, pairings and settings (C:\ProgramData\Pong,
 # %APPDATA%\Pong), so that installing again keeps its clients.
 param(
@@ -103,11 +105,11 @@ function Write-Entry {
 
 if ($Uninstall) {
     Stop-Program 'Pong Control'
-    if (Get-Service PongService -ErrorAction SilentlyContinue) {
-        # Stops the host (it restores the displays) and removes the service
-        # and its firewall rules.
-        & (Join-Path $dest 'pong.exe') uninstall
-        if ($LASTEXITCODE -ne 0) { throw "pong uninstall failed (exit code $LASTEXITCODE)" }
+    if (Test-Path $Source) {
+        # Hosting off: stops the host (it restores the displays) and removes
+        # the service, its firewall rules and the engine in $dest.
+        & $Source disable
+        if ($LASTEXITCODE -ne 0) { throw "pong disable failed (exit code $LASTEXITCODE)" }
     }
     # The host child and the clipboard helper may outlive the service by a
     # moment.
@@ -126,31 +128,13 @@ if ($Uninstall) {
 }
 
 New-Item -ItemType Directory -Force -Path $dest | Out-Null
-$svc = Get-Service PongService -ErrorAction SilentlyContinue
-if ($svc -and $svc.Status -ne 'Stopped') {
-    Stop-Service PongService -Force
-    $svc.WaitForStatus('Stopped', '00:00:30')
-}
-try {
-    # The host child may outlive a forced stop by a moment.
-    Stop-Program pong
-    Copy-Program $Source (Join-Path $dest 'pong.exe')
-    if (Test-Path $Window) {
-        Stop-Program 'Pong Control'
-        Copy-Program $Window (Join-Path $dest 'Pong Control.exe')
-    }
-} catch {
-    # Leave the host running, on whichever pong.exe is in place, rather than
-    # stopped until someone notices.
-    if ($svc) { Start-Service PongService -ErrorAction SilentlyContinue }
-    throw
-}
-# A download's files carry the internet's mark, and SmartScreen would
-# question Pong's window at its first start: the copies are trusted as this
-# installer is.
-Unblock-File (Join-Path $dest 'pong.exe')
 if (Test-Path $Window) {
+    Stop-Program 'Pong Control'
+    Copy-Program $Window (Join-Path $dest 'Pong Control.exe')
     $control = Join-Path $dest 'Pong Control.exe'
+    # A download's files carry the internet's mark, and SmartScreen would
+    # question Pong's window at its first start: the copy is trusted as this
+    # installer is.
     Unblock-File $control
     # For everyone on this PC: Start menu, "Pong".
     $shell = New-Object -ComObject WScript.Shell
@@ -166,8 +150,12 @@ if (Test-Path $Window) {
 # This script beside the programs, for the entry's Uninstall to run.
 Copy-Program $PSCommandPath (Join-Path $dest 'install.ps1')
 
-& (Join-Path $dest 'pong.exe') install
-if ($LASTEXITCODE -ne 0) { throw "pong install failed (exit code $LASTEXITCODE)" }
+# The host: pong enable copies pong.exe from beside $Source into $dest, checks
+# its signature, stops the service, puts the copy in place and starts the
+# service on it. Should putting it in place fail, the host keeps running on
+# the pong.exe that was there.
+& $Source enable
+if ($LASTEXITCODE -ne 0) { throw "pong enable failed (exit code $LASTEXITCODE)" }
 Write-Entry
 if ($NoStart) { Stop-Service PongService -Force }
 Get-Service PongService | Format-Table Name, Status, StartType

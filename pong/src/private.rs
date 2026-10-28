@@ -31,6 +31,13 @@ pub fn secure_data_dir(dir: &Path) {
     imp::secure_data_dir(dir)
 }
 
+/// Whether this process has an administrator's rights (elevated, or
+/// SYSTEM).
+#[cfg(windows)]
+pub fn elevated() -> bool {
+    imp::elevated()
+}
+
 /// Let every local user read `path` (one of [`PUBLIC_FILES`], after it is
 /// written: a new file is born private).
 pub fn make_public(path: &Path) {
@@ -47,14 +54,15 @@ pub fn restrict_to_admins(path: &Path) -> std::io::Result<()> {
 mod imp {
     use std::path::Path;
 
-    use windows::core::{w, HSTRING, PCWSTR};
+    use windows::core::{w, BOOL, HSTRING, PCWSTR};
     use windows::Win32::Foundation::{LocalFree, HLOCAL};
     use windows::Win32::Security::Authorization::{
         ConvertStringSecurityDescriptorToSecurityDescriptorW, SDDL_REVISION_1,
     };
     use windows::Win32::Security::{
-        SetFileSecurityW, DACL_SECURITY_INFORMATION, PROTECTED_DACL_SECURITY_INFORMATION,
-        PSECURITY_DESCRIPTOR,
+        CheckTokenMembership, CreateWellKnownSid, SetFileSecurityW, WinBuiltinAdministratorsSid,
+        DACL_SECURITY_INFORMATION, PROTECTED_DACL_SECURITY_INFORMATION, PSECURITY_DESCRIPTOR, PSID,
+        SECURITY_MAX_SID_SIZE,
     };
 
     use super::PUBLIC_FILES;
@@ -97,6 +105,20 @@ mod imp {
             );
             let _ = LocalFree(Some(HLOCAL(sd.0)));
             ok.ok().map_err(std::io::Error::other)
+        }
+    }
+
+    pub fn elevated() -> bool {
+        let mut sid = [0u8; SECURITY_MAX_SID_SIZE as usize];
+        let mut size = sid.len() as u32;
+        let psid = PSID(sid.as_mut_ptr().cast());
+        let mut member = BOOL(0);
+        // SAFETY: `sid` holds any SID (SECURITY_MAX_SID_SIZE) and `size` says
+        // how much; the token checked is this thread's or process's own.
+        unsafe {
+            CreateWellKnownSid(WinBuiltinAdministratorsSid, None, Some(psid), &mut size).is_ok()
+                && CheckTokenMembership(None, psid, &mut member).is_ok()
+                && member.as_bool()
         }
     }
 

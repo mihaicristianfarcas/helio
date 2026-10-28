@@ -1,23 +1,10 @@
 //! Starting the host from its window, on a Mac: a copy installed by a
-//! package manager has had no script run for it, so the app itself sets the
-//! host up to run whenever the user is logged in (the LaunchAgent
-//! `tools/build-pong-app --install` writes) and starts it.
+//! package manager has had no script run for it, so the window turns
+//! hosting on itself, with `pong enable` (the host's LaunchAgent, which the
+//! host writes and loads; `pong/src/hosting/mac.rs`).
 //!
-//! Only a Mac: on Windows the host is a service that an administrator
-//! installs (`pong install`), on Linux a systemd user unit; the window says
-//! how, and cannot do either for the user.
-
-#[cfg(target_os = "macos")]
-use pingpong_ui::login::LoginItem;
-
-/// The host at login, kept running: `Pong.app`'s executable as `pong host`.
-#[cfg(target_os = "macos")]
-const HOST: LoginItem = LoginItem {
-    id: "dev.pingpong.Pong",
-    name: "Pong",
-    args: &["host"],
-    keep_alive: true,
-};
+//! Only a Mac for now: on Windows `pong enable` needs an administrator, on
+//! Linux the unit is installed with the host; the window says how.
 
 /// The host's executable: in `Pong.app`, beside the bundle this app is in.
 #[cfg(target_os = "macos")]
@@ -40,14 +27,21 @@ pub fn can_start() -> bool {
     false
 }
 
-/// Set the host to run whenever the user is logged in, and start it now.
+/// Turn hosting on: the host runs now, and whenever the user is logged in.
 pub fn start() -> Result<(), String> {
     #[cfg(target_os = "macos")]
     {
         let host = host_binary().ok_or("Pong.app is not beside this app.")?;
-        tracing::info!(host = %host.display(), "starting the host, now and at login");
-        HOST.set(&host, true)?;
-        HOST.start_now()
+        tracing::info!(host = %host.display(), "turning hosting on");
+        let out = std::process::Command::new(&host)
+            .arg("enable")
+            .output()
+            .map_err(|e| format!("{}: {e}", host.display()))?;
+        if out.status.success() {
+            Ok(())
+        } else {
+            Err(String::from_utf8_lossy(&out.stderr).trim().to_string())
+        }
     }
     #[cfg(not(target_os = "macos"))]
     Err("The host is not started from its window on this system.".into())

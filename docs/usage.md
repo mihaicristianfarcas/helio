@@ -123,6 +123,39 @@ hosts (`hosts.toml`) and this device's keys:
 
 `PING_DATA_DIR` points Ping (and `ping`, `ping-agent`) elsewhere.
 
+## Hosting on and off
+
+Hosting is one switch, and it is off until you turn it on. Off, nothing of
+the host runs on your computer: no port is open for streaming, pairing or
+the web UI, nothing is published for finding the host from the internet,
+and it is not announced on the local network. Ping, the client, opens none
+of these.
+
+```sh
+pong enable     # on: the host starts now, and every time after
+pong disable    # off: the host stops, and no longer starts
+pong status     # off, starting, on or failed (with why)
+```
+
+| | `pong enable` | `pong disable` |
+|---|---|---|
+| macOS | Writes the LaunchAgent `~/Library/LaunchAgents/dev.pingpong.Pong.plist`, which runs the host from the app bundle `pong` is in, whenever you are logged in, and starts it now. `pong` outside an app bundle refuses: macOS's Screen Recording and Accessibility permissions belong to the app | Stops the host and deletes the LaunchAgent |
+| Windows | As administrator: copies `pong.exe` to `C:\Program Files\Pong` (only administrators can change that folder), checks its signature, and runs it as **PongService**, which starts at boot, before anyone signs in, with Windows Firewall rules for it | As administrator: stops and deletes PongService, its firewall rules and the copy in `C:\Program Files\Pong` |
+| Linux | `systemctl --user enable --now pong`: the host runs in your desktop session, now and at each login (the unit comes with the install) | `systemctl --user disable --now pong` |
+
+On Windows the service runs as SYSTEM, the only account that can show and
+control the sign-in screen and UAC prompts. That is why it runs only from
+its own copy in Program Files, never from a folder you (or a program you
+run) can write to, and why turning hosting on or off asks for an
+administrator. Without one, `pong enable` and `pong disable` change nothing
+and exit with code 740, so an app can ask Windows to run them again
+elevated. The signature check only warns until Windows releases are signed;
+after that, `pong enable` refuses an engine that is unsigned or was changed
+after signing.
+
+Uninstalling Pong turns hosting off first ([install.md](install.md#uninstalling)).
+Your pairings and settings stay in the data folder either way.
+
 ## Pong's window and web UI
 
 Pong's window (**Pong Control** on a Mac, **Pong** in the Windows Start
@@ -328,7 +361,7 @@ same.
 - **Ping finds no hosts (macOS).** Allow Ping on the local network: System
   Settings > Privacy & Security > Local Network.
 - **Windows asks about the firewall.** Allow Ping (and `ping.exe`) on private
-  networks. The host's firewall rules are added by `pong install`.
+  networks. The host's firewall rules are added by `pong enable`.
 - **"The host did not answer."** Is Pong running (its window says; on
   Windows, `PongService` in Services)? Is this device still paired (the host's
   **Devices**)?

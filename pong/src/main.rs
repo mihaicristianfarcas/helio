@@ -1,6 +1,10 @@
 //! Pong: the pingpong streaming host.
 //!
 //!   pong [host]                      run the host in this session
+//!   pong enable | disable            hosting on (the host runs at every start,
+//!                                    from now) or off (see `hosting`)
+//!   pong status [--json]             off, starting, on or failed; for on,
+//!                                    whether the web API answers
 //!   pong identity                    print this host's public keys
 //!   pong clients                     list paired clients and what each may do
 //!   pong add-client NAME X25519 MLKEM [--agent] [--permissions LIST]
@@ -10,10 +14,12 @@
 //!
 //! On Windows, also:
 //!
-//!   pong install | uninstall         the PongService Windows service
 //!   pong service                     the service itself (started by Windows)
 //!   pong clipboard-agent             clipboard sharing as the signed-in user
 //!                                    (started by the host for a session)
+//!
+//! On Windows, DLLs come only from System32 and from beside `pong.exe`
+//! (`restrict_dll_search`).
 
 #[cfg(windows)]
 mod apps;
@@ -32,6 +38,7 @@ mod endsession;
 #[cfg(windows)]
 mod gamepad;
 mod host;
+mod hosting;
 #[cfg(target_os = "macos")]
 #[path = "mac/icon.rs"]
 mod icon;
@@ -121,7 +128,30 @@ fn init_logging_named(
     guard
 }
 
+/// DLLs from System32 and from beside `pong.exe` only, never from PATH or
+/// the current folder: the host runs as SYSTEM, and a DLL planted in a
+/// folder on PATH would run as SYSTEM with it. Beside `pong.exe` is
+/// `C:\Program Files\Pong` for the service and the host (`hosting`), which
+/// only administrators can change. What the host loads by name, NVENC
+/// (`nvEncodeAPI64.dll`) and NVAPI, the driver puts in System32.
+///
+/// From the first line of `main`, before anything else loads.
+#[cfg(windows)]
+fn restrict_dll_search() {
+    use windows::Win32::System::LibraryLoader::{
+        SetDefaultDllDirectories, LOAD_LIBRARY_SEARCH_APPLICATION_DIR, LOAD_LIBRARY_SEARCH_SYSTEM32,
+    };
+    // SAFETY: changes where later loads look, and nothing else; no other
+    // thread runs yet.
+    unsafe {
+        SetDefaultDllDirectories(LOAD_LIBRARY_SEARCH_SYSTEM32 | LOAD_LIBRARY_SEARCH_APPLICATION_DIR)
+    }
+    .expect("SetDefaultDllDirectories exists on every Windows pong runs on (8 and later)");
+}
+
 fn main() -> ExitCode {
+    #[cfg(windows)]
+    restrict_dll_search();
     let args: Vec<String> = std::env::args().skip(1).collect();
     let dir = config::data_dir();
     // Pong.app opened from the Finder: the host, with its icon.
@@ -135,8 +165,11 @@ fn main() -> ExitCode {
         None => "host",
     };
     // On Windows the data folder is the host's alone (see `private`). Not
-    // from the clipboard helper, which runs as the signed-in user.
-    if command != "clipboard-agent" {
+    // from the clipboard helper, which runs as the signed-in user; nor from
+    // the hosting switch and its status, which the app runs, unelevated for
+    // status and often before the host ever ran: a folder this created
+    // would be that user's own.
+    if !matches!(command, "clipboard-agent" | "enable" | "disable" | "status") {
         private::secure_data_dir(&dir);
     }
     match command {
@@ -146,24 +179,9 @@ fn main() -> ExitCode {
         "host" => run_host(dir, opened_by_hand),
         #[cfg(windows)]
         "service" => run_service(&dir),
-        #[cfg(windows)]
-        "install" => match service::install() {
-            Ok(()) => {
-                println!(
-                    "PongService installed and started. Pong now runs at boot, before sign-in."
-                );
-                ExitCode::SUCCESS
-            }
-            Err(e) => fail(e),
-        },
-        #[cfg(windows)]
-        "uninstall" => match service::uninstall() {
-            Ok(()) => {
-                println!("PongService removed.");
-                ExitCode::SUCCESS
-            }
-            Err(e) => fail(e),
-        },
+        "enable" => hosting::switch(true),
+        "disable" => hosting::switch(false),
+        "status" => hosting::print_status(&dir, args.iter().any(|a| a == "--json")),
         "identity" => print_identity(&dir),
         "clients" => list_clients(&dir),
         "permissions" => permissions(&dir, &args),
@@ -172,12 +190,8 @@ fn main() -> ExitCode {
         other => {
             eprintln!(
                 "unknown command {other}\n\nusage: pong \
-                    [host|identity|clients|add-client|remove-client|permissions{}]",
-                if cfg!(windows) {
-                    "|install|uninstall"
-                } else {
-                    ""
-                }
+                    [host|enable|disable|status [--json]|identity|clients|add-client|\
+                    remove-client|permissions]"
             );
             ExitCode::FAILURE
         }
@@ -253,7 +267,7 @@ fn run_service(dir: &std::path::Path) -> ExitCode {
     match service::run() {
         Ok(()) => ExitCode::SUCCESS,
         Err(e) => {
-            eprintln!("{e}\n(`pong service` is started by Windows; use `pong install`)");
+            eprintln!("{e}\n(`pong service` is started by Windows; use `pong enable`)");
             ExitCode::FAILURE
         }
     }

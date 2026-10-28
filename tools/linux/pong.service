@@ -2,7 +2,7 @@
 #
 #   install -Dm755 target/release/pong ~/.local/bin/pong
 #   install -Dm644 tools/linux/pong.service ~/.config/systemd/user/pong.service
-#   systemctl --user enable --now pong
+#   pong enable        # systemctl --user enable --now pong; off: pong disable
 #
 # The desktop hands DISPLAY to user services (GNOME and KDE do). Logs:
 # ~/.config/pong/logs, or `journalctl --user -u pong`.

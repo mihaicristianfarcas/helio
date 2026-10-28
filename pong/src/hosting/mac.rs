@@ -1,0 +1,191 @@
+//! Hosting on a Mac: the LaunchAgent `dev.pingpong.Pong`, which runs
+//! `pong host` whenever the user is logged in and starts it again if it
+//! exits.
+//!
+//! The host runs from the app bundle this `pong` is the main program of,
+//! never from a bare executable: macOS grants Screen Recording and
+//! Accessibility to an app, by its bundle and signature, so a host outside
+//! one could neither capture nor control anything. That bundle is Pong.app
+//! today, a helper inside the app later; either way it is found from this
+//! `pong`, and `pong enable` from anywhere else fails and says so.
+//!
+//! The agent is in `~/Library/LaunchAgents`, the user's own: nothing here
+//! needs an administrator. The Homebrew cask's uninstall unloads the same
+//! label (`Casks/pong.rb`).
+
+use std::path::{Path, PathBuf};
+use std::process::Output;
+use std::time::Duration;
+
+use super::{Error, State};
+
+const LABEL: &str = "dev.pingpong.Pong";
+
+/// What `pong enable` hands on to the host it starts: a data folder of its
+/// own (a check's), so that the host and `pong status` read the same one;
+/// and `PONG_NO_PROMPTS`, for checks run while someone works at the Mac.
+const HANDED_ON: [&str; 2] = ["PONG_DATA_DIR", "PONG_NO_PROMPTS"];
+
+/// launchctl's exit codes for "this agent is not loaded": `bootout` says 3
+/// (No such process), `print` 113 (Could not find service), on macOS 26.
+const NOT_LOADED: [i32; 2] = [3, 113];
+
+fn plist() -> Result<PathBuf, String> {
+    let home = std::env::var_os("HOME")
+        .filter(|h| !h.is_empty())
+        .ok_or("There is no home folder to keep the host's LaunchAgent in.")?;
+    Ok(PathBuf::from(home)
+        .join("Library/LaunchAgents")
+        .join(format!("{LABEL}.plist")))
+}
+
+/// This user's login session, as launchd names it.
+fn domain() -> String {
+    // SAFETY: getuid cannot fail and touches nothing.
+    format!("gui/{}", unsafe { libc::getuid() })
+}
+
+fn launchctl(args: &[&str]) -> Result<Output, String> {
+    std::process::Command::new("/bin/launchctl")
+        .args(args)
+        .output()
+        .map_err(|e| format!("launchctl did not run: {e}"))
+}
+
+fn said(out: &Output) -> String {
+    String::from_utf8_lossy(&out.stderr).trim().to_string()
+}
+
+/// The host's executable: this `pong`, when it is an app bundle's.
+fn host() -> Result<(PathBuf, PathBuf), String> {
+    let exe = std::env::current_exe()
+        .and_then(std::fs::canonicalize)
+        .map_err(|e| format!("cannot tell where this pong is: {e}"))?;
+    match super::bundle_of(&exe) {
+        Some(bundle) => Ok((exe.clone(), bundle.to_path_buf())),
+        None => Err(format!(
+            "The host runs from its app bundle, so that macOS's Screen Recording and \
+                Accessibility permissions apply to it, and this pong is not in one \
+                ({}). Run the pong inside Pong.app (Pong.app/Contents/MacOS/pong), \
+                or build it with tools/build-pong-app.",
+            exe.display()
+        )),
+    }
+}
+
+pub fn enable() -> Result<String, Error> {
+    let (exe, bundle) = host()?;
+    let env: Vec<(&str, String)> = HANDED_ON
+        .iter()
+        .filter_map(|k| Some((*k, std::env::var(k).ok()?)))
+        .collect();
+    let path = plist()?;
+    if let Some(dir) = path.parent() {
+        std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+    }
+    std::fs::write(&path, super::launch_agent(LABEL, &exe, &env))
+        .map_err(|e| format!("{}: {e}", path.display()))?;
+    // One already loaded (an older one, or this one) goes first: launchd
+    // refuses to load a second of a label. Not loaded is the usual case.
+    let _ = launchctl(&["bootout", &format!("{}/{LABEL}", domain())]);
+    let out = launchctl(&["bootstrap", &domain(), &path.to_string_lossy()])?;
+    if !out.status.success() {
+        return Err(Error::Failed(format!(
+            "launchd did not start the host: {}",
+            said(&out)
+        )));
+    }
+    Ok(format!(
+        "Hosting is on: the host runs from {} now and whenever you are logged in.",
+        bundle.display()
+    ))
+}
+
+/// The host's process, while launchd runs it.
+fn running_pid() -> Option<i32> {
+    let out = launchctl(&["print", &format!("{}/{LABEL}", domain())]).ok()?;
+    out.status
+        .success()
+        .then(|| super::launchd_pid(&String::from_utf8_lossy(&out.stdout)))?
+}
+
+/// Wait for process `pid` to end, at most `timeout`; whether it has.
+/// kqueue says when it exits, so nothing is polled.
+fn wait_for_exit(pid: i32, timeout: Duration) -> bool {
+    // SAFETY: the queue is this function's own and closed once; `change`
+    // and `event` live across the call that reads and fills them.
+    unsafe {
+        let queue = libc::kqueue();
+        if queue < 0 {
+            return false;
+        }
+        let change = libc::kevent {
+            ident: pid as libc::uintptr_t,
+            filter: libc::EVFILT_PROC,
+            flags: libc::EV_ADD | libc::EV_ONESHOT,
+            fflags: libc::NOTE_EXIT,
+            data: 0,
+            udata: std::ptr::null_mut(),
+        };
+        let mut event: libc::kevent = std::mem::zeroed();
+        let wait = libc::timespec {
+            tv_sec: timeout.as_secs() as libc::time_t,
+            tv_nsec: 0,
+        };
+        let n = libc::kevent(queue, &change, 1, &mut event, 1, &wait);
+        let errno = std::io::Error::last_os_error().raw_os_error();
+        libc::close(queue);
+        match n {
+            // Exited; or gone before it could be watched (ESRCH).
+            1 => event.flags & libc::EV_ERROR == 0 || event.data == libc::ESRCH as isize,
+            -1 => errno == Some(libc::ESRCH),
+            _ => false,
+        }
+    }
+}
+
+pub fn disable() -> Result<String, Error> {
+    let pid = running_pid();
+    // bootout asks the host to stop (SIGTERM: it ends a session properly
+    // and puts the displays back) and returns at once, while the host
+    // stops (macOS 26.5): wait for it, as long as launchd would before
+    // killing it, and a little more.
+    let out = launchctl(&["bootout", &format!("{}/{LABEL}", domain())])?;
+    if !out.status.success() && !NOT_LOADED.contains(&out.status.code().unwrap_or(-1)) {
+        return Err(Error::Failed(format!(
+            "launchd did not stop the host: {}",
+            said(&out)
+        )));
+    }
+    let path = plist()?;
+    match std::fs::remove_file(&path) {
+        Err(e) if e.kind() != std::io::ErrorKind::NotFound => {
+            return Err(Error::Failed(format!("{}: {e}", path.display())));
+        }
+        _ => {}
+    }
+    if let Some(pid) = pid {
+        if !wait_for_exit(pid, Duration::from_secs(super::STOP_GRACE_S + 5)) {
+            return Err(Error::Failed(format!(
+                "the host (process {pid}) is still stopping; it no longer starts at login"
+            )));
+        }
+    }
+    Ok("Hosting is off: the host is stopped, and no longer starts at login.".into())
+}
+
+pub fn state() -> State {
+    let installed = plist().is_ok_and(|p| Path::new(&p).exists());
+    match launchctl(&["print", &format!("{}/{LABEL}", domain())]) {
+        Ok(out) if out.status.success() => {
+            super::launchd_state(&String::from_utf8_lossy(&out.stdout))
+        }
+        Ok(_) if installed => State::Failed(
+            "the host's LaunchAgent is there but not loaded: it starts at your next \
+                login, or now with pong enable"
+                .into(),
+        ),
+        Ok(_) => State::Off,
+        Err(e) => State::Failed(e),
+    }
+}

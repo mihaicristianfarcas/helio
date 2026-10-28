@@ -8,6 +8,13 @@ license.workspace = true
 publish.workspace = true
 description = "Pong: the pingpong streaming host (Windows, macOS, Linux)"
 
+[features]
+# Windows: `pong enable` refuses an engine without a valid Authenticode
+# signature by PONG_WINDOWS_PUBLISHER (set at build time) instead of only
+# warning. For release builds once Windows releases are signed; a debug build
+# never requires it (pong/src/hosting/signature.rs).
+require-signature = []
+
 [dependencies]
 pingpong-proto = { path = "../pingpong-proto" }
 pingpong-transport = { path = "../pingpong-transport" }
@@ -71,6 +78,13 @@ windows = { version = "0.61", features = [
     "Win32_Networking_WinSock",
     "Win32_Security",
     "Win32_Security_Authorization",
+    "Win32_Security_Cryptography",
+    "Win32_Security_Cryptography_Catalog",
+    "Win32_Security_Cryptography_Sip",
+    "Win32_Security_WinTrust",
+    "Win32_Storage_FileSystem",
+    "Win32_System_Com",
+    "Win32_System_Diagnostics_ToolHelp",
     "Win32_System_Pipes",
     "Win32_System_Power",
     "Win32_System_RemoteDesktop",
@@ -79,6 +93,7 @@ windows = { version = "0.61", features = [
     "Win32_System_Threading",
     "Win32_UI_Accessibility",
     "Win32_UI_Input_KeyboardAndMouse",
+    "Win32_UI_Shell",
     "Win32_UI_WindowsAndMessaging",
 ] }
 

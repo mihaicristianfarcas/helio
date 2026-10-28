@@ -18,7 +18,12 @@ apps=("ping-app dev.pingpong.Ping" "pong-app dev.pingpong.PongApp")
 
 if [[ ${1:-} == --uninstall ]]; then
     if [[ -f $HERE/pong.service ]]; then
-        systemctl --user disable --now pong 2>/dev/null || true
+        # Hosting off first: the host stopped, and no longer started at
+        # login. A failure stops the uninstall here, with the host's unit
+        # still in place to turn it off by hand.
+        if [[ -x $HOME/.local/bin/pong ]]; then
+            "$HOME/.local/bin/pong" disable
+        fi
         rm -f "$UNITS/pong.service" "$HOME/.local/bin/pong"
         systemctl --user daemon-reload 2>/dev/null || true
     fi

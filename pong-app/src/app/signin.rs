@@ -18,7 +18,7 @@ impl PongApp {
         let how = match std::env::consts::OS {
             "windows" => {
                 "Pong runs as a service, PongService. Start it in Services, or \
-                    install it with pong install from an administrator's terminal."
+                    turn hosting on with pong enable from an administrator's terminal."
             }
             "macos" if can_start => {
                 "Pong then runs whenever you are logged in, and asks for Screen \
@@ -28,7 +28,7 @@ impl PongApp {
                 "Put Pong.app beside this app (both in Applications) and start it \
                     here, or run tools/build-pong-app --install from the source."
             }
-            _ => "Start it with systemctl --user start pong, or run pong host.",
+            _ => "Turn hosting on with pong enable, or run pong host.",
         };
         let start: AnyElement = if can_start {
             button("start-host", "Start Pong", t)

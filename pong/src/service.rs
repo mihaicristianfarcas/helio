@@ -10,21 +10,32 @@
 //!
 //! It relaunches the host when the console session changes (sign-out, fast user
 //! switching, a reboot to the sign-in screen) or if the host exits.
+//!
+//! It runs, and launches, only the engine's copy in `C:\Program Files\Pong`
+//! that `pong enable` puts there (`hosting`): never a `pong.exe` in a folder
+//! a user can write to.
 
 use std::ffi::OsString;
+use std::path::Path;
 use std::time::Duration;
 
 use windows::core::{PCWSTR, PWSTR};
-use windows::Win32::Foundation::{CloseHandle, HANDLE, WAIT_OBJECT_0};
+use windows::Win32::Foundation::{
+    CloseHandle, ERROR_SERVICE_DOES_NOT_EXIST, HANDLE, WAIT_OBJECT_0,
+};
 use windows::Win32::Security::{
     DuplicateTokenEx, SecurityImpersonation, SetTokenInformation, TokenPrimary, TokenSessionId,
     TOKEN_ACCESS_MASK, TOKEN_ALL_ACCESS, TOKEN_DUPLICATE, TOKEN_QUERY,
 };
+use windows::Win32::System::Diagnostics::ToolHelp::{
+    CreateToolhelp32Snapshot, Process32FirstW, Process32NextW, PROCESSENTRY32W, TH32CS_SNAPPROCESS,
+};
 use windows::Win32::System::RemoteDesktop::WTSGetActiveConsoleSessionId;
 use windows::Win32::System::Threading::{
-    CreateEventW, CreateProcessAsUserW, GetCurrentProcess, OpenProcessToken, ResetEvent, SetEvent,
-    TerminateProcess, WaitForMultipleObjects, WaitForSingleObject, CREATE_NO_WINDOW,
-    CREATE_UNICODE_ENVIRONMENT, INFINITE, PROCESS_INFORMATION, STARTUPINFOW,
+    CreateEventW, CreateProcessAsUserW, GetCurrentProcess, OpenProcess, OpenProcessToken,
+    ResetEvent, SetEvent, TerminateProcess, WaitForMultipleObjects, WaitForSingleObject,
+    CREATE_NO_WINDOW, CREATE_UNICODE_ENVIRONMENT, INFINITE, PROCESS_INFORMATION,
+    PROCESS_SYNCHRONIZE, STARTUPINFOW,
 };
 use windows_service::service::{
     ServiceAccess, ServiceControl, ServiceControlAccept, ServiceErrorControl, ServiceExitCode,
@@ -33,6 +44,8 @@ use windows_service::service::{
 use windows_service::service_control_handler::{self, ServiceControlHandlerResult};
 use windows_service::service_manager::{ServiceManager, ServiceManagerAccess};
 use windows_service::{define_windows_service, service_dispatcher};
+
+use crate::hosting::State;
 
 pub const SERVICE_NAME: &str = "PongService";
 const DISPLAY_NAME: &str = "Pong streaming host";
@@ -108,11 +121,16 @@ fn service_body() -> Result<(), String> {
 
     let host_stop = unsafe { CreateEventW(None, true, false, PCWSTR(wide(STOP_EVENT).as_ptr())) }
         .map_err(|e| e.to_string())?;
-    let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+    let exe = crate::hosting::trusted_engine()?;
     let exe_w = wide(&exe.to_string_lossy());
 
-    // Every 3 s until stopped: make sure a host runs in the console session.
-    while unsafe { WaitForSingleObject(events.stop, 3000) } != WAIT_OBJECT_0 {
+    // Until stopped: make sure a host runs in the console session. At once
+    // the first time, so that the host runs as soon as the service does
+    // (`pong status` reports a service without its host as failed); then 3 s
+    // after the host exits, or while there is no console session.
+    let mut wait = 0;
+    while unsafe { WaitForSingleObject(events.stop, wait) } != WAIT_OBJECT_0 {
+        wait = 3000;
         let session = unsafe { WTSGetActiveConsoleSessionId() };
         if session == 0xFFFF_FFFF {
             continue;
@@ -217,22 +235,33 @@ fn launch(exe: &[u16], session: u32) -> Result<PROCESS_INFORMATION, String> {
     }
 }
 
-/// Register the service (auto-start, LocalSystem, restart on failure), open
-/// the firewall, and start it.
-pub fn install() -> Result<(), String> {
-    let manager = ServiceManager::local_computer(
-        None::<&str>,
-        ServiceManagerAccess::CONNECT | ServiceManagerAccess::CREATE_SERVICE,
-    )
-    .map_err(|e| format!("cannot open the service manager (run as administrator): {e}"))?;
-    let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+/// How long the host has to stop with the service: it is given 15 s to
+/// end its session and put the displays back (`service_body`), then ended.
+const STOP_WAIT_MS: u32 = 30_000;
+
+fn manager(access: ServiceManagerAccess) -> Result<ServiceManager, String> {
+    ServiceManager::local_computer(None::<&str>, access)
+        .map_err(|e| format!("cannot open the service manager: {e}"))
+}
+
+fn not_installed(e: &windows_service::Error) -> bool {
+    matches!(e, windows_service::Error::Winapi(io)
+        if io.raw_os_error() == Some(ERROR_SERVICE_DOES_NOT_EXIST.0 as i32))
+}
+
+/// Register the service to run `engine` (auto-start, LocalSystem, restart
+/// on failure), open the firewall to it, and start it.
+pub fn register(engine: &Path) -> Result<(), String> {
+    let manager = manager(ServiceManagerAccess::CONNECT | ServiceManagerAccess::CREATE_SERVICE)?;
     let info = ServiceInfo {
         name: OsString::from(SERVICE_NAME),
         display_name: OsString::from(DISPLAY_NAME),
         service_type: ServiceType::OWN_PROCESS,
         start_type: ServiceStartType::AutoStart,
         error_control: ServiceErrorControl::Normal,
-        executable_path: exe,
+        // Quoted by windows-service when it holds a space ("C:\Program
+        // Files\..."), as an unquoted path with spaces is a known way in.
+        executable_path: engine.to_path_buf(),
         launch_arguments: vec![OsString::from("service")],
         dependencies: vec![],
         account_name: None,
@@ -265,60 +294,165 @@ pub fn install() -> Result<(), String> {
             3
         ]),
     });
-    firewall(true);
+    firewall(Some(engine));
     let _ = service.start::<&str>(&[]);
     Ok(())
 }
 
-pub fn uninstall() -> Result<(), String> {
-    let manager = ServiceManager::local_computer(None::<&str>, ServiceManagerAccess::CONNECT)
-        .map_err(|e| format!("cannot open the service manager (run as administrator): {e}"))?;
-    let service = manager
-        .open_service(
-            SERVICE_NAME,
-            ServiceAccess::STOP | ServiceAccess::DELETE | ServiceAccess::QUERY_STATUS,
-        )
-        .map_err(|e| format!("open service: {e}"))?;
-    let _ = service.stop();
-    for _ in 0..40 {
-        match service.query_status() {
-            Ok(s) if s.current_state == ServiceState::Stopped => break,
-            _ => std::thread::sleep(Duration::from_millis(500)),
+/// Stop the service, delete it, and remove its firewall rules. Nothing to
+/// do for a service that is not there.
+pub fn unregister() -> Result<(), String> {
+    let manager = manager(ServiceManagerAccess::CONNECT)?;
+    match manager.open_service(
+        SERVICE_NAME,
+        ServiceAccess::STOP | ServiceAccess::DELETE | ServiceAccess::QUERY_STATUS,
+    ) {
+        Ok(service) => {
+            stop_and_wait(&service);
+            service
+                .delete()
+                .map_err(|e| format!("delete service: {e}"))?;
         }
+        Err(e) if not_installed(&e) => {}
+        Err(e) => return Err(format!("open service: {e}")),
     }
-    service
-        .delete()
-        .map_err(|e| format!("delete service: {e}"))?;
-    firewall(false);
+    firewall(None);
     Ok(())
 }
 
-/// Allow (or remove) inbound traffic to this executable.
-fn firewall(allow: bool) {
-    let exe = std::env::current_exe()
-        .map(|p| p.to_string_lossy().into_owned())
-        .unwrap_or_default();
+/// Stop the service if it runs, and wait for it to have stopped; whether
+/// it ran.
+pub fn stop() -> bool {
+    let Ok(manager) = manager(ServiceManagerAccess::CONNECT) else {
+        return false;
+    };
+    manager
+        .open_service(
+            SERVICE_NAME,
+            ServiceAccess::STOP | ServiceAccess::QUERY_STATUS,
+        )
+        .is_ok_and(|service| stop_and_wait(&service))
+}
+
+/// Start the service (after [`stop`]), without waiting for it.
+pub fn start() {
+    if let Ok(manager) = manager(ServiceManagerAccess::CONNECT) {
+        if let Ok(service) = manager.open_service(SERVICE_NAME, ServiceAccess::START) {
+            let _ = service.start::<&str>(&[]);
+        }
+    }
+}
+
+/// Stop `service` and wait for its process to end (the host it launched
+/// ends first); whether it ran.
+fn stop_and_wait(service: &windows_service::service::Service) -> bool {
+    let Ok(status) = service.query_status() else {
+        return false;
+    };
+    if status.current_state == ServiceState::Stopped {
+        return false;
+    }
+    // SAFETY: a handle to wait on, closed once below.
+    let process = status
+        .process_id
+        .and_then(|pid| unsafe { OpenProcess(PROCESS_SYNCHRONIZE, false, pid) }.ok());
+    let _ = service.stop();
+    if let Some(process) = process {
+        // SAFETY: the handle is the one just opened.
+        unsafe {
+            WaitForSingleObject(process, STOP_WAIT_MS);
+            let _ = CloseHandle(process);
+        }
+    }
+    true
+}
+
+/// What the service manager says of the service, as hosting states go.
+pub fn state() -> State {
+    let manager = match manager(ServiceManagerAccess::CONNECT) {
+        Ok(m) => m,
+        Err(e) => return State::Failed(e),
+    };
+    let service = match manager.open_service(SERVICE_NAME, ServiceAccess::QUERY_STATUS) {
+        Ok(s) => s,
+        Err(e) if not_installed(&e) => return State::Off,
+        Err(e) => return State::Failed(format!("cannot read PongService: {e}")),
+    };
+    let status = match service.query_status() {
+        Ok(s) => s,
+        Err(e) => return State::Failed(format!("cannot read PongService: {e}")),
+    };
+    match status.current_state {
+        ServiceState::Running if status.process_id.is_none_or(host_runs) => State::On,
+        ServiceState::Running => State::Failed(
+            "the host is not running; PongService starts it again in 3 s \
+                (its log: C:\\ProgramData\\Pong\\logs)"
+                .into(),
+        ),
+        ServiceState::StartPending | ServiceState::ContinuePending => State::Starting,
+        ServiceState::StopPending => State::Failed("PongService is stopping".into()),
+        ServiceState::PausePending | ServiceState::Paused => {
+            State::Failed("PongService is paused".into())
+        }
+        ServiceState::Stopped => State::Failed(match status.exit_code {
+            ServiceExitCode::Win32(0) => "PongService is stopped".into(),
+            ServiceExitCode::Win32(code) => format!("PongService stopped with error {code}"),
+            ServiceExitCode::ServiceSpecific(code) => {
+                format!("PongService stopped with error {code} of its own")
+            }
+        }),
+    }
+}
+
+/// Whether the service (process `service`) has its host running: a
+/// process it started. The service itself runs whatever becomes of the
+/// host, so its own state cannot say. When it cannot be told, yes.
+fn host_runs(service: u32) -> bool {
+    // SAFETY: the snapshot is this function's own, closed once; `entry`
+    // carries its size, as Process32FirstW and Process32NextW require.
+    unsafe {
+        let Ok(snapshot) = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0) else {
+            return true;
+        };
+        let mut entry = PROCESSENTRY32W {
+            dwSize: std::mem::size_of::<PROCESSENTRY32W>() as u32,
+            ..Default::default()
+        };
+        let mut found = false;
+        let mut more = Process32FirstW(snapshot, &mut entry).is_ok();
+        while more && !found {
+            found = entry.th32ParentProcessID == service;
+            more = Process32NextW(snapshot, &mut entry).is_ok();
+        }
+        let _ = CloseHandle(snapshot);
+        found
+    }
+}
+
+/// Firewall rules "Pong" allowing inbound traffic to `program`, or none.
+fn firewall(program: Option<&Path>) {
     let _ = std::process::Command::new("netsh")
         .args(["advfirewall", "firewall", "delete", "rule", "name=Pong"])
         .output();
-    if allow {
-        for proto in ["UDP", "TCP"] {
-            let _ = std::process::Command::new("netsh")
-                .args([
-                    "advfirewall",
-                    "firewall",
-                    "add",
-                    "rule",
-                    "name=Pong",
-                    "dir=in",
-                    "action=allow",
-                    &format!("protocol={proto}"),
-                    &format!("program={exe}"),
-                    "enable=yes",
-                    "profile=any",
-                ])
-                .output();
-        }
+    let Some(program) = program else {
+        return;
+    };
+    for proto in ["UDP", "TCP"] {
+        let _ = std::process::Command::new("netsh")
+            .args([
+                "advfirewall",
+                "firewall",
+                "add",
+                "rule",
+                "name=Pong",
+                "dir=in",
+                "action=allow",
+                &format!("protocol={proto}"),
+                &format!("program={}", program.display()),
+                "enable=yes",
+                "profile=any",
+            ])
+            .output();
     }
 }
 
