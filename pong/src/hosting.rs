@@ -9,8 +9,8 @@
 //!   (`hosting/windows.rs` says why). Turning hosting on or off needs an
 //!   administrator: without one, the command changes nothing and exits with
 //!   [`NEEDS_ELEVATION`], and the app runs it again through UAC.
-//! - macOS: a LaunchAgent that runs `pong host` from the app bundle this
-//!   `pong` is in (`hosting/mac.rs`).
+//! - macOS: a LaunchAgent that runs `pong host` from a copy of the helper
+//!   app this `pong` is in (`hosting/mac.rs`).
 //! - Linux: the systemd user unit `pong.service`
 //!   (`tools/linux/pong.service`), `systemctl --user enable|disable --now`
 //!   (`hosting/linux.rs`).
@@ -130,6 +130,8 @@ mod system;
 
 #[cfg(windows)]
 pub use system::trusted_engine;
+#[cfg(target_os = "macos")]
+pub use system::watch_app;
 
 /// `pong enable` (`on`) or `pong disable`: do it, say what happened, and
 /// exit with [`exit_code`].
@@ -179,6 +181,19 @@ pub fn bundle_of(exe: &Path) -> Option<&Path> {
         .then_some(bundle)
 }
 
+/// The app that holds the helper app `helper`
+/// (`X.app/Contents/Helpers/Pong Host.app`): the one a Mac host comes from.
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+pub fn app_holding(helper: &Path) -> Option<&Path> {
+    let helpers = helper.parent()?;
+    let app = helpers.parent()?.parent()?;
+    (helper.extension()? == "app"
+        && helpers.file_name()? == "Helpers"
+        && helpers.parent()?.file_name()? == "Contents"
+        && app.extension()? == "app")
+        .then_some(app)
+}
+
 /// How long launchd lets the host take to stop before it kills it: the
 /// host ends a session properly and puts the displays back first, and
 /// launchd's own default is 5 s (`exit timeout = 5` in `launchctl print`,
@@ -186,10 +201,10 @@ pub fn bundle_of(exe: &Path) -> Option<&Path> {
 #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 pub const STOP_GRACE_S: u64 = 15;
 
-/// The LaunchAgent `label` that runs `exe host` at login and again whenever
-/// it exits, with `env` in its environment.
+/// The LaunchAgent `label` that runs `exe host` (then `args`) at login and
+/// again whenever it exits, with `env` in its environment.
 #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
-pub fn launch_agent(label: &str, exe: &Path, env: &[(&str, String)]) -> String {
+pub fn launch_agent(label: &str, exe: &Path, args: &[String], env: &[(&str, String)]) -> String {
     fn xml(text: &str) -> String {
         text.replace('&', "&amp;")
             .replace('<', "&lt;")
@@ -209,6 +224,10 @@ pub fn launch_agent(label: &str, exe: &Path, env: &[(&str, String)]) -> String {
         d.push_str("\t</dict>\n");
         d
     };
+    let args: String = args
+        .iter()
+        .map(|a| format!("\t\t<string>{}</string>\n", xml(a)))
+        .collect();
     format!(
         "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n\
          <!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \
@@ -221,6 +240,7 @@ pub fn launch_agent(label: &str, exe: &Path, env: &[(&str, String)]) -> String {
          \t<array>\n\
          \t\t<string>{exe}</string>\n\
          \t\t<string>host</string>\n\
+         {args}\
          \t</array>\n\
          {environment}\
          \t<key>RunAtLoad</key>\n\
@@ -407,16 +427,46 @@ mod tests {
     }
 
     #[test]
+    fn a_mac_host_knows_the_app_it_came_with() {
+        let helper = Path::new("/Applications/Ping.app/Contents/Helpers/Pong Host.app");
+        assert_eq!(
+            app_holding(helper),
+            Some(Path::new("/Applications/Ping.app"))
+        );
+        // Its copy, outside any app, and things that look like a helper.
+        assert_eq!(
+            app_holding(Path::new(
+                "/Users/o/Library/Application Support/Pong/Pong Host.app"
+            )),
+            None
+        );
+        assert_eq!(
+            app_holding(Path::new(
+                "/Applications/Ping.app/Contents/Library/Pong Host.app"
+            )),
+            None
+        );
+        assert_eq!(
+            app_holding(Path::new("/x/Ping/Contents/Helpers/Pong Host.app")),
+            None
+        );
+    }
+
+    #[test]
     fn the_launch_agent_keeps_the_host_running_with_the_environment_handed_on() {
         let text = launch_agent(
             "dev.pingpong.Pong",
             Path::new("/Applications/A & B.app/Contents/MacOS/pong"),
+            &["--app".into(), "/Applications/A & B.app".into()],
             &[("PONG_DATA_DIR", "/tmp/<check>".into())],
         );
         assert!(text.contains("<string>dev.pingpong.Pong</string>"));
         assert!(text.contains(
             "\t\t<string>/Applications/A &amp; B.app/Contents/MacOS/pong</string>\n\
-             \t\t<string>host</string>\n"
+             \t\t<string>host</string>\n\
+             \t\t<string>--app</string>\n\
+             \t\t<string>/Applications/A &amp; B.app</string>\n\
+             \t</array>"
         ));
         assert!(text.contains("<key>PONG_DATA_DIR</key>\n\t\t<string>/tmp/&lt;check&gt;</string>"));
         assert!(text.contains("<key>KeepAlive</key>\n\t<true/>"));
@@ -425,6 +475,7 @@ mod tests {
         let bare = launch_agent(
             "dev.pingpong.Pong",
             Path::new("/A.app/Contents/MacOS/pong"),
+            &[],
             &[],
         );
         assert!(!bare.contains("EnvironmentVariables"));

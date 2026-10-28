@@ -183,7 +183,7 @@ fn main() -> ExitCode {
         // Clipboard sharing as the signed-in user, for the host (Windows).
         #[cfg(windows)]
         "clipboard-agent" => clipagent::run(&args),
-        "host" => run_host(dir, opened_by_hand, secured),
+        "host" => run_host(dir, &args, opened_by_hand, secured),
         #[cfg(windows)]
         "service" => run_service(&dir, secured),
         "enable" => hosting::switch(true),
@@ -212,14 +212,27 @@ fn fail(e: impl std::fmt::Display) -> ExitCode {
 }
 
 /// `pong host`: run the host in this session until it is asked to stop.
+/// `args`: the command line (on a Mac, `--app PATH` from the LaunchAgent).
 /// `opened_by_hand`: the host's helper app opened by hand (a Mac), which
 /// brings its icon up too. `secured`: what making the data folder private did
 /// that the log should say.
-fn run_host(dir: std::path::PathBuf, opened_by_hand: bool, secured: Option<String>) -> ExitCode {
+fn run_host(
+    dir: std::path::PathBuf,
+    args: &[String],
+    opened_by_hand: bool,
+    secured: Option<String>,
+) -> ExitCode {
     let _guard = init_logging(&dir);
     if let Some(said) = secured {
         tracing::warn!("{said}");
     }
+    // Run from its copy, the host stops with the app it came with.
+    #[cfg(target_os = "macos")]
+    if !hosting::watch_app(args) {
+        return ExitCode::SUCCESS;
+    }
+    #[cfg(not(target_os = "macos"))]
+    let _ = args;
     // Before the host: one already running (the LaunchAgent's) makes this
     // one fail to start, and the icon is still what was asked for.
     #[cfg(target_os = "macos")]
