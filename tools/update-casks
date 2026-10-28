@@ -61,13 +61,17 @@ else
 fi
 
 mkdir -p "$OUT"
-# The uninstall (which an upgrade runs too) stops what runs: the host's
-# LaunchAgent (pong/src/hosting/mac.rs) and the app's own, which opens it at
-# login (pingpong-ui's login.rs), are unloaded and their files deleted, then
-# the app is asked to quit. An update the app installs puts both agents
-# back after the upgrade (pingpong-update's macos.rs); `brew upgrade` by
-# hand leaves hosting off until it is turned on again. zap: the app's data
-# and logs, and the host's identity, pairings and logs.
+# The uninstall (which an upgrade runs too) stops what runs. First hosting
+# off, as the switch turns it off (pong disable: the host stopped, its
+# LaunchAgent and its copy of the helper removed; pong/src/hosting/mac.rs);
+# then, whatever that did, the host's LaunchAgent and the app's own, which
+# opens it at login (pingpong-ui's login.rs), unloaded and their files
+# deleted, the app asked to quit, and the host's copy, if one is left, put
+# in the Trash (Homebrew deletes only as root). An update the app installs
+# turns hosting on again after the upgrade and puts the login item back
+# (pingpong-update's macos.rs); `brew upgrade` by hand leaves hosting off
+# until it is turned on again. zap: the app's data and logs, and the host's
+# identity, pairings and logs.
 cat > "$OUT/ping.rb" <<CASK
 # Written by tools/update-casks for each release: change that script, not
 # this file.
@@ -87,11 +91,17 @@ $LIMIT
 
   app "Ping.app"
 
-  uninstall launchctl: [
+  uninstall early_script: {
+              executable:   "#{appdir}/Ping.app/Contents/Helpers/Pong Host.app/Contents/MacOS/pong",
+              args:         ["disable"],
+              must_succeed: false,
+            },
+            launchctl:    [
               "dev.pingpong.Pong",
               "dev.pingpong.Ping",
             ],
-            quit:      "dev.pingpong.Ping"
+            quit:         "dev.pingpong.Ping",
+            trash:        "~/Library/Application Support/Pong/Pong Host.app"
 
   zap trash: [
     "~/Library/Application Support/Ping",

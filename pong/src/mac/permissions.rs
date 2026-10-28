@@ -1,8 +1,8 @@
 //! What a Mac host needs macOS to allow: Screen Recording, to capture at all,
 //! and Accessibility, for the client's keyboard and mouse to act. Both are
 //! granted per app in System Settings > Privacy & Security, to the host's
-//! helper inside Ping.app (Pong Host), or, run from a terminal, to the
-//! terminal. Sound in surround (a Core Audio
+//! helper app (Pong Host, run from its copy outside Ping.app:
+//! `hosting/mac.rs` says why), or, run from a terminal, to the terminal. Sound in surround (a Core Audio
 //! tap, see `sound`) needs System Audio Recording besides, asked for the
 //! first time a client wants surround.
 //!

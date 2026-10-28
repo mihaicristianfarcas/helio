@@ -98,9 +98,11 @@ limits per system are in [platforms/](platforms/).
 open the secure desktop, so only it can capture and control a UAC prompt or
 the lock screen (the model Sunshine uses); it runs only from the host's own
 copy in `C:\Program Files\Pong`, which `pong enable` makes from the
-`pong.exe` beside Ping. On macOS it is `Pong Host.app`, a helper inside
-Ping.app that macOS grants the host's permissions to, started at login by a
-LaunchAgent; on Linux a systemd user unit in the desktop session.
+`pong.exe` beside Ping. On macOS it is `Pong Host.app`, the helper app Ping
+carries, which macOS grants the host's permissions to, run from its copy in
+the host's data folder (outside Ping.app, or Screen Recording would be
+Ping's) and started at login by a LaunchAgent; on Linux a systemd user unit
+in the desktop session.
 `pong enable` and `pong disable` set each of them up or take it down: hosting
 is off until then ([usage.md](usage.md#hosting-on-and-off)). The host
 process runs:

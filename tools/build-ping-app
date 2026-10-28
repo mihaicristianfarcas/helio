@@ -9,8 +9,10 @@
 # The helper has its own bundle identifier (dev.pingpong.Pong) and usage
 # strings, so the permissions the host needs (Screen Recording,
 # Accessibility, System Audio Recording) are granted to it, and the app
-# itself never asks for them. `pong enable` points the host's LaunchAgent at
-# the helper (pong/src/hosting/mac.rs).
+# itself never asks for them. `pong enable` copies the helper out of the app
+# into the host's data folder and points the host's LaunchAgent at the copy:
+# macOS files Screen Recording for code inside an app under that app
+# (pong/src/hosting/mac.rs).
 #
 #   tools/build-ping-app            -> target/Ping.app
 #   tools/build-ping-app --install  -> also copy it to /Applications

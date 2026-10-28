@@ -2,18 +2,29 @@
 //! `pong host` whenever the user is logged in and starts it again if it
 //! exits.
 //!
-//! The host runs from the app bundle this `pong` is the main program of,
-//! never from a bare executable: macOS grants Screen Recording and
-//! Accessibility to an app, by its bundle and signature, so a host outside
-//! one could neither capture nor control anything. That bundle is the
-//! helper inside Ping.app (`Contents/Helpers/Pong Host.app`,
-//! `tools/build-ping-app`), found from this `pong`, so the agent runs the
-//! helper of the app that turned hosting on; `pong enable` from anywhere
-//! else fails and says so.
+//! The host runs from an app bundle, never from a bare executable: macOS
+//! grants Screen Recording and Accessibility to an app, by its bundle and
+//! signature, so a host outside one could neither capture nor control
+//! anything. The bundle is the helper inside Ping.app
+//! (`Contents/Helpers/Pong Host.app`, `tools/build-ping-app`), which this
+//! `pong` is the main program of; `pong enable` from anywhere else fails
+//! and says so.
 //!
-//! The agent is in `~/Library/LaunchAgents`, the user's own: nothing here
-//! needs an administrator. The Homebrew cask's uninstall unloads the same
-//! label (`tools/update-casks`).
+//! The agent does not run the helper where it is, but a copy of it in the
+//! host's data folder ([`installed`]), which `enable` makes and `disable`
+//! removes, as Windows runs the engine's copy in Program Files. Looks
+//! removable, is not: macOS files Screen Recording for code inside another
+//! app under that app. Run from inside Ping.app, the host's request named
+//! Ping, and the grant was kept under `dev.pingpong.Ping`, so Ping held it;
+//! from `Contents/Library/LoginItems` the same; from outside any app, it is
+//! the helper's own, "Pong Host" (`dev.pingpong.Pong`). Accessibility named
+//! the helper either way (macOS 26.5, Developer ID and development
+//! signatures alike).
+//!
+//! The agent is in `~/Library/LaunchAgents` and the copy in the user's own
+//! data folder: nothing here needs an administrator. The Homebrew cask's
+//! uninstall runs `pong disable`, then unloads the same label
+//! (`tools/update-casks`).
 
 use std::path::{Path, PathBuf};
 use std::process::Output;
@@ -31,6 +42,15 @@ const HANDED_ON: [&str; 2] = ["PONG_DATA_DIR", "PONG_NO_PROMPTS"];
 /// launchctl's exit codes for "this agent is not loaded": `bootout` says 3
 /// (No such process), `print` 113 (Could not find service), on macOS 26.
 const NOT_LOADED: [i32; 2] = [3, 113];
+
+/// The copy's name in the data folder.
+const COPY: &str = "Pong Host.app";
+
+/// The copy of the helper the agent runs: `~/Library/Application
+/// Support/Pong/Pong Host.app`, or in `PONG_DATA_DIR`.
+fn installed() -> PathBuf {
+    crate::config::data_dir().join(COPY)
+}
 
 fn plist() -> Result<PathBuf, String> {
     let home = std::env::var_os("HOME")
@@ -76,8 +96,52 @@ fn host() -> Result<(PathBuf, PathBuf), String> {
     }
 }
 
+/// `bundle` copied to `to`, replacing what was there: ditto, which keeps
+/// the bundle's signature as it is, without the download's quarantine (the
+/// app it comes from has been opened, and so checked, already). Copied
+/// beside first and renamed into place, so a copy that broke off leaves
+/// none half made.
+fn copy_bundle(bundle: &Path, to: &Path) -> Result<(), String> {
+    let dir = to.parent().ok_or("the host's folder is unknown")?;
+    std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+    let new = dir.join(format!(".{COPY}.new"));
+    let _ = std::fs::remove_dir_all(&new);
+    let out = std::process::Command::new("/usr/bin/ditto")
+        .arg("--noqtn")
+        .arg(bundle)
+        .arg(&new)
+        .output()
+        .map_err(|e| format!("ditto did not run: {e}"))?;
+    if !out.status.success() {
+        let _ = std::fs::remove_dir_all(&new);
+        return Err(format!("the host was not copied: {}", said(&out)));
+    }
+    remove_bundle(to)?;
+    std::fs::rename(&new, to).map_err(|e| format!("{}: {e}", to.display()))
+}
+
+fn remove_bundle(bundle: &Path) -> Result<(), String> {
+    match std::fs::remove_dir_all(bundle) {
+        Err(e) if e.kind() != std::io::ErrorKind::NotFound => {
+            Err(format!("{}: {e}", bundle.display()))
+        }
+        _ => Ok(()),
+    }
+}
+
 pub fn enable() -> Result<String, Error> {
     let (exe, bundle) = host()?;
+    let copy = installed();
+    let program = copy
+        .join("Contents/MacOS")
+        .join(exe.file_name().ok_or("this pong has no name")?);
+    // One already loaded (an older one, or this one) goes first: launchd
+    // refuses to load a second of a label, and its program is about to be
+    // replaced. Not loaded is the usual case.
+    stop()?;
+    if bundle != copy {
+        copy_bundle(&bundle, &copy)?;
+    }
     let env: Vec<(&str, String)> = HANDED_ON
         .iter()
         .filter_map(|k| Some((*k, std::env::var(k).ok()?)))
@@ -86,11 +150,8 @@ pub fn enable() -> Result<String, Error> {
     if let Some(dir) = path.parent() {
         std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
     }
-    std::fs::write(&path, super::launch_agent(LABEL, &exe, &env))
+    std::fs::write(&path, super::launch_agent(LABEL, &program, &env))
         .map_err(|e| format!("{}: {e}", path.display()))?;
-    // One already loaded (an older one, or this one) goes first: launchd
-    // refuses to load a second of a label. Not loaded is the usual case.
-    let _ = launchctl(&["bootout", &format!("{}/{LABEL}", domain())]);
     let out = launchctl(&["bootstrap", &domain(), &path.to_string_lossy()])?;
     if !out.status.success() {
         return Err(Error::Failed(format!(
@@ -100,7 +161,7 @@ pub fn enable() -> Result<String, Error> {
     }
     Ok(format!(
         "Hosting is on: the host runs from {} now and whenever you are logged in.",
-        bundle.display()
+        copy.display()
     ))
 }
 
@@ -147,19 +208,28 @@ fn wait_for_exit(pid: i32, timeout: Duration) -> bool {
     }
 }
 
-pub fn disable() -> Result<String, Error> {
+/// Unload the agent and wait for its host to stop. bootout asks the host to
+/// stop (SIGTERM: it ends a session properly and puts the displays back)
+/// and returns at once, while the host stops (macOS 26.5): wait for it, as
+/// long as launchd would before killing it, and a little more. Loading the
+/// label again before then fails ("Bootstrap failed: 5: Input/output
+/// error"). Not loaded: nothing to do.
+fn stop() -> Result<(), String> {
     let pid = running_pid();
-    // bootout asks the host to stop (SIGTERM: it ends a session properly
-    // and puts the displays back) and returns at once, while the host
-    // stops (macOS 26.5): wait for it, as long as launchd would before
-    // killing it, and a little more.
     let out = launchctl(&["bootout", &format!("{}/{LABEL}", domain())])?;
     if !out.status.success() && !NOT_LOADED.contains(&out.status.code().unwrap_or(-1)) {
-        return Err(Error::Failed(format!(
-            "launchd did not stop the host: {}",
-            said(&out)
-        )));
+        return Err(format!("launchd did not stop the host: {}", said(&out)));
     }
+    match pid {
+        Some(pid) if !wait_for_exit(pid, Duration::from_secs(super::STOP_GRACE_S + 5)) => Err(
+            format!("the host (process {pid}) is still stopping: try again in a moment"),
+        ),
+        _ => Ok(()),
+    }
+}
+
+pub fn disable() -> Result<String, Error> {
+    let stopped = stop();
     let path = plist()?;
     match std::fs::remove_file(&path) {
         Err(e) if e.kind() != std::io::ErrorKind::NotFound => {
@@ -167,13 +237,10 @@ pub fn disable() -> Result<String, Error> {
         }
         _ => {}
     }
-    if let Some(pid) = pid {
-        if !wait_for_exit(pid, Duration::from_secs(super::STOP_GRACE_S + 5)) {
-            return Err(Error::Failed(format!(
-                "the host (process {pid}) is still stopping; it no longer starts at login"
-            )));
-        }
-    }
+    // The copy goes too, the running host's program or not: the process
+    // keeps what it has open.
+    remove_bundle(&installed())?;
+    stopped?;
     Ok("Hosting is off: the host is stopped, and no longer starts at login.".into())
 }
 
