@@ -95,8 +95,11 @@ limits per system are in [platforms/](platforms/).
 **Pong.** On Windows a service (`PongService`, LocalSystem) launches
 `pong host` into the console session with a SYSTEM token: only SYSTEM can
 open the secure desktop, so only it can capture and control a UAC prompt or
-the lock screen (the model Sunshine uses). On macOS it is `Pong.app`, started
-at login; on Linux a systemd user unit in the desktop session. The host
+the lock screen (the model Sunshine uses); it runs only from the host's own
+copy in `C:\Program Files\Pong`. On macOS it is `Pong.app`, started at login
+by a LaunchAgent; on Linux a systemd user unit in the desktop session.
+`pong enable` and `pong disable` set each of them up or take it down: hosting
+is off until then ([usage.md](usage.md#hosting-on-and-off)). The host
 process runs:
 
 | Thread | Does |

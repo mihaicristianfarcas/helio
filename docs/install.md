@@ -165,7 +165,8 @@ tools/build-pong-app --install
 This installs **Pong.app** (the host) and **Pong Control.app** (its window,
 and Pong's menu bar icon) in `/Applications`, and two LaunchAgents: one
 starts the host at login and keeps it running
-(`~/Library/LaunchAgents/dev.pingpong.Pong.plist`), the other puts Pong's
+(`~/Library/LaunchAgents/dev.pingpong.Pong.plist`, which `pong enable`
+writes; see [usage.md](usage.md#hosting-on-and-off)), the other puts Pong's
 icon in the menu bar at login (`dev.pingpong.PongControl.plist`; **Show
 Pong's icon at login** in the window turns it off). On first start Pong
 asks for **Screen Recording** (to capture) and **Accessibility** (to use
@@ -202,16 +203,17 @@ cargo build --release -p pong -p pong-app
 powershell -ExecutionPolicy Bypass -File tools\host-deploy.ps1
 ```
 
-`host-deploy.ps1` copies the host to `C:\Program Files\Pong`, installs and
-starts **PongService** (it starts at boot, before anyone signs in, and adds
-Windows Firewall rules for Pong), puts Pong's window in the Start menu as
+`host-deploy.ps1` turns hosting on with `pong enable`, which copies the host
+to `C:\Program Files\Pong`, installs and starts **PongService** from there
+(it starts at boot, before anyone signs in, and adds Windows Firewall rules
+for Pong), puts Pong's window in the Start menu as
 **Pong**, and puts Pong's icon in the taskbar's notification area from your
 next sign-in on (your `Run` key; **Show Pong's icon at login** in the window
 turns it off), and lists Pong in **Settings > Apps > Installed apps**. Run
 it again after each build to update. `host-deploy.ps1 -Uninstall`, or
-**Uninstall** in Settings, removes all of that again; `pong uninstall` (as
-administrator, from `C:\Program Files\Pong`) removes only the service and
-its firewall rules.
+**Uninstall** in Settings, removes all of that again; `pong disable` (as
+administrator) removes only the service, its firewall rules and the host's
+copy in `C:\Program Files\Pong`.
 
 Pong's settings and state are in `C:\ProgramData\Pong`. Details:
 [platforms/windows.md](platforms/windows.md).
@@ -264,7 +266,7 @@ async runtimes, and one build cannot have both.
 cargo build --release -p pong
 install -Dm755 target/release/pong ~/.local/bin/pong
 install -Dm644 tools/linux/pong.service ~/.config/systemd/user/pong.service
-systemctl --user enable --now pong
+~/.local/bin/pong enable     # systemctl --user enable --now pong
 ```
 
 Pong runs in your desktop session, as you. Under Wayland, the desktop asks
@@ -293,11 +295,11 @@ anywhere ([networking.md](networking.md)). Next: [usage.md](usage.md).
 |---|---|
 | Homebrew | `brew uninstall --cask ping pong` (the host's LaunchAgents go too); `--zap` also deletes the data folders |
 | Ping, macOS | Delete `/Applications/Ping.app` and `~/Library/Application Support/Ping` |
-| Pong, macOS | `launchctl bootout gui/$(id -u) ~/Library/LaunchAgents/dev.pingpong.Pong.plist` and the same for `dev.pingpong.PongControl.plist`, delete those files, the two apps, and `~/Library/Application Support/Pong` |
+| Pong, macOS | `/Applications/Pong.app/Contents/MacOS/pong disable` (the host's LaunchAgent), `launchctl bootout gui/$(id -u) ~/Library/LaunchAgents/dev.pingpong.PongControl.plist` and delete that file, the two apps, and `~/Library/Application Support/Pong` |
 | Ping, Windows | **Settings > Apps > Installed apps**, **Ping**, **Uninstall** (or `install.ps1 -Uninstall` in `%LOCALAPPDATA%\Programs\Ping`). It leaves your hosts and settings: delete `%APPDATA%\Ping` too to remove them. A copy run from its extracted folder: delete the folder |
-| Pong, Windows | **Settings > Apps > Installed apps**, **Pong**, **Uninstall** (or `install.ps1 -Uninstall` in `C:\Program Files\Pong`); Windows asks for an administrator. It removes PongService, its firewall rules, the programs, the Start menu entry and the icon at sign-in, and leaves the host's identity, pairings and settings: delete `C:\ProgramData\Pong` and `%APPDATA%\Pong` too to remove them |
+| Pong, Windows | **Settings > Apps > Installed apps**, **Pong**, **Uninstall** (or `install.ps1 -Uninstall` in `C:\Program Files\Pong`); Windows asks for an administrator. It turns hosting off (`pong disable`: PongService, its firewall rules and the host's copy), then removes the programs, the Start menu entry and the icon at sign-in, and leaves the host's identity, pairings and settings: delete `C:\ProgramData\Pong` and `%APPDATA%\Pong` too to remove them |
 | Ping, Linux | `install.sh --uninstall` from the download, or `tools/linux/install-apps --uninstall` (or delete the binary); and `~/.config/ping` |
-| Pong, Linux | `install.sh --uninstall` from the download; or `systemctl --user disable --now pong`, then delete the unit and the binary. Then `~/.config/pong` |
+| Pong, Linux | `install.sh --uninstall` from the download (it runs `pong disable` first); or `pong disable`, then delete the unit and the binary. Then `~/.config/pong` |
 
 Unpair a device on the other side too (Ping: the host's menu > Unpair; Pong:
 **Devices**).

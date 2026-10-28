@@ -25,11 +25,25 @@ desktop, so only a host running this way can capture and control UAC
 prompts, the lock screen and the sign-in screen — the model Sunshine uses
 (`pong/src/service.rs`).
 
+Because it runs as SYSTEM, the service runs only from the host's own copy in
+`C:\Program Files\Pong`, which `pong enable` makes (as administrator): it
+copies `pong.exe` there, sets the folder so that only SYSTEM and
+Administrators can change it, checks the copy's Authenticode signature, and
+registers the service, quoted, on the copy (`pong/src/hosting/windows.rs`).
+The service, and the host when it starts the clipboard helper as the
+signed-in user, launch nothing else. Pong loads DLLs only from System32 and
+from beside `pong.exe`, never from `PATH`. `pong disable` removes the
+service, its firewall rules and the copy.
+
 State lives in `C:\ProgramData\Pong\`: `config.toml`, the host's identity,
 paired clients, the web UI's certificate and accounts, and `logs\`. The host
 makes that folder private when it starts (`pong/src/private.rs`): only
 SYSTEM and Administrators can read it, apart from the two files Pong's
 window needs (`config.toml`, `web-cert.pem`).
+
+`pong status` reports `failed` while PongService runs but its host does not
+(the host exited; the service starts it again 3 s later), as it does for a
+LaunchAgent or a unit that keeps restarting.
 `tools/host-deploy.ps1` installs a build as the service, adds Pong's
 window to the Start menu and lists Pong in Settings > Apps (whose
 **Uninstall** runs it with `-Uninstall`); see [../install.md](../install.md).

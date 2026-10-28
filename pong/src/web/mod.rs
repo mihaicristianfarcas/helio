@@ -13,6 +13,8 @@
 //! app token it got by signing in once with the admin account (kept hashed
 //! here, in app-tokens.toml).
 
+pub mod probe;
+
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::path::Path;

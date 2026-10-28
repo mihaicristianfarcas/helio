@@ -105,8 +105,11 @@ login** in General turns that agent on and off. Quitting it leaves the host
 running: the host is Pong.app, under a LaunchAgent that keeps it alive.
 
 When Pong.app is beside it and the host is not running, the window's
-**Start Pong** writes the host's LaunchAgent and loads it: that is how a
-copy installed with Homebrew, where no install script runs, starts the host.
+**Start Pong** runs `pong enable`, which writes the host's LaunchAgent and
+loads it: that is how a copy installed with Homebrew, where no install
+script runs, starts the host. The agent runs the host from the app bundle
+`pong` is in, so that macOS's permissions apply to it; `pong enable` from a
+`pong` outside an app bundle refuses (`pong/src/hosting/mac.rs`).
 
 Opening **Pong** itself (from the Finder, Launchpad or Spotlight) starts
 the host and Pong Control with it, in the background, so the icon is in the
