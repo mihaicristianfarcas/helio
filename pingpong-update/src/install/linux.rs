@@ -1,13 +1,13 @@
 //! Installing an update on Linux: the release archive's `install.sh`, as
-//! the first install ran it. It puts the programs in `~/.local/bin` (over
-//! running ones: `install` replaces a file rather than writing into it)
-//! and restarts Pong's user service.
+//! the first install ran it. It puts the app and the host's engine in
+//! `~/.local/bin` (over running ones: `install` replaces a file rather than
+//! writing into it) and restarts the host's user service if it runs.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::{Duration, Instant};
 
-use super::{run_logged, Program};
+use super::run_logged;
 
 /// How this copy is updated: the programs go to `bin`.
 pub(crate) struct Method {
@@ -15,14 +15,9 @@ pub(crate) struct Method {
 }
 
 /// The program that opens the app again.
-fn app(program: Program) -> &'static str {
-    match program {
-        Program::Ping => "ping-app",
-        Program::Pong => "pong-app",
-    }
-}
+const APP_PROGRAM: &str = "ping-app";
 
-pub(crate) fn method(_program: Program) -> Result<Method, String> {
+pub(crate) fn method() -> Result<Method, String> {
     // Where install.sh puts the programs.
     let bin = std::env::var_os("XDG_BIN_HOME")
         .filter(|b| !b.is_empty())
@@ -61,7 +56,6 @@ pub(crate) fn unpack(archive: &Path, into: &Path) -> Result<(), String> {
 /// Run the archive's install.sh, then start the new copy.
 pub(crate) fn place(
     method: &Method,
-    program: Program,
     unpacked: &Path,
     _stage: &Path,
     dir: &Path,
@@ -76,7 +70,7 @@ pub(crate) fn place(
     let mut install = Command::new("bash");
     install.arg(folder.join("install.sh")).current_dir(&folder);
     run_logged(install, dir)?;
-    let new = method.bin.join(app(program));
+    let new = method.bin.join(APP_PROGRAM);
     Command::new(&new)
         .args(["--after-update", &std::process::id().to_string()])
         .spawn()
@@ -86,7 +80,7 @@ pub(crate) fn place(
 
 /// `install::rehearse`: the archive's folder copied to `folder`, its
 /// install.sh not run (it would restart the user's own host).
-pub(crate) fn rehearse(_program: Program, unpacked: &Path, folder: &Path) -> Result<(), String> {
+pub(crate) fn rehearse(unpacked: &Path, folder: &Path) -> Result<(), String> {
     let out = Command::new("cp")
         .arg("-a")
         .arg(format!("{}/.", unpacked.display()))
@@ -101,11 +95,11 @@ pub(crate) fn rehearse(_program: Program, unpacked: &Path, folder: &Path) -> Res
 }
 
 /// Nothing is left behind: install.sh replaces the programs in place.
-pub(crate) fn tidy(_program: Program) {}
+pub(crate) fn tidy() {}
 
 /// The launcher lists the entries install.sh writes, which name no
 /// version: there is nothing to keep.
-pub(crate) fn keep_listed(_program: Program, _version: &str) {}
+pub(crate) fn keep_listed(_version: &str) {}
 
 /// Wait until process `pid` has exited, or `timeout`.
 pub(crate) fn wait_for_exit(pid: u32, timeout: Duration) {
@@ -152,7 +146,7 @@ mod tests {
             &bin.join("ping-app"),
             &format!("echo \"$@\" > {}", started.display()),
         );
-        place(&Method { bin }, Program::Ping, &unpacked, tmp.path(), &data).unwrap();
+        place(&Method { bin }, &unpacked, tmp.path(), &data).unwrap();
         assert!(installed.exists());
         assert_eq!(
             std::fs::read_to_string(super::super::log_path(&data)).unwrap(),
@@ -178,7 +172,7 @@ mod tests {
             tmp.path().join("bin"),
             tmp.path().join("data"),
         );
-        let folder = unpacked.join("Pong-0.10.0-linux-x86_64");
+        let folder = unpacked.join("Ping-0.10.0-linux-x86_64");
         for d in [&folder, &bin, &data] {
             std::fs::create_dir_all(d).unwrap();
         }
@@ -186,7 +180,7 @@ mod tests {
             &folder.join("install.sh"),
             "echo 'These libraries are missing:' >&2; echo '  libavcodec.so.60' >&2; exit 1",
         );
-        let err = place(&Method { bin }, Program::Pong, &unpacked, tmp.path(), &data).unwrap_err();
+        let err = place(&Method { bin }, &unpacked, tmp.path(), &data).unwrap_err();
         assert_eq!(err, "libavcodec.so.60");
     }
 }

@@ -1,4 +1,4 @@
-//! Knowing when a newer Ping or Pong exists, so the apps can say so.
+//! Knowing when a newer release of the app exists, so it can say so.
 //!
 //! Two things are followed, on GitHub, where the project lives:
 //!
@@ -28,8 +28,16 @@ use crossbeam_channel::{Receiver, RecvTimeoutError, Sender};
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 
-pub use install::{Install, Program};
+pub use install::Install;
 pub use version::Version;
+
+/// The app's name, which is also how its release archives begin
+/// (`Ping-0.9.0-windows-x86_64.zip`: `tools/package-macos`,
+/// `tools/package-windows.ps1`, `tools/linux/package`).
+pub const APP: &str = "Ping";
+
+/// The Homebrew cask that installs the app on a Mac (`tools/update-casks`).
+pub const CASK: &str = "ping";
 
 /// Where the project lives (the workspace's `repository`).
 pub const REPOSITORY: &str = env!("CARGO_PKG_REPOSITORY");
@@ -159,17 +167,15 @@ impl Update {
         }
     }
 
-    /// How to get it, for this copy of `program`.
-    pub fn how(&self, program: Program, build: &Build) -> String {
+    /// How to get it, for this copy of the app.
+    pub fn how(&self, build: &Build) -> String {
         match self {
-            Update::Release { .. } => match install::available(program, build) {
-                Ok(()) if installed_by_homebrew(program.cask()) => format!(
-                    "Homebrew installed this copy: {} has Homebrew upgrade it, then opens again.",
-                    program.name()
+            Update::Release { .. } => match install::available(build) {
+                Ok(()) if installed_by_homebrew() => format!(
+                    "Homebrew installed this copy: {APP} has Homebrew upgrade it, then opens again."
                 ),
                 Ok(()) => format!(
-                    "{} downloads it from GitHub, checks it, installs it and opens again.",
-                    program.name()
+                    "{APP} downloads it from GitHub, checks it, installs it and opens again."
                 ),
                 Err(why) => why,
             },
@@ -180,8 +186,9 @@ impl Update {
     }
 }
 
-/// Whether Homebrew has `cask` installed (its Caskroom has a folder for it).
-pub fn installed_by_homebrew(cask: &str) -> bool {
+/// Whether Homebrew has the app's cask ([`CASK`]) installed (its Caskroom
+/// has a folder for it).
+pub fn installed_by_homebrew() -> bool {
     let prefixes = std::env::var_os("HOMEBREW_PREFIX")
         .map(PathBuf::from)
         .into_iter()
@@ -189,7 +196,7 @@ pub fn installed_by_homebrew(cask: &str) -> bool {
     cfg!(target_os = "macos")
         && prefixes
             .into_iter()
-            .any(|p| p.join("Caskroom").join(cask).is_dir())
+            .any(|p| p.join("Caskroom").join(CASK).is_dir())
 }
 
 /// What the check knows, for the window to show.
@@ -284,18 +291,16 @@ type Wake = Arc<dyn Fn() + Send + Sync>;
 pub struct Checker {
     asks: Sender<Ask>,
     status: Arc<Mutex<Status>>,
-    program: Program,
     build: Build,
     dir: PathBuf,
     wake: Wake,
 }
 
 impl Checker {
-    /// Start following `channel` for this `build` of `program`, keeping
+    /// Start following `channel` for this `build` of the app, keeping
     /// answers in `dir`; `wake` is called (on the check's thread, or the
     /// installer's) whenever [`Checker::status`] has changed.
     pub fn start(
-        program: Program,
         build: Build,
         dir: PathBuf,
         channel: Channel,
@@ -310,7 +315,7 @@ impl Checker {
             .spawn(move || {
                 // An update this app started before it restarted: was it
                 // installed?
-                if let Some(failed) = install::finish(program, &build, &thread_dir) {
+                if let Some(failed) = install::finish(&build, &thread_dir) {
                     shared.lock().install = Some(failed);
                     thread_wake();
                 }
@@ -331,7 +336,6 @@ impl Checker {
         Checker {
             asks,
             status,
-            program,
             build,
             dir,
             wake,
@@ -353,11 +357,11 @@ impl Checker {
             }
             s.install = Some(Install::Starting);
         }
-        let (program, build, dir) = (self.program, self.build, self.dir.clone());
+        let (build, dir) = (self.build, self.dir.clone());
         let (status, wake) = (self.status.clone(), self.wake.clone());
         let spawned = std::thread::Builder::new()
             .name("update-install".into())
-            .spawn(move || install::run(program, &build, &dir, &status, &*wake));
+            .spawn(move || install::run(&build, &dir, &status, &*wake));
         if let Err(e) = spawned {
             self.status.lock().install =
                 Some(Install::Failed(format!("the installer did not start: {e}")));
@@ -595,9 +599,7 @@ mod tests {
             url: String::new(),
         };
         assert_eq!(four.headline("Pong"), "4 newer commits on main");
-        assert!(four
-            .how(Program::Ping, &build(MINE, false))
-            .contains("pull main"));
+        assert!(four.how(&build(MINE, false)).contains("pull main"));
     }
 
     #[test]

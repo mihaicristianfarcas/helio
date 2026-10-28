@@ -35,7 +35,7 @@ use gpui::{
 use ping_core::session::{self, NativeMode, Session};
 use pingpong_ui::updates::UpdateApp;
 use pingpong_ui::{FieldEvent, TextField, Theme, Type};
-use pingpong_update::{Build, Checker, Install, Program};
+use pingpong_update::{Build, Checker, Install};
 
 use crate::agents::AgentsState;
 use crate::host::switch::Hosting;
@@ -45,9 +45,8 @@ use crate::prefs::Prefs;
 use crate::settings::Tab;
 use demo::Demo;
 
-/// Ping, to the update check.
+/// This build, to the update check.
 pub const UPDATE_APP: UpdateApp = UpdateApp {
-    program: Program::Ping,
     build: Build::this(),
 };
 

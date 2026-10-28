@@ -30,7 +30,7 @@ use std::rc::Rc;
 
 use gpui::{actions, App, KeyBinding, Menu, MenuItem};
 use pingpong_ui::menus;
-use pingpong_update::{Channel, Checker, Program};
+use pingpong_update::{Channel, Checker};
 
 actions!(
     ping,
@@ -130,15 +130,9 @@ fn main() {
             prefs.update_channel()
         };
         let (news, mut update_news) = futures::channel::mpsc::unbounded::<()>();
-        let updates = Rc::new(Checker::start(
-            Program::Ping,
-            build,
-            dir,
-            channel,
-            move || {
-                let _ = news.unbounded_send(());
-            },
-        ));
+        let updates = Rc::new(Checker::start(build, dir, channel, move || {
+            let _ = news.unbounded_send(());
+        }));
         let hosting = host::switch::Hosting::start(cx);
         app::start(hosting.clone(), updates.clone(), cx);
         host::tray::start(hosting.clone(), updates, cx);

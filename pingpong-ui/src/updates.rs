@@ -1,4 +1,4 @@
-//! The update check's face, the same in Ping's window and Pong's: a quiet
+//! The update check's face, in the app's window and its tray menu: a quiet
 //! row at the sidebar's foot when something newer exists, the sheet that
 //! says what and installs it (also what "Check for Updates" opens), and the
 //! setting that chooses what to be told about. The check and the installer
@@ -7,39 +7,38 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use gpui::{div, prelude::*, px, App, ClipboardItem, FontWeight, SharedString, Stateful, Window};
-use pingpong_update::{Build, Channel, Install, Program, Status, Update};
+use pingpong_update::{Build, Channel, Install, Status, Update};
 
 use crate::controls::{button, select, setting, spinner, Choice};
 use crate::icon::{icon, IconName};
 use crate::theme::{Radius, Theme, Type};
 
-/// Which app asks, and which build of it this is.
+/// Which build of the app this is.
 #[derive(Debug, Clone, Copy)]
 pub struct UpdateApp {
-    pub program: Program,
     pub build: Build,
 }
 
 impl UpdateApp {
     fn name(&self) -> &'static str {
-        self.program.name()
+        pingpong_update::APP
     }
 
     /// Whether this copy installs updates itself.
     fn installs(&self) -> bool {
-        pingpong_update::install::available(self.program, &self.build).is_ok()
+        pingpong_update::install::available(&self.build).is_ok()
     }
 }
 
-/// What installing an update interrupts, said before it starts.
-fn interrupts(program: Program) -> &'static str {
-    match program {
-        Program::Ping => "A stream that is open ends.",
-        Program::Pong if cfg!(windows) => {
-            "Windows asks for an administrator's permission, and streams to this PC stop \
-                while Pong restarts."
-        }
-        Program::Pong => "Streams to this computer stop while the host restarts.",
+/// What installing an update interrupts, said before it starts: the app
+/// restarts, and so does the host it carries, while hosting is on.
+fn interrupts() -> &'static str {
+    if cfg!(windows) {
+        "A stream that is open ends. If this PC hosts, Windows asks for an administrator's \
+            permission to update the host, and streams to this PC stop while it restarts."
+    } else {
+        "A stream that is open ends, and if this computer hosts, so do streams to it while the \
+            host restarts."
     }
 }
 
@@ -133,14 +132,14 @@ fn said(app: &UpdateApp, status: &Status) -> Said {
                     "This is {} {}. {} {}",
                     app.name(),
                     app.build.describe(),
-                    update.how(app.program, &app.build),
-                    interrupts(app.program)
+                    update.how(&app.build),
+                    interrupts()
                 ),
                 _ => format!(
                     "This is {} {}. {}",
                     app.name(),
                     app.build.describe(),
-                    update.how(app.program, &app.build)
+                    update.how(&app.build)
                 ),
             },
         },
@@ -277,9 +276,9 @@ pub fn sheet_body(
         .filter(|u| {
             !installs
                 && matches!(u, Update::Release { .. })
-                && pingpong_update::installed_by_homebrew(app.program.cask())
+                && pingpong_update::installed_by_homebrew()
         })
-        .map(|_| format!("brew upgrade --cask {}", app.program.cask()));
+        .map(|_| format!("brew upgrade --cask {}", pingpong_update::CASK));
     let mut actions = div().pt(px(8.0)).flex().justify_end().gap(px(8.0));
     match &update {
         Some(update) if installs => {
@@ -482,7 +481,6 @@ mod tests {
     #[test]
     fn the_sheet_says_what_was_found_or_why_nothing_was() {
         let app = UpdateApp {
-            program: Program::Ping,
             build: Build {
                 version: "0.6.0",
                 commit: "",
