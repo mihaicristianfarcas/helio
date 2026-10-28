@@ -1047,8 +1047,6 @@ impl PingApp {
     }
 }
 
-pub use pingpong_ui::toolbar_row as toolbar;
-
 /// A page's scrolling body, its content in a centred column, the bar beside
 /// it (asides' pages).
 pub fn page_body(

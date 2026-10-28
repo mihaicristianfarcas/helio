@@ -59,7 +59,7 @@ impl HostPages {
             })
             .collect();
         let empty = lines.is_empty();
-        let (bar, beside) = pingpong_ui::page_actions(vec![button("copy-logs", "Copy", t)
+        let actions = pingpong_ui::page_actions(vec![button("copy-logs", "Copy", t)
             .icon(IconName::Copy)
             .disabled(empty)
             .on_click(move |_, _, cx| {
@@ -70,7 +70,7 @@ impl HostPages {
             .size_full()
             .flex()
             .flex_col()
-            .child(bar)
+            .child(pingpong_ui::page_strip())
             // The page's column, as every page's; the log fills the rest of
             // the window's height.
             .child(
@@ -84,7 +84,7 @@ impl HostPages {
                         pingpong_ui::page_header(
                             "Logs",
                             Some("The last 400 lines of pong.log.".into()),
-                            beside,
+                            Some(actions),
                             t,
                         ),
                     )),

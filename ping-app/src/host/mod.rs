@@ -568,7 +568,7 @@ fn page(
     id: &'static str,
     content: impl IntoElement,
 ) -> AnyElement {
-    pingpong_ui::page(id, scroll, None, Metrics::PAGE, t, content)
+    pingpong_ui::page(id, scroll, Metrics::PAGE, t, content)
 }
 
 fn info_row(label: &'static str, value: String, mono: bool, t: Theme) -> AnyElement {

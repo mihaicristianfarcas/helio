@@ -45,7 +45,7 @@ pub fn sidebar(t: Theme) -> Div {
         .border_r_1()
         .border_color(t.hairline)
         .child(drag_area().flex_none().h(px(if cfg!(target_os = "macos") {
-            Metrics::TOOLBAR
+            Metrics::TITLE_BAR
         } else {
             SIDEBAR_EDGE - NAV_TOP
         })))
@@ -236,12 +236,17 @@ pub fn sidebar_foot(t: Theme) -> Div {
         .text_color(t.tertiary)
 }
 
-/// A page: the strip along the title bar (`toolbar`, else empty), then its
-/// content in a column, scrolling with a bar beside it.
+/// A page's strip along the top, above its title ([`Metrics::TITLE_BAR`]):
+/// nothing is on it, so all of it moves the window.
+pub fn page_strip() -> Div {
+    drag_area().flex_none().h(px(Metrics::TITLE_BAR))
+}
+
+/// A page: its strip along the top, then its content in a column,
+/// scrolling with a bar beside it.
 pub fn page(
     id: &'static str,
     scroll: &ScrollHandle,
-    toolbar: Option<Div>,
     width: f32,
     t: Theme,
     content: impl IntoElement,
@@ -250,7 +255,7 @@ pub fn page(
         .size_full()
         .flex()
         .flex_col()
-        .child(toolbar.unwrap_or_else(|| drag_area().flex_none().h(px(Metrics::TOOLBAR))))
+        .child(page_strip())
         .child(scrolled(
             div()
                 .id(id)

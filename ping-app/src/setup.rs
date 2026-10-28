@@ -309,7 +309,7 @@ impl PingApp {
                 // The steps between two halves that move the window.
                 div()
                     .flex_none()
-                    .h(px(Metrics::TOOLBAR))
+                    .h(px(Metrics::TITLE_BAR))
                     .flex()
                     .items_center()
                     .child(pingpong_ui::drag_area().flex_1().h_full())

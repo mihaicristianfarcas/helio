@@ -81,12 +81,18 @@ impl Type {
 pub struct Metrics;
 
 impl Metrics {
-    /// The strip along the top of a column, the window's title bar: the
-    /// traffic lights over the sidebar and a page's actions (a Mac, and
-    /// Linux under the system's title bar); on Windows the caption buttons'
-    /// height, a page's actions being beside its title there
-    /// (`page_actions`). Where nothing is on it, it moves the window.
-    pub const TOOLBAR: f32 = if cfg!(windows) { 32.0 } else { 44.0 };
+    /// The strip along the top of the window, its title bar: on a Mac the
+    /// lane the traffic lights are in, over the sidebar, a page's title
+    /// beneath it level with the sidebar's first row; elsewhere the caption
+    /// buttons' height (Windows draws them over a page's strip; Linux's are
+    /// the system's, above the window, and it keeps Windows' height). A
+    /// page's actions are beside its title (`page_actions`), so nothing but
+    /// those buttons is on it, and it moves the window.
+    pub const TITLE_BAR: f32 = if cfg!(target_os = "macos") {
+        44.0
+    } else {
+        32.0
+    };
     pub const SIDEBAR: f32 = 216.0;
     pub const NAV_ROW: f32 = 28.0;
     pub const SETTINGS_ROW: f32 = 50.0;
@@ -95,13 +101,6 @@ impl Metrics {
     pub const TRAFFIC_LIGHTS: f32 = if cfg!(target_os = "macos") { 72.0 } else { 0.0 };
     /// A caption button's width, as Windows 11 draws them (46 × 32).
     pub const CAPTION_BUTTON: f32 = 46.0;
-    /// Room for the caption buttons at the top right when the title bar is
-    /// the app's own (Windows).
-    pub const CAPTION_BUTTONS: f32 = if cfg!(windows) {
-        3.0 * Self::CAPTION_BUTTON
-    } else {
-        0.0
-    };
     /// Every page's column, so the pages line up as the sidebar moves
     /// between them; what is on a page fills it.
     pub const PAGE: f32 = 700.0;

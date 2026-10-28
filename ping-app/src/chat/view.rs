@@ -284,7 +284,7 @@ impl PingApp {
             .size_full()
             .flex()
             .flex_col()
-            .when(cfg!(windows), |d| d.child(pingpong_ui::toolbar_row([])))
+            .when(cfg!(windows), |d| d.child(pingpong_ui::page_strip()))
             .child(bar)
             .child(pingpong_ui::hairline(t))
             .child(

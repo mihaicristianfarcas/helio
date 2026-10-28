@@ -7,7 +7,7 @@ use pingpong_proto::control::{codec, video};
 use pingpong_ui::login::LoginItem;
 use pingpong_ui::{button, rows, section, select, setting, slider, switch, Choice, Theme, Type};
 
-use crate::app::{page_body, toolbar, PingApp};
+use crate::app::{page_body, PingApp};
 use crate::prefs::{parse_size, Prefs, FRAME_RATES, RESOLUTIONS};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -114,7 +114,7 @@ impl PingApp {
             .size_full()
             .flex()
             .flex_col()
-            .child(toolbar([]))
+            .child(pingpong_ui::page_strip())
             .child(page_body(
                 "settings-page",
                 &self.page_scroll,

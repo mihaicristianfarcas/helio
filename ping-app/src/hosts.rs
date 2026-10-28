@@ -35,7 +35,7 @@ impl PingApp {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        let (bar, beside) = pingpong_ui::page_actions(vec![
+        let actions = pingpong_ui::page_actions(vec![
             icon_button(
                 "refresh",
                 IconName::Refresh,
@@ -58,8 +58,8 @@ impl PingApp {
                 .size_full()
                 .flex()
                 .flex_col()
-                .child(bar)
-                .child(self.empty(beside, t, cx))
+                .child(pingpong_ui::page_strip())
+                .child(self.empty(actions, t, cx))
                 .into_any_element();
         }
         let paired = self.model.items.iter().filter(|i| i.is_paired()).count();
@@ -103,7 +103,7 @@ impl PingApp {
             .size_full()
             .flex()
             .flex_col()
-            .child(bar)
+            .child(pingpong_ui::page_strip())
             .child(page_body(
                 "hosts-page",
                 &self.page_scroll,
@@ -116,7 +116,7 @@ impl PingApp {
                     .child(pingpong_ui::page_header(
                         "Hosts",
                         Some(parts.join(" · ").into()),
-                        beside,
+                        Some(actions),
                         t,
                     ))
                     .child(
@@ -317,14 +317,8 @@ impl PingApp {
     }
 
     /// No host yet: the page as it is with hosts, its rows saying how to
-    /// get one. `beside`: the page's actions, where they go beside its
-    /// title (`page_actions`).
-    fn empty(
-        &mut self,
-        beside: Option<AnyElement>,
-        t: Theme,
-        cx: &mut Context<Self>,
-    ) -> impl IntoElement {
+    /// get one. `actions`: the page's, beside its title.
+    fn empty(&mut self, actions: AnyElement, t: Theme, cx: &mut Context<Self>) -> impl IntoElement {
         let searching = self.model.searching;
         let look: AnyElement = if searching {
             div()
@@ -360,7 +354,7 @@ impl PingApp {
                         }
                         .into(),
                     ),
-                    beside,
+                    Some(actions),
                     t,
                 ))
                 .child(
