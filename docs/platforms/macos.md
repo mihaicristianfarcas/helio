@@ -111,6 +111,14 @@ outside, it is Pong Host's. Accessibility was the helper's either way
 refuses (`pong/src/hosting/mac.rs`). An update of Ping copies the new
 helper and restarts the host while hosting is on.
 
+The copy would outlive the app: Ping.app dragged to the Trash would leave
+a host that starts at every login with nothing to turn it off. So the
+LaunchAgent names the app the copy came from (`pong host --app PATH`), and
+the host turns hosting off itself when that app is gone: at start, and
+while it runs, a minute after the app was moved or deleted (kqueue tells
+it; an update's new app in the same place within that minute keeps it
+running).
+
 While hosting is on, Ping shows the host's icon in the menu bar: what the
 host does, a device asking to pair (a notification says so too), the
 window, an update. Closing the window leaves the icon, and Ping leaves the

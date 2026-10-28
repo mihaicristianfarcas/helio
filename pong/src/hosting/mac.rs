@@ -21,6 +21,12 @@
 //! the helper either way (macOS 26.5, Developer ID and development
 //! signatures alike).
 //!
+//! A copy outside the app outlives it: Ping.app dragged to the Trash would
+//! leave a host that starts at every login with no app to turn it off. So
+//! the agent names the app the copy came from (`pong host --app PATH`), and
+//! the host turns hosting off when that app is gone: at start, and while
+//! it runs, a minute after the app was moved or deleted ([`watch_app`]).
+//!
 //! The agent is in `~/Library/LaunchAgents` and the copy in the user's own
 //! data folder: nothing here needs an administrator. The Homebrew cask's
 //! uninstall runs `pong disable`, then unloads the same label
@@ -143,6 +149,11 @@ pub fn enable() -> Result<String, Error> {
     if bundle != copy {
         copy_bundle(&bundle, &copy)?;
     }
+    // The app this helper is inside, which the host watches; none for a
+    // helper on its own.
+    let args: Vec<String> = super::app_holding(&bundle)
+        .map(|app| vec!["--app".into(), app.to_string_lossy().into_owned()])
+        .unwrap_or_default();
     let env: Vec<(&str, String)> = HANDED_ON
         .iter()
         .filter_map(|k| Some((*k, std::env::var(k).ok()?)))
@@ -151,7 +162,7 @@ pub fn enable() -> Result<String, Error> {
     if let Some(dir) = path.parent() {
         std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
     }
-    std::fs::write(&path, super::launch_agent(LABEL, &program, &env))
+    std::fs::write(&path, super::launch_agent(LABEL, &program, &args, &env))
         .map_err(|e| format!("{}: {e}", path.display()))?;
     let out = launchctl(&["bootstrap", &domain(), &path.to_string_lossy()])?;
     if !out.status.success() {
@@ -164,6 +175,117 @@ pub fn enable() -> Result<String, Error> {
         "Hosting is on: the host runs from {} now and whenever you are logged in.",
         copy.display()
     ))
+}
+
+/// After the app was moved or deleted, how long the host waits before it
+/// looks again: an update puts the new app in place by renames, a moment
+/// apart, and replacing it in the Finder is one; a minute is far longer
+/// than either, and short enough that a host whose app is gone stops soon
+/// after.
+const APP_GONE_AFTER: Duration = Duration::from_secs(60);
+
+/// `pong host --app APP`, started by the agent: turn hosting off if APP is
+/// gone, now or later. Returns false when it is gone already (the host
+/// does not start); otherwise watches it on a thread of its own. Without
+/// `--app` (a host started by hand, a helper on its own): true, and
+/// nothing is watched.
+pub fn watch_app(args: &[String]) -> bool {
+    let Some(app) = args
+        .iter()
+        .position(|a| a == "--app")
+        .and_then(|i| args.get(i + 1))
+        .map(PathBuf::from)
+    else {
+        return true;
+    };
+    if !app.is_dir() {
+        retire(&app);
+        return false;
+    }
+    let spawned = std::thread::Builder::new()
+        .name("app-watch".into())
+        .spawn(move || loop {
+            if !wait_for_move(&app) {
+                tracing::warn!(app = %app.display(), "cannot watch the app the host came with");
+                return;
+            }
+            // A single wait until it is due to look again, not polling.
+            std::thread::sleep(APP_GONE_AFTER);
+            if !app.is_dir() {
+                retire(&app);
+                return;
+            }
+            tracing::info!(app = %app.display(), "the app was replaced: the host goes on");
+        });
+    if let Err(e) = spawned {
+        tracing::warn!(error = %e, "cannot watch the app the host came with");
+    }
+    true
+}
+
+/// Block until `path` (a folder) is moved, renamed or deleted; false if it
+/// cannot be watched. kqueue says when, so nothing is polled.
+fn wait_for_move(path: &Path) -> bool {
+    use std::os::unix::ffi::OsStrExt;
+    let Ok(c_path) = std::ffi::CString::new(path.as_os_str().as_bytes()) else {
+        return false;
+    };
+    // SAFETY: `c_path` is a valid C string; the descriptor and the queue
+    // are this function's own and closed once each; `change` and `event`
+    // live across the call that reads and fills them.
+    unsafe {
+        let fd = libc::open(c_path.as_ptr(), libc::O_EVTONLY);
+        if fd < 0 {
+            return false;
+        }
+        let queue = libc::kqueue();
+        if queue < 0 {
+            libc::close(fd);
+            return false;
+        }
+        let change = libc::kevent {
+            ident: fd as libc::uintptr_t,
+            filter: libc::EVFILT_VNODE,
+            flags: libc::EV_ADD | libc::EV_CLEAR,
+            fflags: libc::NOTE_DELETE | libc::NOTE_RENAME | libc::NOTE_REVOKE,
+            data: 0,
+            udata: std::ptr::null_mut(),
+        };
+        let mut event: libc::kevent = std::mem::zeroed();
+        let n = loop {
+            let n = libc::kevent(queue, &change, 1, &mut event, 1, std::ptr::null());
+            if n >= 0 || std::io::Error::last_os_error().kind() != std::io::ErrorKind::Interrupted {
+                break n;
+            }
+        };
+        libc::close(queue);
+        libc::close(fd);
+        n == 1 && event.flags & libc::EV_ERROR == 0
+    }
+}
+
+/// Hosting off from inside the host, its app gone: the agent's file and
+/// the copy removed, then launchd asked to unload the agent, which stops
+/// this host as `pong disable` does (SIGTERM: the session ends properly).
+/// A host launchd does not run is asked to stop directly.
+fn retire(app: &Path) {
+    tracing::warn!(
+        app = %app.display(),
+        "the app this host came with is gone: hosting off"
+    );
+    if let Ok(path) = plist() {
+        let _ = std::fs::remove_file(path);
+    }
+    if let Err(e) = remove_bundle(&installed()) {
+        tracing::warn!(error = e, "the host's copy stays");
+    }
+    let unloaded = launchctl(&["bootout", &format!("{}/{LABEL}", domain())])
+        .is_ok_and(|out| out.status.success());
+    if !unloaded {
+        // SAFETY: a signal to this process, which handles SIGTERM by
+        // stopping the host.
+        unsafe { libc::kill(libc::getpid(), libc::SIGTERM) };
+    }
 }
 
 /// The host's process, while launchd runs it.

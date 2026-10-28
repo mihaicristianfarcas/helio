@@ -34,9 +34,7 @@ fn ping_app() -> Option<PathBuf> {
 fn holder(exe: &Path) -> Option<PathBuf> {
     // Pong Host.app/Contents/MacOS/pong
     let helper = crate::hosting::bundle_of(exe)?;
-    let helpers = helper.parent()?;
-    let app = helpers.parent()?.parent()?;
-    (helpers.file_name()? == "Helpers" && app.extension()? == "app").then(|| app.to_path_buf())
+    crate::hosting::app_holding(helper).map(Path::to_path_buf)
 }
 
 /// Start Ping in the background: its icon, without its window.
