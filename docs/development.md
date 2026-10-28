@@ -185,13 +185,15 @@ when it needs to be and never merged into it.
 
 | Script | Makes |
 |---|---|
-| `tools/package-macos` | `Ping-VERSION-macos-ARCH.zip` (Ping.app) and `Pong-VERSION-macos-ARCH.zip` (Pong.app) |
-| `tools/package-windows.ps1` | `Ping-VERSION-windows-x86_64.zip` (Ping.exe beside FFmpeg's DLLs, `install.ps1`, which is `tools/install-ping.ps1`, and `Install Ping.cmd`) and `Pong-VERSION-windows-x86_64.zip` (pong.exe, `install.ps1`, which is `tools/host-deploy.ps1`, and `Install Pong.cmd`). Each `install.ps1` copies itself beside the programs and lists them in Settings > Apps, whose **Uninstall** runs it with `-Uninstall` |
-| `tools/linux/package` | `Ping-VERSION-linux-ARCH.tar.gz` and `Pong-VERSION-linux-ARCH.tar.gz`, each a folder with the programs, launcher entries, icons and `install.sh` (`tools/linux/install-release`) |
-| `tools/publish-downloads DIST` | The downloads: each archive at `https://download.pingpong.mihaicristian.dev/latest/APP-OS-ARCH.EXT`, then `latest/SHA256SUMS` and `latest.json` (version, commit, sizes, checksums), in the Cloudflare R2 bucket `pingpong-downloads`, with wrangler |
+| `tools/package-macos` | `Ping-VERSION-macos-ARCH.zip`: Ping.app, with the host inside it as a helper app, `Contents/Helpers/Pong Host.app` (`tools/build-ping-app`, which signs the helper, then the app) |
+| `tools/package-windows.ps1` | `Ping-VERSION-windows-x86_64.zip`: Ping.exe beside FFmpeg's DLLs and the host's engine, `pong.exe`; `install.ps1`, which is `tools/install-ping.ps1`; and `Install Ping.cmd`. `install.ps1` copies itself beside the programs and lists Ping in Settings > Apps, whose **Uninstall** runs it with `-Uninstall` (hosting off first) |
+| `tools/linux/package` | `Ping-VERSION-linux-ARCH.tar.gz`: a folder with `ping-app`, `pong`, the host's unit `pong.service`, the launcher entry, its icon and `install.sh` (`tools/linux/install-release`) |
+| `tools/publish-downloads DIST` | The downloads: each archive at `https://download.pingpong.mihaicristian.dev/latest/Ping-OS-ARCH.EXT`, then `latest/SHA256SUMS` and `latest.json` (version, commit, sizes, checksums), in the Cloudflare R2 bucket `pingpong-downloads`, with wrangler; last, the archives the previous `latest.json` listed and this one does not are deleted |
 
 All of them build with `PINGPONG_RELEASE=1`, so the programs follow
-releases, not `main`. The downloads keep their names from one build to the
+releases, not `main`. With `PINGPONG_PROFILE=dev` the three packaging
+scripts build the debug profile instead, which is how CI checks on every
+pull request that the app still packages, the host inside it. The downloads keep their names from one build to the
 next, so the website links them as they are and reads `latest.json` for
 what they are. The workflow signs in to Cloudflare with the repository's
 secret `CLOUDFLARE_API_TOKEN` (an API token with **Workers R2 Storage:

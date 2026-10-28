@@ -1,8 +1,10 @@
 # What AGENTS.md asks before a change is done ("Before you finish"), on every
 # pull request and on main after each merge: the formatting cargo fmt gives,
-# clippy without warnings, and the tests, on macOS, Windows and Linux. main
-# takes changes only through pull requests, and these checks must pass for
-# one to merge.
+# clippy without warnings, and the tests, on macOS, Windows and Linux; then
+# the app packaged on each, as the release packages it (the host's engine
+# inside it), from a debug build: what breaks the packaging shows here, not
+# at the next release. main takes changes only through pull requests, and
+# these checks must pass for one to merge.
 #
 # workflow_dispatch: to run it by hand on a branch. Such a run does not count
 # for a pull request's checks: only the pull request's own run does.
@@ -41,6 +43,16 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace --no-fail-fast
+      # Ping.app with Pong Host.app inside, signed ad hoc, inside out.
+      - name: The app, packaged
+        run: tools/package-macos
+        env:
+          PINGPONG_PROFILE: dev
+      - name: One archive, the host inside it
+        run: |
+          ls target/dist
+          [ "$(ls target/dist | wc -l)" -eq 1 ]
+          unzip -l target/dist/Ping-*-macos-arm64.zip | grep -q 'Ping.app/Contents/Helpers/Pong Host.app/Contents/MacOS/pong'
 
   windows:
     name: Windows
@@ -70,6 +82,22 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace --no-fail-fast
+      - name: The app, packaged
+        shell: pwsh
+        run: ./tools/package-windows.ps1
+        env:
+          PINGPONG_PROFILE: dev
+      - name: One archive, the host inside it
+        shell: pwsh
+        run: |
+          $zips = @(Get-ChildItem target\dist -Filter *.zip)
+          $zips.Name
+          if ($zips.Count -ne 1) { throw "$($zips.Count) archives, not one" }
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $names = [IO.Compression.ZipFile]::OpenRead($zips[0].FullName).Entries.FullName
+          foreach ($file in 'Ping.exe', 'pong.exe', 'install.ps1') {
+            if ($names -notcontains $file) { throw "no $file in $($zips[0].Name)" }
+          }
 
   linux:
     name: Linux
@@ -97,3 +125,14 @@ jobs:
       # out of memory.
       - run: cargo test --workspace --exclude pong -j 2 --no-fail-fast
       - run: cargo test -p pong --no-fail-fast
+      - name: The app, packaged
+        run: tools/linux/package
+        env:
+          PINGPONG_PROFILE: dev
+      - name: One archive, the host inside it
+        run: |
+          ls target/dist
+          [ "$(ls target/dist | wc -l)" -eq 1 ]
+          tar -tzf target/dist/Ping-*-linux-x86_64.tar.gz | sort | tee /dev/stderr |
+            grep -c '/\(ping-app\|pong\|pong.service\|install.sh\|dev.pingpong.Ping.desktop\)$' |
+            grep -qx 5
