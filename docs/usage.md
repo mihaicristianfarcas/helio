@@ -145,7 +145,7 @@ pong status     # off, starting, on or failed (with why)
 
 | | `pong enable` | `pong disable` |
 |---|---|---|
-| macOS | Writes the LaunchAgent `~/Library/LaunchAgents/dev.pingpong.Pong.plist`, which runs the host from the app bundle `pong` is in (`Ping.app/Contents/Helpers/Pong Host.app`), whenever you are logged in, and starts it now. `pong` outside an app bundle refuses: macOS's Screen Recording and Accessibility permissions belong to that helper app, not to Ping | Stops the host and deletes the LaunchAgent |
+| macOS | Copies the app bundle `pong` is in (`Ping.app/Contents/Helpers/Pong Host.app`) to `~/Library/Application Support/Pong/Pong Host.app`, and writes the LaunchAgent `~/Library/LaunchAgents/dev.pingpong.Pong.plist`, which runs the host from that copy whenever you are logged in, and starts it now. `pong` outside an app bundle refuses: macOS's Screen Recording and Accessibility permissions belong to that helper app, not to Ping (and for Screen Recording, only to a copy outside Ping.app: [platforms/macos.md](platforms/macos.md#hosting-from-ping-and-its-menu-bar-icon)) | Stops the host, deletes the LaunchAgent and the copy |
 | Windows | As administrator: copies `pong.exe` to `C:\Program Files\Pong` (only administrators can change that folder), checks its signature, and runs it as **PongService**, which starts at boot, before anyone signs in, with Windows Firewall rules for it | As administrator: stops and deletes PongService, its firewall rules and the copy in `C:\Program Files\Pong` |
 | Linux | `systemctl --user enable --now pong`: the host runs in your desktop session, now and at each login (the unit comes with the install, not turned on) | `systemctl --user disable --now pong` |
 

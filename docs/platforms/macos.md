@@ -98,18 +98,26 @@ Ping is an ordinary app, in the Dock. The host is a helper app inside it,
 `Ping.app/Contents/Helpers/Pong Host.app`, with its own bundle identifier
 (`dev.pingpong.Pong`) and usage strings, signed before the app around it
 (`tools/build-ping-app`). Ping's hosting switch runs `pong enable` from the
-helper, which writes the host's LaunchAgent and loads it. The agent runs
-the host from the app bundle `pong` is in, so that macOS's permissions
-apply to Pong Host, not to Ping; `pong enable` from a `pong` outside an app
-bundle refuses (`pong/src/hosting/mac.rs`).
+helper, which copies the helper to the host's data folder
+(`~/Library/Application Support/Pong/Pong Host.app`), writes the host's
+LaunchAgent for that copy and loads it; `pong disable` removes both. The
+host runs from an app bundle so that macOS's permissions apply to Pong
+Host, not to Ping, and from a copy outside Ping.app because macOS files
+Screen Recording for code inside an app under that app: run from inside
+Ping.app (`Contents/Helpers` or `Contents/Library/LoginItems`), the
+request named Ping and the grant was kept under Ping's identifier; from
+outside, it is Pong Host's. Accessibility was the helper's either way
+(macOS 26.5). `pong enable` from a `pong` outside an app bundle
+refuses (`pong/src/hosting/mac.rs`). An update of Ping copies the new
+helper and restarts the host while hosting is on.
 
 While hosting is on, Ping shows the host's icon in the menu bar: what the
 host does, a device asking to pair (a notification says so too), the
 window, an update. Closing the window leaves the icon, and Ping leaves the
 Dock until its window opens again (the accessory activation policy);
 **Open at login** in General starts Ping at login as the icon only
-(`--background`). Quitting Ping leaves the host running: it is the helper,
-under a LaunchAgent that keeps it alive.
+(`--background`). Quitting Ping leaves the host running: it is the
+helper's copy, under a LaunchAgent that keeps it alive.
 
 Opening **Pong Host** itself (from the Finder, inside Ping.app, or with
 Spotlight) starts the host and Ping with it, in the background, so the

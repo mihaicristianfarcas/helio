@@ -158,12 +158,13 @@ created one (`tools/dev-signing-identity`, see
 
 ## Hosting on macOS
 
-The host is inside the app: `Ping.app/Contents/Helpers/Pong Host.app`, a
+The host comes inside the app: `Ping.app/Contents/Helpers/Pong Host.app`, a
 helper app of its own. Turn hosting on in Ping (setup asks, or **Settings →
-Hosting**): Ping runs the helper's `pong enable`, which writes a
-LaunchAgent that starts the host at login and keeps it running
+Hosting**): Ping runs the helper's `pong enable`, which copies the helper
+to `~/Library/Application Support/Pong/Pong Host.app` and writes a
+LaunchAgent that starts that copy at login and keeps it running
 (`~/Library/LaunchAgents/dev.pingpong.Pong.plist`; see
-[usage.md](usage.md#hosting-on-and-off)). On first start the host asks for
+[usage.md](usage.md#hosting-on-and-off)). Turning hosting off removes both. On first start the host asks for
 **Screen Recording** (to capture) and **Accessibility** (to use the
 keyboard and mouse); grant both to **Pong Host** in System Settings >
 Privacy & Security. Ping itself never needs them. Without Accessibility,
@@ -285,7 +286,7 @@ anywhere ([networking.md](networking.md)). Next: [usage.md](usage.md).
 
 | | |
 |---|---|
-| Homebrew | `brew uninstall --cask ping`: it stops the host (its LaunchAgent) and Ping's start at login, and quits Ping; `--zap` also deletes the data folders, Ping's and the host's |
+| Homebrew | `brew uninstall --cask ping`: it turns hosting off (`pong disable`: the host stopped, its LaunchAgent and its copy removed), removes Ping's start at login, and quits Ping; `--zap` also deletes the data folders, Ping's and the host's |
 | macOS | Turn hosting off in Ping (or run `pong disable` from inside it: `"/Applications/Ping.app/Contents/Helpers/Pong Host.app/Contents/MacOS/pong" disable`), quit Ping, then delete Ping.app. Your data is in `~/Library/Application Support/Ping` and `~/Library/Application Support/Pong` (the host's identity and pairings) |
 | Windows | **Settings > Apps > Installed apps**, **Ping**, **Uninstall** (or `install.ps1 -Uninstall` in `%LOCALAPPDATA%\Programs\Ping`). While hosting is on, it turns it off first (`pong disable`: PongService, its firewall rules and the host's copy), and Windows asks for an administrator. It leaves your hosts and settings, and the host's identity and pairings: delete `%APPDATA%\Ping` and `C:\ProgramData\Pong` too to remove them. A copy run from its extracted folder: turn hosting off in it, then delete the folder |
 | Linux | `install.sh --uninstall` from the download, or `tools/linux/install-apps --uninstall`: it turns hosting off first (`pong disable`), then removes the programs, the host's unit and the launcher entry. Then `~/.config/ping` and `~/.config/pong` |

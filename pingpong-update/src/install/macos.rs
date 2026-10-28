@@ -1,8 +1,10 @@
 //! Installing an update on a Mac: the release's app bundle in place of the
 //! running one, once it is known to be signed, helper and all, by the same
 //! team's Developer ID; or, for a copy Homebrew installed, `brew upgrade
-//! --cask`. Either way the host, which runs from the helper inside the app
-//! (`Contents/Helpers/Pong Host.app`), runs the new one after.
+//! --cask`. Either way, while hosting is on, the new app's helper
+//! (`Contents/Helpers/Pong Host.app`) runs `pong enable` after: the host runs
+//! from a copy of the helper outside the app (`pong/src/hosting/mac.rs` says
+//! why), which that replaces and restarts.
 
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
@@ -33,6 +35,11 @@ const LOGIN_AGENT: &str = "dev.pingpong.Ping";
 /// The bundle a release's archive holds.
 fn bundle_name() -> String {
     format!("{APP}.app")
+}
+
+/// The host's program inside the app at `own`.
+fn helper_program(own: &Path) -> PathBuf {
+    own.join("Contents/Helpers/Pong Host.app/Contents/MacOS/pong")
 }
 
 /// The app bundle this program runs from.
@@ -217,7 +224,7 @@ pub(crate) fn place(
             // --deep: the helper inside, which the host runs from, too.
             verify(&new, &team)?;
             replace(unpacked, folder)?;
-            restart_host();
+            update_host(own);
             relaunch(own)
         }
         Method::Homebrew { own, brew } => homebrew_upgrade(own, brew, stage, dir),
@@ -239,17 +246,26 @@ fn gui_domain() -> String {
     format!("gui/{}", unsafe { libc::getuid() })
 }
 
-/// While hosting is on, the host runs from the helper inside the app under
-/// its LaunchAgent, still the old one's program: restart it, now from the
-/// new bundle at the same path. Not loaded (hosting off): left alone.
-fn restart_host() {
+/// While hosting is on (its LaunchAgent is loaded), the new app's helper
+/// runs `pong enable`: the host's copy replaced by the new helper, and the
+/// host restarted on it. Hosting off: left alone. Failed: the host runs on
+/// the copy it had, until hosting is turned off and on.
+fn update_host(own: &Path) {
     let job = format!("{}/{HOST_AGENT}", gui_domain());
-    match Command::new("/bin/launchctl")
-        .args(["kickstart", "-k", &job])
+    let loaded = Command::new("/bin/launchctl")
+        .args(["print", &job])
         .output()
-    {
-        Ok(out) if out.status.success() => tracing::info!("the host restarted"),
-        _ => tracing::info!("the host does not run under its LaunchAgent; not restarted"),
+        .is_ok_and(|out| out.status.success());
+    if !loaded {
+        return;
+    }
+    match Command::new(helper_program(own)).arg("enable").output() {
+        Ok(out) if out.status.success() => tracing::info!("the host runs the new helper"),
+        Ok(out) => tracing::warn!(
+            error = %String::from_utf8_lossy(&out.stderr).trim(),
+            "the host was not updated"
+        ),
+        Err(e) => tracing::warn!(error = %e, "the host was not updated"),
     }
 }
 
@@ -301,10 +317,10 @@ fn homebrew_upgrade(own: &Path, brew: &Path, stage: &Path, dir: &Path) -> Result
 
 /// The script that, once process `pid` (the app) has quit, has Homebrew
 /// upgrade the cask (its output to `log`), and opens `own` again. The
-/// cask's uninstall step, which an upgrade runs, unloads and deletes the
-/// app's LaunchAgents (`tools/update-casks`): they are kept in `keep`
-/// meanwhile and put back, the host's loaded again (it runs the new
-/// helper), the login item's only for the next login, as it was.
+/// cask's uninstall step, which an upgrade runs, turns hosting off and
+/// deletes the app's LaunchAgents (`tools/update-casks`): hosting is turned
+/// on again with the new app's helper if it was on, and the login item's
+/// agent, kept in `keep` meanwhile, put back for the next login, as it was.
 fn homebrew_script(pid: u32, own: &Path, brew: &Path, keep: &Path, log: &Path) -> String {
     let prefix_bin = brew.parent().unwrap_or(Path::new("/opt/homebrew/bin"));
     format!(
@@ -314,24 +330,20 @@ fn homebrew_script(pid: u32, own: &Path, brew: &Path, keep: &Path, log: &Path) -
          agents=\"$HOME/Library/LaunchAgents\"\n\
          keep={keep}\n\
          mkdir -p \"$keep\"\n\
-         for agent in {HOST_AGENT} {LOGIN_AGENT}; do\n\
-         \t[ -f \"$agents/$agent.plist\" ] && cp \"$agents/$agent.plist\" \"$keep/\"\n\
-         done\n\
+         hosting=\n\
+         [ -f \"$agents/{HOST_AGENT}.plist\" ] && hosting=1\n\
+         [ -f \"$agents/{LOGIN_AGENT}.plist\" ] && cp \"$agents/{LOGIN_AGENT}.plist\" \"$keep/\"\n\
          PATH={path}:/usr/bin:/bin:/usr/sbin:/sbin {brew} upgrade --cask {CASK} >>{log} 2>&1\n\
-         for agent in {HOST_AGENT} {LOGIN_AGENT}; do\n\
-         \t[ -f \"$keep/$agent.plist\" ] || continue\n\
-         \t[ -f \"$agents/$agent.plist\" ] || cp \"$keep/$agent.plist\" \"$agents/\"\n\
-         done\n\
-         if [ -f \"$keep/{HOST_AGENT}.plist\" ]; then\n\
-         \tlaunchctl print \"{domain}/{HOST_AGENT}\" >/dev/null 2>&1 || \
-         launchctl bootstrap {domain} \"$agents/{HOST_AGENT}.plist\"\n\
+         if [ -f \"$keep/{LOGIN_AGENT}.plist\" ] && [ ! -f \"$agents/{LOGIN_AGENT}.plist\" ]; then\n\
+         \tcp \"$keep/{LOGIN_AGENT}.plist\" \"$agents/\"\n\
          fi\n\
+         [ -n \"$hosting\" ] && {helper} enable >>{log} 2>&1\n\
          open -n {own}\n",
         keep = sh_quote(&keep.to_string_lossy()),
         path = sh_quote(&prefix_bin.to_string_lossy()),
         brew = sh_quote(&brew.to_string_lossy()),
         log = sh_quote(&log.to_string_lossy()),
-        domain = gui_domain(),
+        helper = sh_quote(&helper_program(own).to_string_lossy()),
         own = sh_quote(&own.to_string_lossy()),
     )
 }
@@ -394,11 +406,15 @@ mod tests {
             String::from_utf8_lossy(&out.stderr)
         );
         assert!(script.contains("kill -0 4242"));
-        assert!(script.contains("for agent in dev.pingpong.Pong dev.pingpong.Ping; do"));
         assert!(script.contains("upgrade --cask ping"));
-        // Only the host is loaded again: the login item waits for a login.
-        assert!(script.contains("bootstrap gui/"));
-        assert!(!script.contains("dev.pingpong.Ping.plist\""));
+        // Hosting on again from the new app's helper, if it was on; the
+        // login item only put back, for the next login.
+        assert!(script.contains(
+            "[ -n \"$hosting\" ] && '/Applications/Ping.app/Contents/Helpers/Pong \
+             Host.app/Contents/MacOS/pong' enable"
+        ));
+        assert!(script.contains("cp \"$keep/dev.pingpong.Ping.plist\""));
+        assert!(!script.contains("bootstrap"));
         assert!(script.contains(r"open -n '/Applications/Ping.app'"));
     }
 }
