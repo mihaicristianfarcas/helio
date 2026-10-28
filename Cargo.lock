@@ -5787,6 +5787,7 @@ dependencies = [
  "objc2-user-notifications 0.3.2",
  "ping-agent",
  "ping-core",
+ "pingpong-display",
  "pingpong-pairing",
  "pingpong-proto",
  "pingpong-ui",
@@ -5796,6 +5797,7 @@ dependencies = [
  "tiny-skia 0.12.0",
  "toml 0.8.23",
  "tracing",
+ "ureq",
  "windows 0.61.3",
  "winresource",
 ]
@@ -6246,26 +6248,6 @@ dependencies = [
  "windows 0.61.3",
  "windows-service",
  "x11rb",
-]
-
-[[package]]
-name = "pong-app"
-version = "0.9.7"
-dependencies = [
- "crossbeam-channel",
- "futures",
- "gpui",
- "gpui_platform",
- "pingpong-proto",
- "pingpong-ui",
- "pingpong-update",
- "serde",
- "serde_json",
- "toml 0.8.23",
- "tracing",
- "tracing-subscriber",
- "ureq",
- "winresource",
 ]
 
 [[package]]

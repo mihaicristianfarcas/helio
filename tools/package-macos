@@ -5,7 +5,7 @@
 #
 #   tools/package-macos
 #     -> target/dist/Ping-VERSION-macos-ARCH.zip   (Ping.app)
-#        target/dist/Pong-VERSION-macos-ARCH.zip   (Pong.app, Pong Control.app)
+#        target/dist/Pong-VERSION-macos-ARCH.zip   (Pong.app, the host)
 #
 # ARCH is this Mac's (arm64 or x86_64); VERSION the workspace's. The release
 # workflow (.github/workflows/release.yml) runs this on one Mac of each, then
@@ -23,7 +23,7 @@ VERSION=$(sed -n '/^\[workspace.package\]/,/^\[/ s/^version = "\(.*\)"/\1/p' "$R
 ARCH=$(uname -m)
 DIST="$REPO/target/dist"
 
-APPS=("$REPO/target/Ping.app" "$REPO/target/Pong.app" "$REPO/target/Pong Control.app")
+APPS=("$REPO/target/Ping.app" "$REPO/target/Pong.app")
 if [[ -n ${APPLE_API_KEY_PATH:-} && -z ${PINGPONG_SIGN_IDENTITY:-} ]]; then
     echo "notarization needs a Developer ID to sign with: set PINGPONG_SIGN_IDENTITY" >&2
     exit 1
@@ -73,9 +73,9 @@ mkdir -p "$DIST"
 PING="$DIST/Ping-$VERSION-macos-$ARCH.zip"
 rm -f "$PING"
 ditto -c -k --keepParent "$REPO/target/Ping.app" "$PING"
-# Both of Pong's apps at the archive's root, where the cask finds them.
+# The host at the archive's root, where the cask finds it.
 mkdir "$STAGE/pong"
-cp -R "$REPO/target/Pong.app" "$REPO/target/Pong Control.app" "$STAGE/pong/"
+cp -R "$REPO/target/Pong.app" "$STAGE/pong/"
 PONG="$DIST/Pong-$VERSION-macos-$ARCH.zip"
 rm -f "$PONG"
 ditto -c -k "$STAGE/pong" "$PONG"

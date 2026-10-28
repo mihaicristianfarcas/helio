@@ -48,6 +48,17 @@ pub struct Prefs {
     /// then, what suits the build that runs: see [`Prefs::update_channel`]).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub updates: Option<Channel>,
+    /// Setup is over (done, or skipped with the defaults): it opens the
+    /// window only until then, and from Settings → General after.
+    pub onboarded: bool,
+    /// The step of setup reached, to go on from there after a restart
+    /// (`crate::setup::Step`'s name).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub setup_step: Option<String>,
+    /// What setup was told this computer is for (`crate::setup::Use`'s
+    /// name).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub use_for: Option<String>,
 }
 
 impl Default for Prefs {
@@ -75,6 +86,9 @@ impl Default for Prefs {
             yuv444: false,
             share_clipboard: true,
             updates: None,
+            onboarded: false,
+            setup_step: None,
+            use_for: None,
         }
     }
 }

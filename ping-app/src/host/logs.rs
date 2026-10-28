@@ -3,9 +3,9 @@
 use gpui::{div, prelude::*, px, AnyElement, ClipboardItem, Context};
 use pingpong_ui::{button, IconName, Ink, Radius, Theme};
 
-use super::PongApp;
+use super::HostPages;
 
-impl PongApp {
+impl HostPages {
     pub(super) fn logs(&mut self, t: Theme, _cx: &mut Context<Self>) -> AnyElement {
         let text = self.snap.logs.clone().unwrap_or_default();
         let copy = text.clone();

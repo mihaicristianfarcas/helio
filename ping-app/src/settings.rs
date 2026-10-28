@@ -1,9 +1,10 @@
-//! The app's own settings (General), Moonlight's (video, audio, input) and
-//! the agents' setup, one page each: cards of labelled rows, each saying
-//! what it does.
+//! The app's own settings (General, Hosting, Updates), Moonlight's (video,
+//! audio, input) and the agents' setup, one page each: asides' cards of
+//! labelled rows, each saying what it does.
 
 use gpui::{div, prelude::*, px, AnyElement, App, Context, SharedString, Window};
 use pingpong_proto::control::{codec, video};
+use pingpong_ui::login::LoginItem;
 use pingpong_ui::{button, rows, section, select, setting, slider, switch, Choice, Theme, Type};
 
 use crate::app::{page_body, toolbar, PingApp};
@@ -16,6 +17,8 @@ pub enum Tab {
     Audio,
     Input,
     Agents,
+    Hosting,
+    Updates,
 }
 
 impl Tab {
@@ -25,12 +28,22 @@ impl Tab {
             "audio" => Tab::Audio,
             "input" => Tab::Input,
             "agents" => Tab::Agents,
+            "hosting" => Tab::Hosting,
+            "updates" => Tab::Updates,
             _ => Tab::Video,
         }
     }
 }
 
 /// Moonlight's streaming shortcut chord, as this platform writes it.
+/// The app at login, without its window: only the host's icon, with
+/// hosting on (`--background`); nothing, and it quits, with hosting off.
+const AT_LOGIN: LoginItem = LoginItem {
+    id: crate::host::tray::APP_ID,
+    name: "Ping",
+    args: &["--background"],
+};
+
 pub fn chord(key: &str) -> String {
     if cfg!(target_os = "macos") {
         format!("⌃⌥⇧{key}")
@@ -60,8 +73,18 @@ impl PingApp {
         let (title, subtitle, body): (&str, &str, AnyElement) = match tab {
             Tab::General => (
                 "General",
-                "Ping itself: its version, and how it hears of a newer one.",
+                "Ping itself: when it opens, and setting it up again.",
                 self.general(t, cx),
+            ),
+            Tab::Hosting => (
+                "Hosting",
+                "Let your other devices play this computer.",
+                self.hosting_settings(t, cx),
+            ),
+            Tab::Updates => (
+                "Updates",
+                "Ping's version, and how it hears of a newer one.",
+                self.updates_page(t, cx),
             ),
             Tab::Video => (
                 "Video",
@@ -151,9 +174,78 @@ impl PingApp {
         }
     }
 
+    /// General: opening at login (for the host's icon, with hosting on),
+    /// and setup again.
     fn general(&mut self, t: Theme, cx: &mut Context<Self>) -> AnyElement {
+        let mut startup = Vec::new();
+        if pingpong_ui::login::supported() {
+            let this = cx.weak_entity();
+            let on = std::env::current_exe().is_ok_and(|exe| AT_LOGIN.enabled(&exe));
+            startup.push(
+                setting(
+                    "Open at login",
+                    Some(
+                        format!(
+                            "With hosting on, Ping's icon is in the {} from the moment you log \
+                                in, without its window: what the host is doing and a device \
+                                asking to pair are a click away. The host itself runs either way.",
+                            if cfg!(target_os = "macos") {
+                                "menu bar"
+                            } else {
+                                "notification area"
+                            }
+                        )
+                        .into(),
+                    ),
+                    switch("at-login", on, t).on_toggle(move |on, _, cx| {
+                        let done = std::env::current_exe()
+                            .map_err(|e| e.to_string())
+                            .and_then(|exe| AT_LOGIN.set(&exe, on));
+                        let _ = this.update(cx, |app, cx| {
+                            match done {
+                                Ok(()) => tracing::info!(on, "open at login"),
+                                Err(e) => app.show_alert("Open at login did not change", &e, cx),
+                            }
+                            cx.notify();
+                        });
+                    }),
+                    t,
+                )
+                .into_any_element(),
+            );
+        }
+        let set_up = button("set-up-again", "Set Up Again…", t)
+            .on_click(cx.listener(|this, _, _, cx| this.setup_again(cx)));
+        div()
+            .flex()
+            .flex_col()
+            .gap(px(20.0))
+            .when(!startup.is_empty(), |d| {
+                d.child(section("Startup", t).child(rows(startup, t)))
+            })
+            .child(
+                section("Setup", t).child(rows(
+                    [setting(
+                        "Set up Ping again",
+                        Some(
+                            "What this computer is for, what it must allow to be played, and \
+                                how to pair, step by step."
+                                .into(),
+                        ),
+                        set_up,
+                        t,
+                    )
+                    .into_any_element()],
+                    t,
+                )),
+            )
+            .into_any_element()
+    }
+
+    /// Updates: the channel the check follows, and the version.
+    fn updates_page(&mut self, t: Theme, cx: &mut Context<Self>) -> AnyElement {
         let check = cx.weak_entity();
-        section("Updates", t)
+        section("", t)
             .child(rows(
                 [
                     pingpong_ui::updates::channel_setting(

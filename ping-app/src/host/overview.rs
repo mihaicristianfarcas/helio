@@ -6,12 +6,12 @@ use pingpong_ui::{
     Type,
 };
 
-use crate::api::{LogEntry, Status};
-use crate::worker::Cmd;
+use crate::host::api::{LogEntry, Status};
+use crate::host::worker::Cmd;
 
-use super::{ago, device_word, duration, info_row, now_ms, page, Confirm, Page, PongApp};
+use super::{ago, device_word, duration, info_row, now_ms, page, Confirm, HostPages, Page};
 
-impl PongApp {
+impl HostPages {
     pub(super) fn overview(&mut self, t: Theme, cx: &mut Context<Self>) -> AnyElement {
         let Some(s) = self.snap.status.clone() else {
             return super::signin::waiting("overview-page", "Asking Pong how it is…", t);
@@ -37,7 +37,14 @@ impl PongApp {
             .child(pingpong_ui::page_header(
                 s.name.clone(),
                 Some(subtitle.into()),
-                None,
+                // Signed in with an account (not the local token): a way
+                // out.
+                (!self.snap.local).then(|| {
+                    button("sign-out", "Sign Out", t)
+                        .icon(IconName::Power)
+                        .on_click(cx.listener(|this, _, _, cx| this.ask_sign_out(cx)))
+                        .into_any_element()
+                }),
                 t,
             ));
         if let Some(p) = pending {

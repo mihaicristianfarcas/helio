@@ -9,11 +9,10 @@ changes themselves — code style, comments, docs, commits — are in
 
 ```
 Cargo.toml            the workspace (every crate below but spikes/ and tools/rawinput-probe)
-ping-app/             Ping's window (GPUI)                    ─┐
-ping-core/            the client: stream, platforms, `ping`    │ the client
+ping-app/             the app's window (GPUI), This computer   ─┐
+ping-core/            the client: stream, platforms, `ping`    │ the app
 ping-agent/           AI agents: MCP server, runners           ─┘
-pong/                 the host: sessions, pipelines, web UI    ─┐ the host
-pong-app/             Pong's window and tray icon (GPUI)       ─┘
+pong/                 the host: sessions, pipelines, web UI      the host
 pingpong-*/           the libraries both share (see docs/architecture.md)
 Casks/                the Homebrew casks, written at each release (see below)
 docs/                 documentation; docs/design/ is the design history
@@ -153,9 +152,10 @@ normal use.
 | `PINGPONG_TEST_WIRE_LOSS=N[:B]` | Any endpoint drops N% of all tunnel datagrams, in bursts of B (before decryption; handshakes included) |
 | `PINGPONG_TEST_HANDSHAKE_LOSS=N` | Any endpoint drops N% of handshake datagrams (rekeys under loss) |
 | `PINGPONG_TEST_BLACKOUT=S:D` | Any endpoint sends and receives nothing from S seconds after it opened, for D seconds |
-| `PING_UI_DEMO=…`, `PONG_UI_DEMO=…` | Drive either window and save screenshots ([ui.md](ui.md#checking-it-without-clicking)) |
+| `PING_UI_DEMO=…` | Drive the window and save screenshots ([ui.md](ui.md#checking-it-without-clicking)) |
+| `PING_HOST_PROGRAM=PATH` | The `pong` the hosting switch runs (a test host), instead of the one beside the app |
 | `PING_UI_DEMO_SCREEN=PATH` | The picture the sample agent sessions show |
-| `PONG_APP_URL`, `PONG_APP_CERT`, `PONG_APP_TOKEN` | Point Pong's window at another host's API |
+| `PONG_APP_URL`, `PONG_APP_CERT`, `PONG_APP_TOKEN` | Point This computer at another host's API |
 | `PINGPONG_UPDATE_API=URL` | The update check asks this instead of `https://api.github.com` (the paths are GitHub's) |
 | `PINGPONG_COMMIT=SHA`, `PINGPONG_RELEASE=1` | At build time: the commit the update check compares with `main` (else the checkout's), and a release build (follows releases only). `cargo run -p pingpong-update --example check [releases\|main]` asks GitHub as the apps would; `--example install -- ping\|pong FOLDER` installs the latest release into FOLDER as an update would (on a Mac, over an older release's apps there), leaving the installed apps alone |
 | `PONG_NO_PROMPTS=1` | A bundled Mac host does not ask for permissions at start |
@@ -182,8 +182,8 @@ when it needs to be and never merged into it.
 
 | Script | Makes |
 |---|---|
-| `tools/package-macos` | `Ping-VERSION-macos-ARCH.zip` (Ping.app) and `Pong-VERSION-macos-ARCH.zip` (Pong.app, Pong Control.app) |
-| `tools/package-windows.ps1` | `Ping-VERSION-windows-x86_64.zip` (Ping.exe beside FFmpeg's DLLs, `install.ps1`, which is `tools/install-ping.ps1`, and `Install Ping.cmd`) and `Pong-VERSION-windows-x86_64.zip` (pong.exe, Pong Control.exe, `install.ps1`, which is `tools/host-deploy.ps1`, and `Install Pong.cmd`). Each `install.ps1` copies itself beside the programs and lists them in Settings > Apps, whose **Uninstall** runs it with `-Uninstall` |
+| `tools/package-macos` | `Ping-VERSION-macos-ARCH.zip` (Ping.app) and `Pong-VERSION-macos-ARCH.zip` (Pong.app) |
+| `tools/package-windows.ps1` | `Ping-VERSION-windows-x86_64.zip` (Ping.exe beside FFmpeg's DLLs, `install.ps1`, which is `tools/install-ping.ps1`, and `Install Ping.cmd`) and `Pong-VERSION-windows-x86_64.zip` (pong.exe, `install.ps1`, which is `tools/host-deploy.ps1`, and `Install Pong.cmd`). Each `install.ps1` copies itself beside the programs and lists them in Settings > Apps, whose **Uninstall** runs it with `-Uninstall` |
 | `tools/linux/package` | `Ping-VERSION-linux-ARCH.tar.gz` and `Pong-VERSION-linux-ARCH.tar.gz`, each a folder with the programs, launcher entries, icons and `install.sh` (`tools/linux/install-release`) |
 | `tools/publish-downloads DIST` | The downloads: each archive at `https://download.pingpong.mihaicristian.dev/latest/APP-OS-ARCH.EXT`, then `latest/SHA256SUMS` and `latest.json` (version, commit, sizes, checksums), in the Cloudflare R2 bucket `pingpong-downloads`, with wrangler |
 
@@ -255,7 +255,7 @@ hardware module or the issuer's cloud): for a person rather than a
 company, Certum's open-source certificate in its cloud is one, while
 Microsoft's Artifact Signing issues to individuals only in the US and
 Canada. The signing goes in `tools/package-windows.ps1`, on Ping.exe,
-pong.exe and Pong Control.exe before they are zipped, with the issuer's
+and pong.exe before they are zipped, with the issuer's
 credentials as repository secrets, as the Developer ID's are.
 
 `main` takes changes only through pull requests: work on a branch, push it,
@@ -279,10 +279,9 @@ cargo +nightly fuzz run depacketize   # also: control, input
 
 - The icons are drawn by code: `cargo run -p ping-app --example make-icon
   -- OUTDIR` writes Ping's and Pong's macOS iconsets, their Windows `.ico`
-  and 256-pixel PNGs, and Pong's menu bar mark (`tray.png`,
-  `tray@2x.png`). The `.ico`, the PNGs and the mark are committed in
-  `ping-app/assets/` and `pong-app/assets/` (`icon-256.png` there is
-  `pong-256.png`); the bundle scripts rerun the drawing when it changes.
+  and 256-pixel PNGs, and the host's menu bar mark (`tray.png`,
+  `tray@2x.png`). Ping's `.ico`, PNG and the mark are committed in
+  `ping-app/assets/`; the bundle scripts rerun the drawing when it changes.
 - The UI's icons are SVG files in `pingpong-ui/assets/icons/`, 24×24 with
   1.75 pt round strokes in `currentColor`, embedded in the binary.
 - `pingpong-decode/tests/fixtures/testsrc.h264` is the known stream the

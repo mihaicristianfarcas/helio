@@ -89,7 +89,10 @@ Windows and Linux) opens them.
 
 | Page | Setting | What it does |
 |---|---|---|
-| General | Look for updates | New releases (the default for a packaged release), releases and main (the default for a build from a checkout: also commits on `main` newer than the build's), or off. See [Updates](#updates) |
+| General | Open at login | With hosting on, Ping's icon from the moment you log in, without its window (a LaunchAgent on a Mac, your `Run` key on Windows; not on Linux). With hosting off, nothing starts |
+| | Set Up Again | Setup once more: what this computer is for, what it must allow, how to pair |
+| Hosting | Let my devices play this computer | The hosting switch ([Hosting on and off](#hosting-on-and-off)), with what it needs: on a Mac, Screen Recording and Accessibility for the host; on Windows, whether there are NVIDIA graphics and SudoVDA |
+| Updates | Look for updates | New releases (the default for a packaged release), releases and main (the default for a build from a checkout: also commits on `main` newer than the build's), or off. See [Updates](#updates) |
 | | Check for Updates | Asks GitHub now, whatever the setting |
 | Video | Resolution | This display's native size (the default), the scaled desktop size (Mac), or a custom size. Each is fitted to the nearest standard aspect ratio (16:10, 16:9, 21:9...): a size between them makes games draw a smaller picture with strips around it, which a Windows host does not refresh. Below a MacBook's notch that is 16:10, 3024 × 1890 on a 14" |
 | | Frame rate | Frames per second the host sends; up to this display's maximum |
@@ -125,11 +128,14 @@ hosts (`hosts.toml`) and this device's keys:
 
 ## Hosting on and off
 
-Hosting is one switch, and it is off until you turn it on. Off, nothing of
-the host runs on your computer: no port is open for streaming, pairing or
-the web UI, nothing is published for finding the host from the internet,
-and it is not announced on the local network. Ping, the client, opens none
-of these.
+Hosting is one switch, and it is off until you turn it on: in Ping, under
+**This computer** or **Settings → Hosting** (or in setup, by answering that
+your devices will play this computer). Off, nothing of the host runs on
+your computer: no port is open for streaming, pairing or the web UI,
+nothing is published for finding the host from the internet, and it is not
+announced on the local network. Ping, the client, opens none of these.
+
+The switch runs the host's own commands, which you can also run yourself:
 
 ```sh
 pong enable     # on: the host starts now, and every time after
@@ -148,33 +154,41 @@ control the sign-in screen and UAC prompts. That is why it runs only from
 its own copy in Program Files, never from a folder you (or a program you
 run) can write to, and why turning hosting on or off asks for an
 administrator. Without one, `pong enable` and `pong disable` change nothing
-and exit with code 740, so an app can ask Windows to run them again
-elevated. The signature check only warns until Windows releases are signed;
+and exit with code 740, and Ping asks Windows to run them again elevated
+(the UAC prompt). The signature check only warns until Windows releases are signed;
 after that, `pong enable` refuses an engine that is unsigned or was changed
 after signing.
 
-Uninstalling Pong turns hosting off first ([install.md](install.md#uninstalling)).
-Your pairings and settings stay in the data folder either way.
+On a Mac the host asks for Screen Recording and Accessibility with macOS's
+own prompts as it first starts. Ping's Hosting page says, for each, whether
+macOS allows it, with a button to its pane of System Settings, and notices
+when it is allowed. After Screen Recording is turned on there, macOS asks
+to quit and reopen the host.
 
-## Pong's window and web UI
+Quitting Ping never stops the host: only the switch does. Uninstalling Pong
+turns hosting off first ([install.md](install.md#uninstalling)). Your
+pairings and settings stay in the data folder either way.
 
-Pong's window (**Pong Control** on a Mac, **Pong** in the Windows Start
-menu) and its web UI (`https://HOST:47802`) do the same things: see and end
-the session, pair and unpair devices, change settings, read the log. The
-window is for the host's own screen; the web UI for a headless host or
-another computer. On Windows the window signs in once with the web UI's
-admin account.
+## This computer and the web UI
 
-**Pong's icon** sits in the menu bar on a Mac and in the taskbar's
-notification area on Windows, with or without the window open. Its menu
-says what the host is doing (running, streaming to whom, not running),
-opens the window, names a device asking to pair (a notification says so
-too), and says when a newer Pong exists. On a Mac, Pong's window app has no
-Dock icon at all: the menu bar icon is where it lives. Closing the window
-leaves the icon; **Quit Pong Control** in its menu removes it. Either way
-the host keeps running: it is a service of its own (PongService, or
-Pong.app). Linux has no single tray to put an icon in, so there Pong's
-window is an ordinary app: closing it quits it.
+With hosting on, Ping's **This computer** pages and the host's web UI
+(`https://HOST:47802`) do the same things: see and end the session, pair
+and unpair devices, set what each may do, change the host's settings, read
+its log. This computer is for the host's own screen; the web UI for a
+headless host or another computer. On Windows, Ping signs in to the host
+once with the web UI's admin account.
+
+**Ping's icon** sits in the menu bar on a Mac and in the taskbar's
+notification area on Windows while hosting is on, with or without the
+window open. Its menu says what the host is doing (ready, streaming to
+whom, starting, stopped), opens the window, names a device asking to pair
+(a notification says so too), and says when a newer Ping exists. With the
+icon there, closing the window leaves the app running behind it (on a Mac,
+without a Dock tile until the window is open again); **Quit Ping** in its
+menu quits the app. Either way the host keeps running: it is a service of
+its own (PongService, the LaunchAgent, or the user unit). Linux has no
+single tray to put an icon in, so there closing the window quits Ping, and
+the host runs on.
 
 | Page | Setting | Default | `config.toml` |
 |---|---|---|---|
@@ -197,16 +211,9 @@ window is an ordinary app: closing it quits it.
 | AI agents | Allow paired AI agents | on | `agents` |
 | | Hold after local input | 10 s | `agent_local_input_hold_secs` |
 
-General's last section, **This window**, is the window's own, not the
-host's; it is kept per user, in `window.toml` beside the app token
-(`%APPDATA%\Pong` on Windows, Pong's data folder elsewhere):
-
-| Setting | Default | What it does |
-|---|---|---|
-| Show Pong's icon at login | on after `tools/build-pong-app --install` or `host-deploy.ps1` | The icon at sign-in, without the window (a LaunchAgent on a Mac, the user's `Run` key on Windows; not on Linux) |
-| Look for updates | as Ping's | As Ping's, for Pong |
-
-A changed name or port applies after Pong restarts (the window offers to).
+These are This computer → Settings (General, Video, Network, AI agents,
+picked along the top of the page). A changed name or port applies after
+the host restarts (the page offers to).
 Pong's data folder holds `config.toml`, its identity, the paired clients,
 the web UI's certificate and account, and `logs/`:
 
@@ -222,7 +229,7 @@ the web UI's certificate and account, and `logs/`:
 
 Each paired device has permissions on the host, as Apollo gives each of its
 clients: whether it may see the screen, which input the host takes from it,
-which way the clipboard goes, and more. Set them in Pong's window under
+which way the clipboard goes, and more. Set them in Ping, This computer →
 **Devices** (the button beside each device) or in the web UI under
 **Clients**. A change applies at once, to a stream that is running too.
 
@@ -272,9 +279,9 @@ From a terminal: `pong permissions X25519 view,keyboard,mouse`
 
 ## Updates
 
-Ping and Pong's window say when there is something newer than the copy
-that runs: a line at the foot of the sidebar ("Ping 0.7.0 is available"),
-and on Pong's icon, its menu. Clicking it says what it is, with
+Ping says when there is something newer than the copy that runs: a line at
+the foot of the sidebar ("Ping 0.7.0 is available"), and, while hosting is
+on, its icon's menu. Clicking it says what it is, with
 **Install and Restart**: the app downloads the release from GitHub, checks
 it, installs it and opens again. Nothing is downloaded or installed until
 you choose to. For a build from a checkout it lists the commits on `main`
@@ -284,7 +291,7 @@ How each system installs it:
 
 | | Ping | Pong |
 |---|---|---|
-| macOS | The app is replaced where it is (Applications) | Pong and Pong Control are replaced, and the host restarts |
+| macOS | The app is replaced where it is (Applications) | Pong is replaced, and the host restarts |
 | macOS, installed with Homebrew | `brew upgrade --cask ping`, run for you | `brew upgrade --cask pong`, run for you; the host is started again |
 | Windows | Ping's files are replaced in its folder; Settings > Apps shows the new version | The new release's `install.ps1` runs: Windows asks for an administrator's permission, PongService restarts, and Settings > Apps shows the new version |
 | Linux | The new release's `install.sh` (into `~/.local/bin`) | The same; the host's user service restarts |

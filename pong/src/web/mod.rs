@@ -7,11 +7,11 @@
 //! choose what it may do), clients (unpair; what each one may do), settings
 //! (config.toml), logs.
 //!
-//! The same API serves Pong's own window (pong-app), which sends a bearer
-//! token instead of a cookie: the local token this host writes where only
-//! its own user (on Windows, SYSTEM and Administrators) can read it, or an
-//! app token it got by signing in once with the admin account (kept hashed
-//! here, in app-tokens.toml).
+//! The same API serves Ping's This computer pages (`ping-app/src/host`),
+//! which send a bearer token instead of a cookie: the local token this host
+//! writes where only its own user (on Windows, SYSTEM and Administrators)
+//! can read it, or an app token it got by signing in once with the admin
+//! account (kept hashed here, in app-tokens.toml).
 
 pub mod probe;
 
@@ -436,8 +436,26 @@ async fn status(State(web): State<Shared>, headers: HeaderMap) -> Response {
         "internet": c.internet_access,
         "public": h.stun.public().iter().map(|a| a.to_string()).collect::<Vec<_>>(),
         "port_mapping": *h.port_mapping.lock(),
+        "grants": grants(),
     }))
     .into_response()
+}
+
+/// What macOS lets this host do, for the app's Hosting page: Screen
+/// Recording (asked of the process: it changes when the host starts again)
+/// and Accessibility (live). Elsewhere there is nothing to grant: null.
+fn grants() -> serde_json::Value {
+    #[cfg(target_os = "macos")]
+    {
+        json!({
+            "screen": crate::permissions::screen_capture_allowed(),
+            "accessibility": pingpong_input::macos::trusted(),
+        })
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        serde_json::Value::Null
+    }
 }
 
 async fn pending(State(web): State<Shared>, headers: HeaderMap) -> Response {

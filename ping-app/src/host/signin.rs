@@ -1,4 +1,5 @@
-//! Before the host can be shown: Pong not running, or signing in (Windows).
+//! Before the host can be shown: the host not answering (starting, or
+//! failed), or signing in (Windows).
 //! Pages like the others: a title at the top, rows under it.
 
 use gpui::{div, prelude::*, px, AnyElement, Context, Window};
@@ -7,43 +8,44 @@ use pingpong_ui::{
     Theme, Type,
 };
 
-use crate::host;
-use crate::worker::Cmd;
+use super::switch::State;
+use super::worker::Cmd;
 
-use super::{page, PongApp};
+use super::{page, HostPages};
 
-impl PongApp {
+impl HostPages {
+    /// Hosting is on, but the host's API does not answer: it is starting,
+    /// or it failed (and why), with a way to start it again.
     pub(super) fn not_running(&mut self, t: Theme, cx: &mut Context<Self>) -> AnyElement {
-        let can_start = host::can_start();
-        let how = match std::env::consts::OS {
-            "windows" => {
-                "Pong runs as a service, PongService. Start it in Services, or \
-                    turn hosting on with pong enable from an administrator's terminal."
-            }
-            "macos" if can_start => {
-                "Pong then runs whenever you are logged in, and asks for Screen \
-                    Recording and Accessibility the first time."
-            }
-            "macos" => {
-                "Put Pong.app beside this app (both in Applications) and start it \
-                    here, or run tools/build-pong-app --install from the source."
-            }
-            _ => "Turn hosting on with pong enable, or run pong host.",
+        let (state, busy, error) = {
+            let h = self.hosting.read(cx);
+            (h.state.clone(), h.busy, h.error.clone())
         };
-        let start: AnyElement = if can_start {
-            button("start-host", "Start Pong", t)
-                .accent()
-                .on_click(cx.listener(|this, _, _, cx| {
-                    this.start_error = host::start().err();
-                    if let Some(e) = &this.start_error {
-                        tracing::warn!(error = e, "the host was not started");
-                    }
+        let (title, line) = match &state {
+            State::Failed(why) => (
+                "The host stopped",
+                format!("Hosting is on, but the host does not run: {why}."),
+            ),
+            State::Starting | State::On { .. } | State::Unknown => (
+                "Starting the host",
+                "This page shows the host as soon as it answers.".to_string(),
+            ),
+            State::Off => (
+                "Hosting is off",
+                "Turn it on in Settings → Hosting.".to_string(),
+            ),
+        };
+        let again: AnyElement = if busy.is_some() {
+            spinner("host-switching", 13.0, t.tertiary).into_any_element()
+        } else {
+            let hosting = self.hosting.clone();
+            button("start-host", "Start It Again", t)
+                .on_click(cx.listener(move |this, _, _, cx| {
+                    hosting.update(cx, |h, cx| h.turn(true, cx));
                     this.send(Cmd::Refresh);
                     cx.notify();
                 }))
                 .into_any_element()
-        } else {
-            div().into_any_element()
         };
         let waiting = div()
             .flex()
@@ -51,7 +53,7 @@ impl PongApp {
             .gap(px(8.0))
             .child(spinner("waiting-host", 11.0, t.tertiary))
             .child(
-                button("retry", "Try Again", t).on_click(cx.listener(|this, _, _, cx| {
+                button("retry", "Look Again", t).on_click(cx.listener(|this, _, _, cx| {
                     this.send(Cmd::Refresh);
                     cx.notify();
                 })),
@@ -60,28 +62,19 @@ impl PongApp {
             .flex()
             .flex_col()
             .gap(px(22.0))
-            .child(page_header(
-                "Pong isn't running",
-                Some("This window connects as soon as it starts.".into()),
-                None,
-                t,
-            ))
-            .children(
-                self.start_error
-                    .clone()
-                    .map(|e| notice(IconName::Warning, Ink::DANGER, e, t)),
-            )
+            .child(page_header(title, Some(line.into()), None, t))
+            .children(error.map(|e| notice(IconName::Warning, Ink::DANGER, e, t)))
             .child(
                 section("", t).child(rows(
                     [
                         setting(
-                            if can_start {
-                                "Start it here"
-                            } else {
-                                "Start it"
-                            },
-                            Some(how.into()),
-                            start,
+                            "Start the host again",
+                            Some(
+                                "Runs pong enable once more: the system starts the host and \
+                                    keeps it running."
+                                    .into(),
+                            ),
+                            again,
                             t,
                         )
                         .into_any_element(),

@@ -1,33 +1,17 @@
 //! The settings pages (General, Video, Network, AI agents): each saves as it changes.
 //!
-//! All of them are the host's, kept by the host, but for General's last
-//! section: the window's own (its icon at login, the update check), which
-//! are this user's and kept by the app.
-
-use std::time::Instant;
+//! All of them are the host's, kept by the host; the app's own (opening at
+//! login, the update check) are in its Settings.
 
 use gpui::{div, prelude::*, px, AnyElement, Context, ElementId};
-use pingpong_ui::login::LoginItem;
 use pingpong_ui::{
     field, notice, rows, section, select, setting, stepper, switch, IconName, Ink, Theme,
 };
 use serde_json::json;
 
-use super::{page, Page, PongApp, UPDATE_APP};
+use super::{page, HostPages, Page};
 
-/// The app at login: in the tray, without its window.
-const AT_LOGIN: LoginItem = LoginItem {
-    id: crate::background::APP_ID,
-    name: "Pong",
-    args: &["--background"],
-};
-
-/// Whether this copy of the app starts at login as things stand.
-pub(super) fn starts_at_login() -> bool {
-    std::env::current_exe().is_ok_and(|exe| AT_LOGIN.enabled(&exe))
-}
-
-impl PongApp {
+impl HostPages {
     pub(super) fn settings(&mut self, t: Theme, cx: &mut Context<Self>) -> AnyElement {
         if self.config().is_none() {
             return super::signin::waiting("settings-page", "Reading the settings…", t);
@@ -96,7 +80,6 @@ impl PongApp {
                             t,
                         )),
                     )
-                    .child(section("This window", t).child(rows(self.window_rows(t, cx), t)))
                     .into_any_element(),
             ),
             Page::Video => {
@@ -369,7 +352,7 @@ impl PongApp {
             .child(pingpong_ui::page_header(
                 title,
                 Some(subtitle.into()),
-                None,
+                Some(self.settings_tabs(t, cx)),
                 t,
             ));
         if self.restart_needed {
@@ -386,87 +369,22 @@ impl PongApp {
         page(&self.page_scroll, t, "settings-page", content.child(body))
     }
 
-    /// The window's own settings: its icon at login (where there is a tray
-    /// for it), and the update check.
-    fn window_rows(&mut self, t: Theme, cx: &mut Context<Self>) -> Vec<AnyElement> {
-        let mut out = Vec::new();
-        if pingpong_ui::tray::supported() && pingpong_ui::login::supported() {
-            let this = cx.weak_entity();
-            out.push(
-                setting(
-                    "Show Pong's icon at login",
-                    Some(
-                        format!(
-                            "Pong's icon is in the {} from the moment you log in, without \
-                                this window: what the host is doing, a device asking to pair, \
-                                and the window itself are a click away.",
-                            if cfg!(target_os = "macos") {
-                                "menu bar"
-                            } else {
-                                "taskbar's notification area"
-                            }
-                        )
-                        .into(),
-                    ),
-                    switch("at-login", self.starts_at_login, t).on_toggle(move |on, _, cx| {
-                        let _ = this.update(cx, |app, cx| app.set_starts_at_login(on, cx));
-                    }),
-                    t,
-                )
-                .into_any_element(),
-            );
-        }
+    /// The host's settings are one row in the sidebar: these pick among
+    /// them.
+    fn settings_tabs(&mut self, t: Theme, cx: &mut Context<Self>) -> AnyElement {
+        const TABS: [(Page, &str); 4] = [
+            (Page::General, "General"),
+            (Page::Video, "Video"),
+            (Page::Network, "Network"),
+            (Page::Agents, "AI agents"),
+        ];
+        let at = TABS.iter().position(|(p, _)| *p == self.page).unwrap_or(0);
         let this = cx.weak_entity();
-        out.push(
-            pingpong_ui::updates::channel_setting(
-                "update-channel",
-                &UPDATE_APP,
-                self.prefs.update_channel(),
-                t,
-                move |channel, _, cx| {
-                    let _ = this.update(cx, |app, cx| {
-                        tracing::info!(?channel, "update check");
-                        app.prefs.updates = Some(channel);
-                        app.prefs.save(&crate::api::app_dir());
-                        app.updates.set_channel(channel);
-                        cx.notify();
-                    });
-                },
-            )
-            .into_any_element(),
-        );
-        let this = cx.weak_entity();
-        out.push(
-            pingpong_ui::updates::version_setting(
-                &UPDATE_APP,
-                &self.updates.status(),
-                t,
-                move |_, cx| {
-                    let _ = this.update(cx, |app, cx| {
-                        app.update_sheet = true;
-                        app.updates.check_now();
-                        cx.notify();
-                    });
-                },
-            )
-            .into_any_element(),
-        );
-        out
-    }
-
-    fn set_starts_at_login(&mut self, on: bool, cx: &mut Context<Self>) {
-        let done = std::env::current_exe()
-            .map_err(|e| e.to_string())
-            .and_then(|exe| AT_LOGIN.set(&exe, on));
-        match done {
-            Ok(()) => tracing::info!(on, "Pong's icon at login"),
-            Err(e) => {
-                tracing::warn!(error = e, "Pong's icon at login was not changed");
-                self.note = Some((IconName::Warning, Ink::DANGER, e, Instant::now()));
-            }
-        }
-        self.starts_at_login = starts_at_login();
-        cx.notify();
+        pingpong_ui::segmented("host-settings-tabs", TABS.map(|(_, l)| l), at, t)
+            .on_select(move |i, _, cx| {
+                let _ = this.update(cx, |this, cx| this.set_page(TABS[i].0, cx));
+            })
+            .into_any_element()
     }
 
     pub(super) fn toggle(

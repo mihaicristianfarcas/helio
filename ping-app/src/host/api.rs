@@ -362,6 +362,17 @@ pub struct Status {
     pub public: Vec<String>,
     /// The router's port mapping ("" before the first try).
     pub port_mapping: String,
+    /// What macOS lets the host do (None elsewhere).
+    pub grants: Option<Grants>,
+}
+
+/// What macOS lets the host do: Screen Recording, to capture at all, and
+/// Accessibility, for a device's keyboard and mouse to act.
+#[derive(Debug, Clone, Copy, Default, Deserialize, PartialEq)]
+#[serde(default)]
+pub struct Grants {
+    pub screen: bool,
+    pub accessibility: bool,
 }
 
 #[derive(Debug, Clone, Default, Deserialize, PartialEq)]

@@ -7,7 +7,7 @@ use crossbeam_channel::Sender;
 use futures::StreamExt;
 use gpui::{App, AppContext, Entity, EventEmitter};
 
-use crate::worker::{self, Cmd, Done, Msg, Snapshot};
+use super::worker::{self, Cmd, Done, Msg, Snapshot};
 
 pub struct Link {
     pub snap: Snapshot,
@@ -37,7 +37,7 @@ impl Link {
                         match msg {
                             Msg::Snapshot(snap) => {
                                 link.snap = *snap;
-                                crate::app::pretend(&mut link.snap);
+                                super::pretend(&mut link.snap);
                                 cx.notify();
                             }
                             Msg::Done(done) => cx.emit(done),
@@ -51,10 +51,6 @@ impl Link {
         })
         .detach();
         link
-    }
-
-    pub fn send(&self, cmd: Cmd) {
-        let _ = self.cmds.send(cmd);
     }
 
     /// For a window to ask the host things itself.

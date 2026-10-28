@@ -38,6 +38,18 @@ impl PingApp {
         .on_action(
             cx.listener(|this, _: &menus::CheckForUpdates, _, cx| this.show_updates(true, cx)),
         )
+        .on_action(cx.listener(|this, _: &crate::ShowHostingSettings, _, cx| {
+            this.open_settings(Tab::Hosting, cx)
+        }))
+        .on_action(
+            cx.listener(|this, _: &crate::ShowUpdates, _, cx| this.open_settings(Tab::Updates, cx)),
+        )
+        .on_action(cx.listener(|this, _: &crate::ShowThisComputer, _, cx| {
+            this.set_page(Page::Host(crate::host::Page::Overview), cx)
+        }))
+        .on_action(cx.listener(|this, _: &crate::ShowDevices, _, cx| {
+            this.set_page(Page::Host(crate::host::Page::Devices), cx)
+        }))
         .on_action(cx.listener(|this, _: &crate::ShowHosts, _, cx| this.set_page(Page::Hosts, cx)))
         .on_action(
             cx.listener(|this, _: &crate::ShowAgents, _, cx| this.set_page(Page::Agents, cx)),

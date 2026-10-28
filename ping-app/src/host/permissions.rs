@@ -8,10 +8,10 @@ use gpui::{div, prelude::*, px, AnyElement, Context, ElementId, FontWeight};
 use pingpong_proto::permission::{self, Permissions};
 use pingpong_ui::{button, rows, section, select, setting, sheet, switch, Choice, Theme, Type};
 
-use crate::api::Client;
-use crate::worker::Cmd;
+use crate::host::api::Client;
+use crate::host::worker::Cmd;
 
-use super::PongApp;
+use super::HostPages;
 
 /// How long a change made here stands against the host's older word (the
 /// next refresh may have left before the change arrived).
@@ -191,7 +191,7 @@ fn preset_choices(agent: bool, p: Permissions) -> (Vec<Choice>, Option<usize>) {
     (choices, at)
 }
 
-impl PongApp {
+impl HostPages {
     /// The select that chooses what a device asking to pair may do.
     pub(super) fn pairing_choice(
         &mut self,

@@ -25,15 +25,19 @@ line of its standard output. That process is `ping_core::linux`:
 - **Controllers.** gilrs (evdev), rumble included.
 - **Sound.** cpal (ALSA; PipeWire and PulseAudio through it).
 - **In the launcher.** `tools/linux/install-apps` (from a checkout) and the
-  downloads' `install.sh` install Ping's and Pong's windows for the user
-  with a desktop entry and an icon each. The entries
-  are named after the windows' app ids (`dev.pingpong.Ping`,
-  `dev.pingpong.PongApp`), so the dock and the task switcher show each
-  window under its own icon, under Wayland and X11.
-- **No tray icon for Pong's window.** There is no one tray on Linux (the
+  downloads' `install.sh` install Ping for the user with a desktop entry
+  and an icon, named after the window's app id (`dev.pingpong.Ping`), so
+  the dock and the task switcher show it under its own icon, under Wayland
+  and X11.
+- **The window's glass.** GPUI blurs behind a window only on KDE Plasma
+  under Wayland; elsewhere the window is opaque, in the same colours
+  ([../ui.md](../ui.md#the-glass-on-each-system)).
+- **No tray icon for hosting.** There is no one tray on Linux (the
   StatusNotifier protocol needs a D-Bus service and a menu protocol of its
-  own, and GNOME shows it only with an extension), so Pong's window is an
-  ordinary app there: closing it quits, and it does not start at login.
+  own, and GNOME shows it only with an extension), so with hosting on Ping
+  is still an ordinary app: closing it quits, and the host runs on as its
+  user unit. The hosting switch runs `pong enable` (`systemctl --user`),
+  which asks for nothing.
 
 ## Pong, the host
 

@@ -32,6 +32,7 @@ pingpong-update = { path = "../pingpong-update" }
 serde = { version = "1", features = ["derive"] }
 toml = "0.8"
 tracing = "0.1"
+ureq = { version = "3", features = ["json"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 block2 = "0.6"
@@ -41,7 +42,15 @@ objc2-user-notifications = { version = "0.3", default-features = false, features
 objc2-core-foundation = { version = "0.3", features = ["std", "CFBase", "CFString", "CFNumber", "CFPreferences", "CFPropertyList"] }
 
 [target.'cfg(windows)'.dependencies]
-windows = { version = "0.61", features = ["Win32_Foundation", "Win32_System_Registry"] }
+# SudoVDA's presence, for the Hosting page's check.
+pingpong-display = { path = "../pingpong-display" }
+windows = { version = "0.61", features = [
+    "Win32_Foundation",
+    "Win32_System_Registry",
+    "Win32_System_Threading",
+    "Win32_UI_Shell",
+    "Win32_UI_WindowsAndMessaging",
+] }
 
 [dev-dependencies]
 tiny-skia = "0.12"

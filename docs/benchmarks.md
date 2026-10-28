@@ -154,6 +154,35 @@ straight to the display again, with some frames a refresh late: 105–117 of
 streams with a recording running, through CleanShot X: 39 of 60 and 40 of
 120 shown before.
 
+### One app, with glass (macOS client)
+
+Measured 2026-10-28 with `mac-present` (frames handed over on time), on the
+MacBook's built-in 120 Hz display at 3600x2338, V-Sync on, 10 s runs.
+Before is Ping with Pong's window still an app of its own; after is the one
+app, in asides' glass. The stream's code (`ping-core`, `pingpong-decode`,
+`pingpong-proto`) and its dependencies' versions are the same in both, so
+this checks that nothing new reaches the stream: "glass window beside it"
+is Ping's main window open on a settings page next to the stream's.
+Figures are a run's steady seconds (seconds composited because something
+was over the stream for a moment are left out).
+
+| Case | Before: decode to glass | Before: shown | After: decode to glass | After: shown |
+|---|---|---|---|---|
+| Full screen, 60 fps | 5.8–6.6 ms | 99.2–99.8% | 5.7–7.8 ms | 100% |
+| Full screen, 120 fps | 6.0 or 13.3 ms | 99.7–100% | 7.2 or 13.6 ms | 99.8% |
+| Window, 120 fps | 26.2 ms (1 run) | 100% | 23.3–31.4 ms (5 runs) | 100% |
+| Window, 120 fps, glass window beside it | | | 25.7–28.6 ms (3 runs) | 99.8–100% |
+
+The synthetic frames come on a clock of their own, not the display's, so
+each run lands at a phase of its own against the refresh and keeps it: a
+run's figure is steady, and runs differ by up to one refresh (8.3 ms),
+before as after (full screen at 120 fps, a run sits at about 6–7 or
+13–14 ms). The glass window's blur is the WindowServer's, for that window
+alone; the stream's window stays opaque. `mac-present` does not load
+`pingpong-ui`; in the app, its change to GPUI's blending
+(`glass::blend_alpha_over`) acts once, as Metal makes a pipeline, and
+leaves the stream's renderer's pipelines as they are.
+
 ## Against Moonlight + Apollo
 
 Apollo streams with Sunshine's video path and adds the virtual display at

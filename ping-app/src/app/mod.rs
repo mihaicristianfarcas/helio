@@ -1,7 +1,13 @@
-//! The window: a sidebar (Hosts, Agents, the open sessions, the settings
-//! pages) beside the page it selects, and the sheets over them (pairing,
-//! adding a host, unpairing, alerts). The logic under it is the same the
-//! `ping` CLI drives.
+//! The window: a sidebar (Hosts, This computer, Agents, the open sessions,
+//! the settings pages) beside the page it selects, in asides' structure, and
+//! the sheets over them (pairing, adding a host, unpairing, alerts, the
+//! host's confirmations). Setup takes the whole window (`crate::setup`). The
+//! logic under it is the same the `ping` CLI drives; This computer's pages
+//! are the host's (`crate::host`).
+//!
+//! The window comes and goes (with hosting on, the app stays behind the
+//! host's icon); what outlives it is the app's: hosting and the update
+//! check.
 //!
 //! Sessions: your own desktop streams (until the stream ends, from its window
 //! or its hotkey) and agent sessions (until you end them). Neither outlives
@@ -13,22 +19,27 @@ mod desktop;
 mod sheets;
 mod sidebar;
 
+pub use sidebar::brand_mark;
+
 use std::path::PathBuf;
+use std::rc::Rc;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use crossbeam_channel::{Receiver, Sender};
 use futures::StreamExt;
 use gpui::{
-    div, prelude::*, px, AnyElement, App, Context, Entity, FocusHandle, FontWeight, Pixels, Point,
-    SharedString, Window,
+    div, prelude::*, px, AnyElement, App, Context, Entity, FocusHandle, FontWeight, Global, Pixels,
+    Point, SharedString, Window, WindowHandle,
 };
 use ping_core::session::{self, NativeMode, Session};
 use pingpong_ui::updates::UpdateApp;
 use pingpong_ui::{FieldEvent, TextField, Theme, Type};
-use pingpong_update::{Build, Channel, Checker, Install, Program};
+use pingpong_update::{Build, Checker, Install, Program};
 
 use crate::agents::AgentsState;
+use crate::host::switch::Hosting;
+use crate::host::HostPages;
 use crate::model::{Item, Model, Pairing};
 use crate::prefs::Prefs;
 use crate::settings::Tab;
@@ -50,6 +61,131 @@ pub enum Page {
     /// One of your desktop streams.
     Desktop(u64),
     Settings(Tab),
+    /// This computer while hosting is off: what hosting is, and its switch.
+    Hosting,
+    /// This computer's host: one of its pages (hosting on).
+    Host(crate::host::Page),
+    /// Setup, the whole window: the first time the app opens, or from
+    /// Settings.
+    Setup,
+}
+
+/// What opening the window is for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Show {
+    /// Just the window, where it was.
+    Window,
+    /// This computer's pairing requests.
+    Devices,
+    /// The update sheet.
+    Updates,
+}
+
+/// The app's window and what outlives it: hosting, the update check.
+struct Main {
+    window: Option<WindowHandle<PingApp>>,
+    hosting: Entity<Hosting>,
+    updates: Rc<Checker>,
+}
+
+impl Global for Main {}
+
+/// Keep what the window is made with; the window opens with [`open`].
+pub fn start(hosting: Entity<Hosting>, updates: Rc<Checker>, cx: &mut App) {
+    cx.set_global(Main {
+        window: None,
+        hosting,
+        updates,
+    });
+}
+
+/// Bring the window up (opening it if it is closed), at what it was asked
+/// for.
+pub fn open(show: Show, cx: &mut App) {
+    let existing = cx.global::<Main>().window;
+    let handle = match existing {
+        Some(handle) if handle.update(cx, |_, _, _| ()).is_ok() => handle,
+        _ => {
+            // Back from the menu bar only: a window of its own in the Dock.
+            pingpong_ui::desktop::show_in_dock();
+            let options = pingpong_ui::window_options(
+                "Ping",
+                "dev.pingpong.Ping",
+                940.0,
+                620.0,
+                (680.0, 440.0),
+                cx,
+            );
+            let (hosting, updates) = {
+                let m = cx.global::<Main>();
+                (m.hosting.clone(), m.updates.clone())
+            };
+            let opened = cx.open_window(options, |window, cx| {
+                cx.new(|cx| PingApp::new(hosting, updates, window, cx))
+            });
+            let handle = match opened {
+                Ok(handle) => handle,
+                Err(e) => {
+                    tracing::error!(error = %e, "the window did not open");
+                    return;
+                }
+            };
+            tracing::info!(?show, "window opened");
+            cx.global_mut::<Main>().window = Some(handle);
+            handle
+        }
+    };
+    let _ = handle.update(cx, |app, window, cx| {
+        match show {
+            Show::Window => {}
+            Show::Devices => app.set_page(Page::Host(crate::host::Page::Devices), cx),
+            Show::Updates => app.show_updates(false, cx),
+        }
+        pingpong_ui::set_window_visible(window, true);
+        window.activate_window();
+        cx.activate(true);
+    });
+}
+
+/// Whether the window is open and in front (a pairing request it shows
+/// needs no notification).
+pub fn window_in_front(cx: &mut App) -> bool {
+    cx.try_global::<Main>()
+        .and_then(|m| m.window)
+        .is_some_and(|w| {
+            w.update(cx, |_, window, _| window.is_window_active())
+                .unwrap_or(false)
+        })
+}
+
+/// The update check said something new: the window takes it in.
+pub fn update_news(cx: &mut App) {
+    if let Some(w) = cx.try_global::<Main>().and_then(|m| m.window) {
+        let _ = w.update(cx, |app, window, cx| app.poll(window, cx));
+    }
+}
+
+/// Started at login (`--background`): with hosting on, only the host's
+/// icon, in the menu bar (no Dock tile until the window opens); off, there
+/// is nothing to show and the app quits.
+pub fn stay_in_background(hosting: Entity<Hosting>, cx: &mut App) {
+    pingpong_ui::desktop::hide_from_dock();
+    // Hosting's first answer decides; later ones change nothing here.
+    let decided = std::rc::Rc::new(std::cell::Cell::new(false));
+    let decide = move |hosting: &Entity<Hosting>, cx: &mut App| {
+        let state = hosting.read(cx).state.clone();
+        if decided.get() || state == crate::host::switch::State::Unknown {
+            return;
+        }
+        decided.set(true);
+        if !state.enabled() && cx.windows().is_empty() {
+            tracing::info!("started in the background with hosting off: quitting");
+            cx.quit();
+        }
+    };
+    decide(&hosting, cx);
+    cx.observe(&hosting, move |hosting, cx| decide(&hosting, cx))
+        .detach();
 }
 
 /// Background work says there is news: the window takes it in.
@@ -104,8 +240,9 @@ pub struct PingApp {
     pub agents: AgentsState,
     /// Notifications about agent sessions not on screen.
     pub notifier: crate::notify::Notifier,
-    /// The update check, and what it said when last looked at.
-    pub updates: Checker,
+    /// The update check (the app's: it outlives the window), and what it
+    /// said when last looked at.
+    pub updates: Rc<Checker>,
     pub update_status: pingpong_update::Status,
     /// The sheet that says what the update check found.
     update_sheet: bool,
@@ -115,10 +252,25 @@ pub struct PingApp {
     pub nav_glide: pingpong_ui::Glide,
     /// Where the page shown is scrolled to (its bar).
     pub page_scroll: gpui::ScrollHandle,
+    /// Hosting on or off (the app's: it outlives the window).
+    pub hosting: Entity<Hosting>,
+    /// This computer's host's pages, while hosting is on.
+    pub host: Option<Entity<HostPages>>,
+    /// Setup's step and what was chosen in it.
+    pub setup: crate::setup::Setup,
+    /// The sidebar's rows' focus handles, by row, and what has the
+    /// keyboard as the window is drawn (its ring shows when a key moved it).
+    nav_focus: std::collections::HashMap<usize, FocusHandle>,
+    focused: Option<FocusHandle>,
 }
 
 impl PingApp {
-    pub fn new(window: &mut Window, cx: &mut Context<Self>) -> PingApp {
+    pub fn new(
+        hosting: Entity<Hosting>,
+        updates: Rc<Checker>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> PingApp {
         let (tx, mut rx) = futures::channel::mpsc::unbounded::<()>();
         let waker = Waker(tx);
         // News from the poll, pairing and agent threads.
@@ -158,31 +310,30 @@ impl PingApp {
         let (ended_tx, ended_rx) = crossbeam_channel::unbounded();
         let demo = Demo::from_env();
         let prefs = Prefs::load(&dir);
-        // A check asks GitHub nothing on its own: what it shows is made up
-        // (PING_UI_DEMO's `update`), or asked for by hand.
-        let channel = if std::env::var_os("PING_UI_DEMO").is_some() {
-            Channel::Off
-        } else {
-            prefs.update_channel()
-        };
-        let updates = {
-            let waker = waker.clone();
-            Checker::start(
-                Program::Ping,
-                Build::this(),
-                dir.clone(),
-                channel,
-                move || waker.wake(),
-            )
-        };
+        // Hosting turned on or off: This computer's pages come or go.
+        cx.observe_in(&hosting, window, |this, _, window, cx| {
+            this.follow_hosting(window, cx)
+        })
+        .detach();
+        // Back in front (from System Settings, a terminal, the host's own
+        // web UI): hosting and the host may have changed meanwhile.
+        cx.observe_window_activation(window, |this, window, cx| {
+            if window.is_window_active() {
+                this.hosting.update(cx, |h, cx| h.refresh(cx));
+                if let Some(host) = &this.host {
+                    host.read(cx).refresh();
+                }
+            }
+        })
+        .detach();
+        let setup = crate::setup::Setup::resume(&prefs);
         let agents = AgentsState::new(dir.clone(), window, cx);
         let focus = cx.focus_handle();
         window.focus(&focus, cx);
-        PingApp {
+        let mut app = PingApp {
             model,
             prefs,
             dir,
-            page: Page::Hosts,
             pairing: None,
             add_host: None,
             confirm_unpair: None,
@@ -204,7 +355,61 @@ impl PingApp {
             focus,
             nav_glide: pingpong_ui::Glide::new(cx),
             page_scroll: gpui::ScrollHandle::new(),
+            hosting,
+            host: None,
+            nav_focus: std::collections::HashMap::new(),
+            focused: None,
+            page: if setup.showing() {
+                Page::Setup
+            } else {
+                Page::Hosts
+            },
+            setup,
+        };
+        app.follow_hosting(window, cx);
+        app
+    }
+
+    /// Hosting changed: This computer's pages come (hosting on: the host's)
+    /// or go (off: the page with the switch), and the Hosts list leaves out
+    /// this computer's own host, once the host has said which it is.
+    fn follow_hosting(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let link = self.hosting.read(cx).link.clone();
+        match (link, &self.host) {
+            (Some(link), None) => {
+                let hosting = self.hosting.clone();
+                let host = cx.new(|cx| HostPages::new(link, hosting, window, cx));
+                cx.observe(&host, |this, host, cx| {
+                    // The host's own id, for the Hosts list to leave out.
+                    let own = host
+                        .read(cx)
+                        .snapshot()
+                        .status
+                        .as_ref()
+                        .map(|s| s.id.clone());
+                    if this.model.set_own(own) {
+                        this.model.rebuild();
+                    }
+                    cx.notify();
+                })
+                .detach();
+                if let Page::Host(p) = self.page {
+                    host.update(cx, |h, cx| h.go(p, cx));
+                }
+                self.host = Some(host);
+            }
+            (None, Some(_)) => {
+                // This computer's own host stays out of the list: it is
+                // never one to play from here, and it goes on announcing
+                // itself for a moment after hosting goes off.
+                self.host = None;
+                if matches!(self.page, Page::Host(_)) {
+                    self.page = Page::Hosting;
+                }
+            }
+            _ => {}
         }
+        cx.notify();
     }
 
     /// This display's native mode, looked up at most once a second.
@@ -230,7 +435,7 @@ impl PingApp {
         }
     }
 
-    fn poll(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    pub fn poll(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         while let Ok((id, reason)) = self.ended_rx.try_recv() {
             self.stream_ended(id, reason, window, cx);
         }
@@ -366,6 +571,16 @@ impl PingApp {
     // What clicks do
 
     pub fn set_page(&mut self, page: Page, cx: &mut Context<Self>) {
+        // This computer's host's pages, while there is a host; else the
+        // page with the switch.
+        let page = match (page, &self.host) {
+            (Page::Host(p), Some(host)) => {
+                host.update(cx, |h, cx| h.go(p, cx));
+                page
+            }
+            (Page::Host(_), None) => Page::Hosting,
+            (page, _) => page,
+        };
         if self.page != page {
             tracing::debug!(?page, "page");
             self.page_scroll.set_offset(gpui::point(px(0.0), px(0.0)));
@@ -687,7 +902,13 @@ impl PingApp {
 
     fn dismiss(&mut self, cx: &mut Context<Self>) {
         // The topmost thing open closes: a menu, a sheet, pairing, a page.
+        let host_sheet = matches!(self.page, Page::Host(_))
+            && self
+                .host
+                .clone()
+                .is_some_and(|h| h.update(cx, |h, cx| h.dismiss(cx)));
         let closed = self.menu.take().is_some()
+            || host_sheet
             || self.add_host.take().is_some()
             || self.confirm_unpair.take().is_some()
             || self.alert.take().is_some()
@@ -700,6 +921,9 @@ impl PingApp {
                 Page::Settings(_) | Page::Agents | Page::Desktop(_)
             ) {
                 self.page = Page::Hosts;
+            } else if self.page == Page::Setup {
+                // Escape in setup is Skip: the defaults.
+                self.finish_setup(cx);
             }
         }
         cx.notify();
@@ -730,21 +954,43 @@ impl PingApp {
 impl Render for PingApp {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let t = Theme::of(window);
+        self.focused = window.focused(cx);
+        let mut areas = vec![self.page_scroll.clone()];
         let page: AnyElement = match self.page {
             Page::Hosts => self.render_hosts(t, window, cx),
             Page::Agents => self.render_agents(t, window, cx),
             Page::Chat(id) => self.render_chat(id, t, window, cx),
             Page::Desktop(id) => self.render_desktop(id, t, cx),
             Page::Settings(tab) => self.render_settings(tab, t, window, cx),
+            Page::Hosting => self.render_hosting_page(t, cx),
+            Page::Host(_) => match self.host.clone() {
+                Some(host) => host.update(cx, |h, cx| {
+                    areas.extend(h.scroll_handles());
+                    h.render_page(t, window, cx)
+                }),
+                None => self.render_hosting_page(t, cx),
+            },
+            Page::Setup => self.render_setup(t, window, cx),
         };
-        let sheet = self.sheets(t, window, cx);
+        let mut sheet = self.sheets(t, window, cx);
+        if sheet.is_none() && matches!(self.page, Page::Host(_)) {
+            sheet = self
+                .host
+                .clone()
+                .and_then(|h| h.update(cx, |h, cx| h.render_sheet(t, window, cx)));
+        }
         let menu = self.host_menu(t, cx);
-        pingpong_ui::scroll_areas([self.page_scroll.clone()]);
+        pingpong_ui::scroll_areas(areas);
         // Each page fades in as it is picked, as the sidebar's pill slides to
-        // it (asides).
-        let shown = gpui::ElementId::Name(format!("page-{:?}", self.page).into());
+        // it (asides); setup's steps too.
+        let shown = gpui::ElementId::Name(match self.page {
+            Page::Host(p) => format!("page-host-{p:?}-{:?}", self.host_conn(cx)).into(),
+            Page::Setup => format!("page-setup-{:?}", self.setup.step).into(),
+            page => format!("page-{page:?}").into(),
+        });
         let page =
             pingpong_ui::fade_in(div().size_full().flex().flex_col().child(page), shown, 0.0);
+        let setup = self.page == Page::Setup;
         self.on_actions(div().key_context("PingApp").track_focus(&self.focus), cx)
             .size_full()
             .relative()
@@ -761,7 +1007,9 @@ impl Render for PingApp {
                     }
                 }),
             )
-            .child(self.sidebar(t, cx))
+            // Setup is the whole window, without the sidebar, near solid to
+            // read through (asides).
+            .when(!setup, |d| d.child(self.sidebar(t, cx)))
             .child(
                 div()
                     .flex_1()
@@ -769,11 +1017,21 @@ impl Render for PingApp {
                     .h_full()
                     .flex()
                     .flex_col()
-                    .bg(t.background)
+                    .bg(if setup { t.reading } else { t.background })
                     .child(page),
             )
             .children(menu)
             .children(sheet)
+    }
+}
+
+impl PingApp {
+    /// The host's connection, while there is a host: its pages change with
+    /// it (signed out, not running, ready).
+    fn host_conn(&self, cx: &App) -> Option<crate::host::worker::Conn> {
+        self.host
+            .as_ref()
+            .map(|h| h.read(cx).snapshot().conn.clone())
     }
 }
 

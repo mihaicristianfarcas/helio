@@ -37,6 +37,9 @@ pub(super) struct Demo {
     pub(super) at: Option<Instant>,
     snapshot: Option<PathBuf>,
     quit: bool,
+    /// Close the window when the rest is done, as its close button does
+    /// (with hosting on, the app stays behind the host's icon).
+    close: bool,
     /// The snapshot is of a stream's page, taken while it runs.
     during_stream: bool,
 }
@@ -53,6 +56,8 @@ impl Demo {
                     demo.stop_after = secs.parse().ok().map(Duration::from_secs_f64);
                 } else if part == "quit" {
                     demo.quit = true;
+                } else if part == "close" {
+                    demo.close = true;
                 } else {
                     demo.actions.push(part.to_string());
                 }
@@ -212,6 +217,38 @@ impl PingApp {
                 for line in pingpong_ui::desktop::menu_bar() {
                     tracing::info!(target: "menu_bar", "{line}");
                 }
+                for line in crate::host::tray::HostIcon::menu_lines(cx) {
+                    tracing::info!(target: "tray_menu", "{line}");
+                }
+            } else if let Some(name) = action.strip_prefix("host=") {
+                // This computer's pages, once there is a host to show.
+                match crate::host::Page::parse(name) {
+                    Some(p) if self.host.is_some() => self.set_page(Page::Host(p), cx),
+                    Some(_) => self.demo.actions.push(action),
+                    None => tracing::warn!(name, "no such page of This computer"),
+                }
+            } else if action == "hosting-page" {
+                self.set_page(Page::Hosting, cx);
+            } else if let Some(to) = action.strip_prefix("switch=") {
+                // Hosting turned on or off, as the switch does: for real
+                // (PING_HOST_PROGRAM picks a test host).
+                let on = to == "on";
+                self.hosting.update(cx, |h, cx| h.turn(on, cx));
+            } else if let Some(name) = action.strip_prefix("permissions=") {
+                match &self.host {
+                    Some(host) => host.update(cx, |h, cx| h.demo_permissions(name, cx)),
+                    None => self.demo.actions.push(action),
+                }
+            } else if let Some((user, password)) = action
+                .strip_prefix("signin-as=")
+                .and_then(|c| c.split_once(':'))
+            {
+                match &self.host {
+                    Some(host) => host.update(cx, |h, cx| {
+                        h.demo_sign_in(user.to_string(), password.to_string(), cx)
+                    }),
+                    None => self.demo.actions.push(action),
+                }
             } else if let Some(address) = action.strip_prefix("pair=") {
                 let web = crate::model::web_url_for(address);
                 self.pair_with(address.to_string(), address.to_string(), web, false, cx);
@@ -280,6 +317,11 @@ impl PingApp {
         if !self.demo.actions.is_empty() {
             return;
         }
+        // A last `wait=` holds the snapshot and the quit too (they are not
+        // steps): `switch=on,wait=20,quit` sees the switch through.
+        if self.demo.at.is_some_and(|at| at > Instant::now()) {
+            return;
+        }
         match &self.demo.snapshot {
             Some(path) => {
                 // Let the page settle for a moment first.
@@ -296,6 +338,8 @@ impl PingApp {
                     self.demo.at = None;
                     if self.demo.quit {
                         cx.quit();
+                    } else if self.demo.close {
+                        window.remove_window();
                     }
                 }
             }
@@ -303,6 +347,8 @@ impl PingApp {
                 self.demo.at = None;
                 if self.demo.quit {
                     cx.quit();
+                } else if self.demo.close {
+                    window.remove_window();
                 }
             }
         }

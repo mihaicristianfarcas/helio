@@ -1,8 +1,16 @@
-//! The sidebar: Hosts, Agents, the open sessions, the settings pages.
+//! The sidebar, as asides' (`window.rs`): Hosts; This computer (one row
+//! while hosting is off, the host's pages while it is on); Agents (a new
+//! session) and the open sessions; the settings pages; and a foot that says
+//! the version, or offers an update. The pages are one stop for Tab, the arrows going up
+//! and down them, each shown as the keyboard comes to it; the glass pill
+//! slides to the page shown.
 
-use gpui::{div, prelude::*, px, AnyElement, Context, ElementId, FontWeight};
+use gpui::{
+    div, prelude::*, px, AnyElement, Context, ElementId, FocusHandle, FontWeight, KeyDownEvent,
+};
 use pingpong_ui::{dot, icon, spinner, IconName, Ink, Radius, Theme, Type};
 
+use crate::host::Page as HostPage;
 use crate::settings::Tab;
 
 use super::{Page, PingApp};
@@ -23,32 +31,245 @@ pub fn brand_mark(size: f32) -> impl IntoElement {
         }])
 }
 
+/// What a sidebar row shows: the page it goes to, its id, name and icon.
+struct Nav {
+    page: Page,
+    id: &'static str,
+    label: &'static str,
+    glyph: IconName,
+}
+
+const fn nav(page: Page, id: &'static str, label: &'static str, glyph: IconName) -> Nav {
+    Nav {
+        page,
+        id,
+        label,
+        glyph,
+    }
+}
+
+/// The settings pages, in order.
+const SETTINGS: [Nav; 7] = [
+    nav(
+        Page::Settings(Tab::General),
+        "nav-general",
+        "General",
+        IconName::Settings,
+    ),
+    nav(
+        Page::Settings(Tab::Video),
+        "nav-video",
+        "Video",
+        IconName::Display,
+    ),
+    nav(
+        Page::Settings(Tab::Audio),
+        "nav-audio",
+        "Audio",
+        IconName::Speaker,
+    ),
+    nav(
+        Page::Settings(Tab::Input),
+        "nav-input",
+        "Input",
+        IconName::Keyboard,
+    ),
+    nav(
+        Page::Settings(Tab::Agents),
+        "nav-agent-setup",
+        "Agent setup",
+        IconName::Sparkle,
+    ),
+    nav(
+        Page::Settings(Tab::Hosting),
+        "nav-hosting",
+        "Hosting",
+        IconName::Server,
+    ),
+    nav(
+        Page::Settings(Tab::Updates),
+        "nav-updates",
+        "Updates",
+        IconName::Download,
+    ),
+];
+
+/// This computer's pages while hosting is on; its one page while it is off.
+const HOST_PAGES: [Nav; 4] = [
+    nav(
+        Page::Host(HostPage::Overview),
+        "nav-host-overview",
+        "Overview",
+        IconName::Activity,
+    ),
+    nav(
+        Page::Host(HostPage::Devices),
+        "nav-host-devices",
+        "Devices",
+        IconName::Devices,
+    ),
+    nav(
+        Page::Host(HostPage::General),
+        "nav-host-settings",
+        "Settings",
+        IconName::Settings,
+    ),
+    nav(
+        Page::Host(HostPage::Logs),
+        "nav-host-logs",
+        "Logs",
+        IconName::List,
+    ),
+];
+const HOSTING_OFF: Nav = nav(
+    Page::Hosting,
+    "nav-hosting-off",
+    "Overview",
+    IconName::Activity,
+);
+
+/// The row a page is shown under: the host's four settings pages are one.
+fn row_of(page: Page) -> Page {
+    match page {
+        Page::Host(HostPage::Video | HostPage::Network | HostPage::Agents) => {
+            Page::Host(HostPage::General)
+        }
+        page => page,
+    }
+}
+
 impl PingApp {
+    /// The pages the sidebar lists now, in order (sessions after Agents).
+    fn nav_pages(&self) -> Vec<Page> {
+        let mut pages = vec![Page::Hosts];
+        if self.host.is_some() {
+            pages.extend(HOST_PAGES.iter().map(|n| n.page));
+        } else {
+            pages.push(HOSTING_OFF.page);
+        }
+        pages.push(Page::Agents);
+        pages.extend(self.session_pages());
+        pages.extend(SETTINGS.iter().map(|n| n.page));
+        pages
+    }
+
+    /// A sidebar row's focus handle (one stop for Tab: the page shown's).
+    fn nav_focus(&mut self, page: Page, cx: &mut Context<Self>) -> (FocusHandle, bool) {
+        let handle = self
+            .nav_focus
+            .entry(nav_index(page))
+            .or_insert_with(|| cx.focus_handle())
+            .clone();
+        let ring = pingpong_ui::keyboard_focus() && Some(&handle) == self.focused.as_ref();
+        (handle, ring)
+    }
+
     pub(super) fn sidebar(&mut self, t: Theme, cx: &mut Context<Self>) -> impl IntoElement {
         let page = self.page;
+        let shown = row_of(page);
         let paired = self.model.items.iter().filter(|i| i.is_paired()).count();
         let glide = self.nav_glide.clone();
-        let nav = |id: &'static str,
-                   label: &'static str,
-                   name: IconName,
-                   target: Page,
-                   trailing: Option<AnyElement>,
-                   cx: &mut Context<Self>| {
-            let on = page == target;
-            pingpong_ui::nav_row(id, label, name, on, nav_index(target), &glide, false, t)
-                .when(!on, |d| {
-                    d.on_click(cx.listener(move |this, _, _, cx| this.set_page(target, cx)))
-                })
-                .children(trailing)
-        };
+        let order = self.nav_pages();
+        let focus: std::collections::HashMap<usize, (FocusHandle, bool)> = order
+            .iter()
+            .map(|p| (nav_index(*p), self.nav_focus(*p, cx)))
+            .collect();
+        // The arrows go up and down the pages, each shown as they come to it.
+        let handles: Vec<(Page, FocusHandle)> = order
+            .iter()
+            .map(|p| (*p, focus[&nav_index(*p)].0.clone()))
+            .collect();
+        let host = self.host.clone();
         let agent_badge = if self.agents.is_running() {
-            Some(pingpong_ui::live_dot(Ink::FRESH).into_any_element())
+            Some(pingpong_ui::live_dot(t.fresh).into_any_element())
         } else if self.agents.awaiting_answer() {
             Some(dot(t.attention, 7.0).into_any_element())
         } else {
             None
         };
+        let sessions = self.session_rows(t, cx);
+        let arrows = cx.listener(move |this, e: &KeyDownEvent, window, cx| {
+            let at = handles.iter().position(|(_, h)| h.is_focused(window));
+            let Some(to) = pingpong_ui::arrow_step(e, at, handles.len(), false) else {
+                return;
+            };
+            cx.stop_propagation();
+            pingpong_ui::keyboard_moved();
+            window.focus(&handles[to].1, cx);
+            this.set_page(handles[to].0, cx);
+        });
+        let row = |n: &Nav, trailing: Option<AnyElement>, cx: &mut Context<Self>| {
+            let target = n.page;
+            let on = shown == target;
+            let (handle, ring) = focus
+                .get(&nav_index(target))
+                .cloned()
+                .unwrap_or_else(|| (cx.focus_handle(), false));
+            pingpong_ui::nav_row(
+                n.id,
+                n.label,
+                n.glyph,
+                on,
+                nav_index(target),
+                &glide,
+                ring,
+                t,
+            )
+            .track_focus(&handle.tab_stop(on))
+            .when(!on, |d| {
+                d.on_click(cx.listener(move |this, _, _, cx| this.set_page(target, cx)))
+            })
+            .children(trailing)
+            .into_any_element()
+        };
+        let mut list = pingpong_ui::nav_list(&glide, Some(nav_index(shown)), t).on_key_down(arrows);
         let count = (paired > 0).then(|| pingpong_ui::nav_count(paired, t).into_any_element());
+        list = list.child(row(
+            &nav(Page::Hosts, "nav-hosts", "Hosts", IconName::Devices),
+            count,
+            cx,
+        ));
+        list = list.child(pingpong_ui::sidebar_header("This computer", t));
+        if let Some(host) = host {
+            let snap = host.read(cx).snapshot().clone();
+            let streaming = snap.status.as_ref().is_some_and(|s| s.session.is_some());
+            let pending = snap.status.as_ref().map_or(0, |s| s.pending.len());
+            for n in &HOST_PAGES {
+                let badge = match n.page {
+                    Page::Host(HostPage::Overview) if streaming => {
+                        Some(pingpong_ui::live_dot(t.fresh).into_any_element())
+                    }
+                    Page::Host(HostPage::Devices) if pending > 0 => Some(
+                        div()
+                            .px(px(6.0))
+                            .rounded(px(8.0))
+                            .bg(t.accent)
+                            .text_size(px(Type::META))
+                            .font_weight(FontWeight::SEMIBOLD)
+                            .text_color(t.on_accent)
+                            .child(pending.to_string())
+                            .into_any_element(),
+                    ),
+                    _ => None,
+                };
+                list = list.child(row(n, badge, cx));
+            }
+        } else {
+            list = list.child(row(&HOSTING_OFF, None, cx));
+        }
+        // A group of its own, as This computer's: a row under This computer's
+        // pages read as the host's.
+        list = list.child(pingpong_ui::sidebar_header("Agents", t));
+        list = list.child(row(
+            &nav(Page::Agents, "nav-agents", "New Session", IconName::Agent),
+            agent_badge,
+            cx,
+        ));
+        list = list.children(sessions);
+        list = list.child(pingpong_ui::sidebar_header("Settings", t));
+        for n in &SETTINGS {
+            list = list.child(row(n, None, cx));
+        }
         let footer: AnyElement = if self.model.searching {
             div()
                 .flex()
@@ -58,76 +279,17 @@ impl PingApp {
                 .child("Looking for hosts…")
                 .into_any_element()
         } else {
-            div()
-                .flex()
-                .items_center()
-                .gap(px(7.0))
-                .child(brand_mark(8.0))
-                .child(format!("Ping {}", env!("CARGO_PKG_VERSION")))
-                .into_any_element()
+            format!("Ping {}", env!("CARGO_PKG_VERSION")).into_any_element()
         };
-        let sessions = self.session_rows(t, cx);
         pingpong_ui::sidebar(t)
             .child(
-                pingpong_ui::nav_list(&glide, Some(nav_index(page)), t)
-                    .child(nav(
-                        "nav-hosts",
-                        "Hosts",
-                        IconName::Devices,
-                        Page::Hosts,
-                        count,
-                        cx,
-                    ))
-                    .child(nav(
-                        "nav-agents",
-                        "Agents",
-                        IconName::Agent,
-                        Page::Agents,
-                        agent_badge,
-                        cx,
-                    ))
-                    .children(sessions)
-                    .child(pingpong_ui::sidebar_header("Settings", t))
-                    .child(nav(
-                        "nav-general",
-                        "General",
-                        IconName::Settings,
-                        Page::Settings(Tab::General),
-                        None,
-                        cx,
-                    ))
-                    .child(nav(
-                        "nav-video",
-                        "Video",
-                        IconName::Display,
-                        Page::Settings(Tab::Video),
-                        None,
-                        cx,
-                    ))
-                    .child(nav(
-                        "nav-audio",
-                        "Audio",
-                        IconName::Speaker,
-                        Page::Settings(Tab::Audio),
-                        None,
-                        cx,
-                    ))
-                    .child(nav(
-                        "nav-input",
-                        "Input",
-                        IconName::Keyboard,
-                        Page::Settings(Tab::Input),
-                        None,
-                        cx,
-                    ))
-                    .child(nav(
-                        "nav-agent-setup",
-                        "Agent setup",
-                        IconName::Sparkle,
-                        Page::Settings(Tab::Agents),
-                        None,
-                        cx,
-                    )),
+                // Scrolls when the window is short.
+                div()
+                    .id("sidebar-pages")
+                    .flex_1()
+                    .min_h_0()
+                    .overflow_y_scroll()
+                    .child(list),
             )
             .children(
                 pingpong_ui::updates::notice(&super::UPDATE_APP, &self.update_status, t).map(
@@ -137,6 +299,17 @@ impl PingApp {
                 ),
             )
             .child(pingpong_ui::sidebar_foot(t).child(footer))
+    }
+
+    /// The open sessions' pages: agents' and your desktops.
+    fn session_pages(&self) -> Vec<Page> {
+        let chats = self.agents.chats.iter().map(|c| Page::Chat(c.id));
+        let desktops = self
+            .streams
+            .iter()
+            .filter(|s| s.chat.is_none())
+            .map(|s| Page::Desktop(s.id));
+        chats.chain(desktops).collect()
     }
 
     /// The sidebar's open sessions: agents' and your desktops.
@@ -291,12 +464,15 @@ impl PingApp {
 }
 
 /// Where `page`'s row is among the sidebar's, for the pill that slides
-/// between them.
+/// between them (and its focus handle).
 fn nav_index(page: Page) -> usize {
     match page {
         Page::Hosts => 0,
         Page::Agents => 1,
-        Page::Settings(tab) => 2 + tab as usize,
+        Page::Hosting => 2,
+        Page::Setup => 3,
+        Page::Host(p) => 10 + p as usize,
+        Page::Settings(tab) => 30 + tab as usize,
         // Sessions, after the fixed rows; one id space each.
         Page::Chat(id) => 100 + 2 * id as usize,
         Page::Desktop(id) => 101 + 2 * id as usize,

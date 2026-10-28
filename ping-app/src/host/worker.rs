@@ -12,7 +12,7 @@ use crossbeam_channel::{Receiver, RecvTimeoutError, Sender};
 use pingpong_proto::permission::Permissions;
 use serde_json::{json, Value};
 
-use crate::api::{Api, Client, Failure, HostState, LogEntry, Status};
+use crate::host::api::{Api, Client, Failure, HostState, LogEntry, Status};
 
 #[derive(Debug, Clone)]
 pub enum Cmd {
@@ -90,7 +90,7 @@ pub fn spawn(wake: impl Fn() + Send + 'static) -> (Sender<Cmd>, Receiver<Msg>) {
     let (cmd_tx, cmd_rx) = crossbeam_channel::unbounded::<Cmd>();
     let (msg_tx, msg_rx) = crossbeam_channel::unbounded::<Msg>();
     std::thread::Builder::new()
-        .name("pong-app-worker".into())
+        .name("host-api".into())
         .spawn(move || run(cmd_rx, msg_tx, wake))
         .expect("spawning the worker");
     (cmd_tx, msg_rx)

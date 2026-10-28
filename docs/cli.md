@@ -135,12 +135,11 @@ run started by Ping.
   [ai-agents.md](ai-agents.md#3-or-use-your-hosts-from-another-agent-mcp)).
 - On Linux, `ping-app --ping-stream` is the stream's own process, started by
   the app.
-- `Pong Control --background` (`pong-app --background`) starts Pong's window
-  app as its icon only, without the window: what starting at login does.
-  Where there is no tray (Linux) the window opens all the same.
-- Starting either app while it runs shows the copy that runs, and adds none
-  (one copy per data folder: a `PING_DATA_DIR` or `PONG_DATA_DIR` elsewhere
-  is another app).
+- `Ping --background` (`ping-app --background`) starts the app as its icon
+  only, without the window, when hosting is on, and quits when it is off:
+  what Open at login does.
+- Starting the app while it runs shows the copy that runs, and adds none
+  (one copy per data folder: a `PING_DATA_DIR` elsewhere is another app).
 
 ## Environment variables
 
@@ -150,7 +149,7 @@ For everyone:
 |---|---|---|
 | `RUST_LOG` | all | Log filter, e.g. `info,ping_core::stats=debug` |
 | `PING_DATA_DIR` | Ping, `ping`, `ping-agent` | Ping's data folder |
-| `PONG_DATA_DIR` | Pong, Pong's window | Pong's data folder. On a Mac, `pong enable` hands it on to the host it starts |
+| `PONG_DATA_DIR` | Pong, Ping's This computer | Pong's data folder. On a Mac, `pong enable` hands it on to the host it starts |
 | `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `OPENROUTER_API_KEY`, `PING_AGENT_API_KEY` (a custom endpoint) | agents | API keys; win over saved keys |
 | `ANTHROPIC_BASE_URL`, `OPENAI_BASE_URL` | agents | Point the API loops at a gateway or proxy |
 | `CLOUDFLARE_AUTH_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` | agents | The Workers AI token and account clef's screen checks use; win over Agent setup's |

@@ -26,7 +26,6 @@ interactive-run.log
 !pingpong-decode/tests/fixtures/*.obu
 # ...and so are the apps' icons (drawn by ping-app/examples/make-icon.rs).
 !ping-app/assets/*.png
-!pong-app/assets/*.png
 # ...and the documentation's screenshots.
 !docs/images/*.png
 

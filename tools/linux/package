@@ -5,7 +5,7 @@
 #
 #   tools/linux/package
 #     -> target/dist/Ping-VERSION-linux-ARCH.tar.gz   (ping-app)
-#        target/dist/Pong-VERSION-linux-ARCH.tar.gz   (pong, pong-app, pong.service)
+#        target/dist/Pong-VERSION-linux-ARCH.tar.gz   (pong, pong.service)
 #
 # Each archive is a folder of the same name with the programs, their launcher
 # entries and icons, and install.sh (tools/linux/install-release). ARCH is
@@ -23,7 +23,7 @@ DIST="$REPO/target/dist"
 
 export PINGPONG_RELEASE=1
 cd "$REPO"
-cargo build --release -p ping-app -p pong-app
+cargo build --release -p ping-app
 # The host on its own: it and the GPUI apps ask one dependency for different
 # async runtimes (docs/development.md).
 cargo build --release -p pong
@@ -54,7 +54,4 @@ archive Ping \
     "$REPO/ping-app/assets/icon-256.png:dev.pingpong.Ping.png"
 archive Pong \
     "$TARGET/release/pong" \
-    "$TARGET/release/pong-app" \
-    "$REPO/tools/linux/pong.service" \
-    "$REPO/tools/linux/dev.pingpong.PongApp.desktop" \
-    "$REPO/pong-app/assets/icon-256.png:dev.pingpong.PongApp.png"
+    "$REPO/tools/linux/pong.service"
