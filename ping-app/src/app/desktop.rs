@@ -3,7 +3,7 @@
 use gpui::{div, prelude::*, px, AnyElement, Context};
 use pingpong_ui::{button, IconName, Theme};
 
-use super::{info, page_body, toolbar, PingApp};
+use super::{info, page_body, PingApp};
 
 /// Where a stream's window is, and how to get between it and Ping's.
 pub(super) fn where_text(fullscreen: bool) -> String {
@@ -36,27 +36,28 @@ impl PingApp {
             format!("{} h {} min", secs / 3600, secs / 60 % 60)
         };
         let host = s.host.clone();
+        let (bar, beside) = pingpong_ui::page_actions(vec![
+            button("desk-show", "Show Window", t)
+                .icon(IconName::Display)
+                .on_click(cx.listener(move |this, _, _, _| {
+                    if let Some(s) = this.streams.iter().find(|s| s.id == id) {
+                        s.session.show();
+                    }
+                }))
+                .into_any_element(),
+            button("desk-end", "End Session", t)
+                .danger()
+                .on_click(cx.listener(move |this, _, window, cx| {
+                    tracing::info!(id, "the user ends the desktop session");
+                    this.stream_ended(id, None, window, cx);
+                }))
+                .into_any_element(),
+        ]);
         div()
             .size_full()
             .flex()
             .flex_col()
-            .child(toolbar([
-                button("desk-show", "Show Window", t)
-                    .icon(IconName::Display)
-                    .on_click(cx.listener(move |this, _, _, _| {
-                        if let Some(s) = this.streams.iter().find(|s| s.id == id) {
-                            s.session.show();
-                        }
-                    }))
-                    .into_any_element(),
-                button("desk-end", "End Session", t)
-                    .danger()
-                    .on_click(cx.listener(move |this, _, window, cx| {
-                        tracing::info!(id, "the user ends the desktop session");
-                        this.stream_ended(id, None, window, cx);
-                    }))
-                    .into_any_element(),
-            ]))
+            .child(bar)
             .child(page_body(
                 "desktop-page",
                 &self.page_scroll,
@@ -69,7 +70,7 @@ impl PingApp {
                     .child(pingpong_ui::page_header(
                         host.clone(),
                         Some(format!("Your desktop session, for {since}.").into()),
-                        None,
+                        beside,
                         t,
                     ))
                     .child(pingpong_ui::section("", t).child(pingpong_ui::rows(

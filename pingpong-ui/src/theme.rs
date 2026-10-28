@@ -81,15 +81,27 @@ impl Type {
 pub struct Metrics;
 
 impl Metrics {
-    /// The strip along the top of a column: the traffic lights over the
-    /// sidebar, a page's actions.
-    pub const TOOLBAR: f32 = 44.0;
+    /// The strip along the top of a column, the window's title bar: the
+    /// traffic lights over the sidebar and a page's actions (a Mac, and
+    /// Linux under the system's title bar); on Windows the caption buttons'
+    /// height, a page's actions being beside its title there
+    /// (`page_actions`). Where nothing is on it, it moves the window.
+    pub const TOOLBAR: f32 = if cfg!(windows) { 32.0 } else { 44.0 };
     pub const SIDEBAR: f32 = 216.0;
     pub const NAV_ROW: f32 = 28.0;
     pub const SETTINGS_ROW: f32 = 50.0;
     pub const CONTROL: f32 = 26.0;
     /// Room for the traffic lights when the title bar is the app's own.
     pub const TRAFFIC_LIGHTS: f32 = if cfg!(target_os = "macos") { 72.0 } else { 0.0 };
+    /// A caption button's width, as Windows 11 draws them (46 × 32).
+    pub const CAPTION_BUTTON: f32 = 46.0;
+    /// Room for the caption buttons at the top right when the title bar is
+    /// the app's own (Windows).
+    pub const CAPTION_BUTTONS: f32 = if cfg!(windows) {
+        3.0 * Self::CAPTION_BUTTON
+    } else {
+        0.0
+    };
     /// A page's column.
     pub const FORM: f32 = 640.0;
 }

@@ -11,7 +11,7 @@ use pingpong_ui::{
     Theme, Type,
 };
 
-use crate::app::{page_body, toolbar, Page, PingApp};
+use crate::app::{page_body, Page, PingApp};
 use crate::model::Item;
 use crate::settings::{mbps, Tab};
 
@@ -25,7 +25,7 @@ impl PingApp {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        let bar = toolbar([
+        let (bar, beside) = pingpong_ui::page_actions(vec![
             icon_button(
                 "refresh",
                 IconName::Refresh,
@@ -49,7 +49,7 @@ impl PingApp {
                 .flex()
                 .flex_col()
                 .child(bar)
-                .child(self.empty(t, cx))
+                .child(self.empty(beside, t, cx))
                 .into_any_element();
         }
         let paired = self.model.items.iter().filter(|i| i.is_paired()).count();
@@ -106,7 +106,7 @@ impl PingApp {
                     .child(pingpong_ui::page_header(
                         "Hosts",
                         Some(parts.join(" · ").into()),
-                        None,
+                        beside,
                         t,
                     ))
                     .child(div().flex().flex_wrap().gap(px(14.0)).children(cards))
@@ -301,8 +301,14 @@ impl PingApp {
     }
 
     /// No host yet: the page as it is with hosts, its rows saying how to
-    /// get one.
-    fn empty(&mut self, t: Theme, cx: &mut Context<Self>) -> impl IntoElement {
+    /// get one. `beside`: the page's actions, where they go beside its
+    /// title (`page_actions`).
+    fn empty(
+        &mut self,
+        beside: Option<AnyElement>,
+        t: Theme,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
         let searching = self.model.searching;
         let look: AnyElement = if searching {
             div()
@@ -338,7 +344,7 @@ impl PingApp {
                         }
                         .into(),
                     ),
-                    None,
+                    beside,
                     t,
                 ))
                 .child(

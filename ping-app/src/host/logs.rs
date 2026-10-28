@@ -59,17 +59,18 @@ impl HostPages {
             })
             .collect();
         let empty = lines.is_empty();
+        let (bar, beside) = pingpong_ui::page_actions(vec![button("copy-logs", "Copy", t)
+            .icon(IconName::Copy)
+            .disabled(empty)
+            .on_click(move |_, _, cx| {
+                cx.write_to_clipboard(ClipboardItem::new_string(copy.clone()))
+            })
+            .into_any_element()]);
         div()
             .size_full()
             .flex()
             .flex_col()
-            .child(pingpong_ui::toolbar_row([button("copy-logs", "Copy", t)
-                .icon(IconName::Copy)
-                .disabled(empty)
-                .on_click(move |_, _, cx| {
-                    cx.write_to_clipboard(ClipboardItem::new_string(copy.clone()))
-                })
-                .into_any_element()]))
+            .child(bar)
             .child(
                 div()
                     .flex_none()
@@ -78,7 +79,7 @@ impl HostPages {
                     .child(pingpong_ui::page_header(
                         "Logs",
                         Some("The last 400 lines of pong.log.".into()),
-                        None,
+                        beside,
                         t,
                     )),
             )

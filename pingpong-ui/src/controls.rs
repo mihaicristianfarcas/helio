@@ -1701,15 +1701,37 @@ impl RenderOnce for Stepper {
     }
 }
 
-/// A page's own strip along the title bar: its actions at the right.
+/// A page's actions, where this system has them: in its strip along the
+/// title bar ([`toolbar_row`]; a Mac, Linux), or beside its title on
+/// Windows, where the caption buttons end that strip and actions next to
+/// them crowd it. The strip, and the actions for [`page_header`]'s
+/// `trailing`, if they go there.
+pub fn page_actions(actions: Vec<AnyElement>) -> (Div, Option<AnyElement>) {
+    if cfg!(windows) && !actions.is_empty() {
+        let beside = div()
+            .flex_none()
+            .flex()
+            .items_center()
+            .gap(px(6.0))
+            .children(actions)
+            .into_any_element();
+        (toolbar_row([]), Some(beside))
+    } else {
+        (toolbar_row(actions), None)
+    }
+}
+
+/// A page's own strip along the title bar: its actions at the right (clear
+/// of the caption buttons, on Windows), and the rest of it moves the
+/// window.
 pub fn toolbar_row(trailing: impl IntoIterator<Item = AnyElement>) -> Div {
     div()
         .flex_none()
         .h(px(Metrics::TOOLBAR))
-        .px(px(14.0))
+        .pr(px(14.0 + Metrics::CAPTION_BUTTONS))
         .flex()
         .items_center()
-        .justify_end()
         .gap(px(6.0))
+        .child(crate::chrome::drag_area().flex_1().h_full())
         .children(trailing)
 }

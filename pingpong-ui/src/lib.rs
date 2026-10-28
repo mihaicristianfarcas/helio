@@ -28,7 +28,10 @@ use gpui::{
     WindowOptions,
 };
 
-pub use chrome::{nav_count, nav_list, nav_row, page, sidebar, sidebar_foot, sidebar_header};
+pub use chrome::{
+    caption_buttons, drag_area, nav_count, nav_list, nav_row, page, sidebar, sidebar_foot,
+    sidebar_header,
+};
 pub use controls::*;
 pub use focus::{
     arrow_step, clicked, focus_handle, focus_ring, keep_focus, keyboard_focus, keyboard_moved,
@@ -112,8 +115,11 @@ pub fn mono_font() -> SharedString {
 }
 
 /// A main window: glass where the system blurs behind windows
-/// (`glass::window_background`); on a Mac the toolbar shares the title bar
-/// (traffic lights over the sidebar); elsewhere the system's own title bar.
+/// (`glass::window_background`, then `glass::dress` once it is open). The
+/// title bar is the window's own strip along the top, over the glass: on a
+/// Mac with the traffic lights over the sidebar, on Windows with caption
+/// buttons the app draws (`chrome::caption_buttons`), as the system's dark
+/// title bar would sit opaque above the glass. Linux keeps the system's.
 pub fn window_options(
     title: &str,
     app_id: &str,
@@ -142,7 +148,7 @@ pub fn window_options(
         window_bounds: Some(WindowBounds::Windowed(bounds)),
         titlebar: Some(TitlebarOptions {
             title: Some(title.to_string().into()),
-            appears_transparent: cfg!(target_os = "macos"),
+            appears_transparent: cfg!(any(target_os = "macos", windows)),
             traffic_light_position: cfg!(target_os = "macos").then_some(point(px(16.0), px(16.0))),
         }),
         window_min_size: Some(size(px(min.0), px(min.1))),

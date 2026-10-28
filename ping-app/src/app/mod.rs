@@ -121,6 +121,7 @@ pub fn open(show: Show, cx: &mut App) {
                 (m.hosting.clone(), m.updates.clone())
             };
             let opened = cx.open_window(options, |window, cx| {
+                pingpong_ui::glass::dress(window);
                 cx.new(|cx| PingApp::new(hosting, updates, window, cx))
             });
             let handle = match opened {
@@ -1022,6 +1023,7 @@ impl Render for PingApp {
             )
             .children(menu)
             .children(sheet)
+            .children(pingpong_ui::caption_buttons(window, t))
     }
 }
 
