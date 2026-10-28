@@ -225,7 +225,7 @@ impl PingApp {
         let body = match step {
             Step::Use => self.setup_use(t, cx),
             Step::Permissions => self.setup_permissions(t, window, cx),
-            Step::Pairing => self.setup_pairing(t),
+            Step::Pairing => self.setup_pairing(t, cx),
             Step::Welcome | Step::Done => self.setup_done(t, cx),
         };
         let steps = self.setup.steps();
@@ -502,30 +502,13 @@ impl PingApp {
             .into_any_element()
     }
 
-    /// How to pair from the other computer, in a line.
-    fn setup_pairing(&mut self, t: Theme) -> AnyElement {
+    /// Pairing: hosting, the devices asking to pair as they come, each with
+    /// the field for the PIN it shows; else how to pair from here, in a
+    /// line.
+    fn setup_pairing(&mut self, t: Theme, cx: &mut Context<Self>) -> AnyElement {
         let device = crate::app::device_word();
-        let (subtitle, line) = match self.setup.use_for.unwrap_or(Use::Play) {
-            Use::Play => (
-                "Pair once with each computer you want to play.",
-                "On the other computer, turn hosting on in Ping. Then pick it in Hosts here and \
-                 type the PIN this window shows into the window on it."
-                    .to_string(),
-            ),
-            Use::Host | Use::Both => (
-                "Pair once with each device that will play this one.",
-                format!(
-                    "On the other device, open Ping and pick this {device} in Hosts: it shows a \
-                     PIN, which you type here, in This computer → Devices."
-                ),
-            ),
-        };
-        div()
-            .flex()
-            .flex_col()
-            .gap(px(20.0))
-            .child(page_header("Pairing", Some(subtitle.into()), None, t))
-            .child(rows(
+        let line = |text: String| {
+            rows(
                 [div()
                     .min_h(px(Metrics::SETTINGS_ROW))
                     .px(px(12.0))
@@ -534,10 +517,39 @@ impl PingApp {
                     .items_center()
                     .gap(px(12.0))
                     .child(pingpong_ui::tile(IconName::Link, t))
-                    .child(div().flex_1().line_height(px(19.0)).child(line))
+                    .child(div().flex_1().min_w_0().line_height(px(19.0)).child(text))
                     .into_any_element()],
                 t,
-            ))
+            )
+            .into_any_element()
+        };
+        let (subtitle, body): (&str, Vec<AnyElement>) = match self.setup.use_for {
+            Some(Use::Host | Use::Both) => (
+                "Pair once with each device that will play this one.",
+                match self.host.clone() {
+                    Some(host) => host.update(cx, |h, cx| h.pairing(t, cx)),
+                    None => vec![line(
+                        "Hosting is off, so no device can ask to pair yet. Turn it on in \
+                         Permissions (Back), or later in Settings → Hosting; then pair from \
+                         This computer → Devices."
+                            .to_string(),
+                    )],
+                },
+            ),
+            _ => (
+                "Pair once with each computer you want to play.",
+                vec![line(format!(
+                    "On the other computer, turn hosting on in Ping. Then pick it in Hosts on \
+                     this {device}: it shows a PIN, which you type into Ping on the other one."
+                ))],
+            ),
+        };
+        div()
+            .flex()
+            .flex_col()
+            .gap(px(20.0))
+            .child(page_header("Pairing", Some(subtitle.into()), None, t))
+            .children(body)
             .child(footnote(
                 "Pairing uses a PIN, never a password: nothing else is copied between them.",
                 t,
@@ -611,16 +623,42 @@ impl PingApp {
                 cx,
             ));
         }
+        // Paired: hosting, the devices that may play this one; playing
+        // only, the computers this one may play.
+        let paired = if hosts {
+            self.host
+                .as_ref()
+                .map_or(0, |h| h.read(cx).snapshot().clients.len())
+        } else {
+            self.model.items.iter().filter(|i| i.is_paired()).count()
+        };
+        let (label, detail) = match (hosts, paired) {
+            (true, 0) => (
+                "Pair your devices".into(),
+                "Their PINs go in This computer → Devices.".into(),
+            ),
+            (true, n) => (
+                format!("{n} {} paired", if n == 1 { "device" } else { "devices" }),
+                "This computer → Devices has them, and pairs more.".into(),
+            ),
+            (false, 0) => (
+                "Pair your computers".into(),
+                "Pick a computer in Hosts to pair with it.".into(),
+            ),
+            (false, n) => (
+                format!(
+                    "Paired with {n} {}",
+                    if n == 1 { "computer" } else { "computers" }
+                ),
+                "Hosts lists them: a click plays one.".into(),
+            ),
+        };
         list.push(item(
             "setup-done-pairing",
             Step::Pairing,
-            false,
-            "Pair your devices".into(),
-            if hosts {
-                "Their PINs go in This computer → Devices.".into()
-            } else {
-                "Pick a computer in Hosts to pair with it.".into()
-            },
+            paired > 0,
+            label,
+            detail,
             cx,
         ));
         div()

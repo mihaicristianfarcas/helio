@@ -17,14 +17,7 @@ use super::{date, duration, page, Confirm, HostPages};
 
 impl HostPages {
     pub(super) fn devices(&mut self, t: Theme, cx: &mut Context<Self>) -> AnyElement {
-        let pending: Vec<Pending> = self
-            .snap
-            .status
-            .as_ref()
-            .map(|s| s.pending.clone())
-            .unwrap_or_default();
-        let name = self.snap.state.name.clone();
-        let mut content = div()
+        let content = div()
             .flex()
             .flex_col()
             .gap(px(22.0))
@@ -37,9 +30,29 @@ impl HostPages {
                 ),
                 None,
                 t,
-            ));
+            ))
+            .children(self.pairing(t, cx));
+        page(&self.page_scroll, t, "devices-page", content)
+    }
+
+    /// The pairing requests, each with its PIN's field, and the paired
+    /// devices: the Devices page's, and setup's pairing step's, as they
+    /// come.
+    pub fn pairing(&mut self, t: Theme, cx: &mut Context<Self>) -> Vec<AnyElement> {
+        let pending: Vec<Pending> = self
+            .snap
+            .status
+            .as_ref()
+            .map(|s| s.pending.clone())
+            .unwrap_or_default();
+        // The host's name, once it has said it.
+        let name = match self.snap.state.name.as_str() {
+            "" => format!("this {}", crate::app::device_word()),
+            name => name.to_string(),
+        };
+        let mut content = Vec::new();
         if let Some((glyph, tint, text, _)) = self.note.clone() {
-            content = content.child(notice(glyph, tint, text, t));
+            content.push(notice(glyph, tint, text, t).into_any_element());
         }
         let requests: Vec<AnyElement> = if pending.is_empty() {
             vec![div()
@@ -50,22 +63,30 @@ impl HostPages {
                 .gap(px(10.0))
                 .child(icon(IconName::Link, 15.0, t.tertiary))
                 .child(
+                    // What to do there, then what comes here: a line each.
                     div()
                         .flex_1()
                         .min_w_0()
+                        .flex()
+                        .flex_col()
                         .text_size(px(12.5))
                         .line_height(px(17.0))
                         .text_color(t.tertiary)
                         .child(format!(
-                            "To pair a device, choose {name} in Ping (or add it by \
-                                address). Its request shows here, with the PIN to type."
-                        )),
+                            "On the other device, open Ping and choose {name} in Hosts (or \
+                                add it by address)."
+                        ))
+                        .child("Its request shows here, with a field for the PIN it shows."),
                 )
                 .into_any_element()]
         } else {
             pending.iter().map(|p| self.request_row(p, t, cx)).collect()
         };
-        content = content.child(section("Pairing requests", t).child(rows(requests, t)));
+        content.push(
+            section("Pairing requests", t)
+                .child(rows(requests, t))
+                .into_any_element(),
+        );
         let clients = self.snap.clients.clone();
         let paired: Vec<AnyElement> = if clients.is_empty() {
             vec![div()
@@ -78,8 +99,12 @@ impl HostPages {
         } else {
             clients.iter().map(|c| self.client_row(c, t, cx)).collect()
         };
-        content = content.child(section("Paired", t).child(rows(paired, t)));
-        page(&self.page_scroll, t, "devices-page", content)
+        content.push(
+            section("Paired", t)
+                .child(rows(paired, t))
+                .into_any_element(),
+        );
+        content
     }
 
     pub(super) fn request_row(
