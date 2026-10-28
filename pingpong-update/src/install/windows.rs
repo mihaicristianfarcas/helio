@@ -1,34 +1,30 @@
 //! Installing an update on Windows.
 //!
-//! - **Ping** replaces its files in the folder it runs from (per user, so
-//!   no administrator is needed). A running program or loaded DLL cannot be
-//!   written over or deleted, but it can be renamed: the old files are
-//!   renamed `*.old` and the new ones copied beside them; the next start
-//!   deletes the old ones. Then the archive's `install.ps1 -Register
-//!   FOLDER` brings Ping's entry in Settings > Apps up to date, if the
-//!   folder is the one it installs Ping into. An update by an older release
-//!   runs no installer: the new Ping lists itself when it starts
-//!   ([`keep_listed`]).
-//! - **Pong** is a service in Program Files: the release archive's
-//!   `install.ps1` installs it, as it did the first time, as an
-//!   administrator (Windows asks). A script started from Pong's window
-//!   waits for the window to quit (the installer replaces it too), runs the
-//!   installer, and opens the window again, updated or not.
+//! The app replaces its files, the host's engine (`pong.exe`) among them,
+//! in the folder it runs from (per user, so no administrator is needed). A
+//! running program or loaded DLL cannot be written over or deleted, but it
+//! can be renamed: the old files are renamed `*.old` and the new ones
+//! copied beside them; the next start deletes the old ones. Then the
+//! archive's `install.ps1 -Register FOLDER` brings the app's entry in
+//! Settings > Apps up to date, if the folder is the one it installs the app
+//! into. An update by an older release runs no installer: the new app lists
+//! itself when it starts ([`keep_listed`]).
+//!
+//! The host itself runs from the engine's own copy in Program Files, which
+//! only `pong enable`, as an administrator, replaces
+//! (`pong/src/hosting/windows.rs`): while hosting is on, the update runs it
+//! again from the new files, and Windows asks ([`update_host`]).
 
 use std::os::windows::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::Duration;
 
-use super::{ps_quote, Program};
+use super::ps_quote;
 
-/// How this copy is updated.
-pub(crate) enum Method {
-    /// Ping: the files in `dir`.
-    Files { dir: PathBuf },
-    /// Pong: the archive's install.ps1; `window` is the running window's
-    /// program, opened again if the installer leaves none in Program Files.
-    Script { window: PathBuf },
+/// How this copy is updated: the files in `dir`.
+pub(crate) struct Method {
+    dir: PathBuf,
 }
 
 /// No console window for a script or a tool.
@@ -47,32 +43,22 @@ fn powershell() -> PathBuf {
     system32(r"WindowsPowerShell\v1.0\powershell.exe")
 }
 
-pub(crate) fn method(program: Program) -> Result<Method, String> {
+pub(crate) fn method() -> Result<Method, String> {
     let exe = std::env::current_exe().map_err(|e| e.to_string())?;
-    match program {
-        Program::Ping => {
-            let dir = exe
-                .parent()
-                .ok_or("Ping's folder is unknown")?
-                .to_path_buf();
-            let probe = dir.join(".ping-update-probe");
-            std::fs::write(&probe, b"")
-                .and_then(|()| std::fs::remove_file(&probe))
-                .map_err(|_| {
-                    format!(
-                        "Ping cannot change its own folder ({}): download the update instead.",
-                        dir.display()
-                    )
-                })?;
-            Ok(Method::Files { dir })
-        }
-        Program::Pong => {
-            if !powershell().is_file() {
-                return Err("Windows PowerShell, which installs Pong, is not here.".into());
-            }
-            Ok(Method::Script { window: exe })
-        }
-    }
+    let dir = exe
+        .parent()
+        .ok_or("Ping's folder is unknown")?
+        .to_path_buf();
+    let probe = dir.join(".ping-update-probe");
+    std::fs::write(&probe, b"")
+        .and_then(|()| std::fs::remove_file(&probe))
+        .map_err(|_| {
+            format!(
+                "Ping cannot change its own folder ({}): download the update instead.",
+                dir.display()
+            )
+        })?;
+    Ok(Method { dir })
 }
 
 pub(crate) fn needs_archive(_method: &Method) -> bool {
@@ -115,28 +101,72 @@ pub(crate) fn unpack(archive: &Path, into: &Path) -> Result<(), String> {
 
 pub(crate) fn place(
     method: &Method,
-    _program: Program,
     unpacked: &Path,
-    stage: &Path,
-    dir: &Path,
+    _stage: &Path,
+    _dir: &Path,
 ) -> Result<(), String> {
-    match method {
-        Method::Files { dir: folder } => {
-            replace_files(unpacked, folder)?;
-            register(unpacked, folder);
-            let new = folder.join("Ping.exe");
-            Command::new(&new)
-                .args(["--after-update", &std::process::id().to_string()])
-                .spawn()
-                .map(drop)
-                .map_err(|e| format!("the new Ping did not start: {e}"))
-        }
-        Method::Script { window } => run_installer(unpacked, stage, dir, window),
+    let folder = &method.dir;
+    replace_files(unpacked, folder)?;
+    register(unpacked, folder);
+    update_host(folder);
+    let new = folder.join("Ping.exe");
+    Command::new(&new)
+        .args(["--after-update", &std::process::id().to_string()])
+        .spawn()
+        .map(drop)
+        .map_err(|e| format!("the new Ping did not start: {e}"))
+}
+
+/// While hosting is on, `pong enable` from the new files in `folder`, as an
+/// administrator (Windows asks, as when hosting was turned on): it puts the
+/// new engine in Program Files and restarts the service on it. Without it
+/// the host would go on running the engine of the release before. Not
+/// allowed, or failed: the app is updated all the same, the host keeps the
+/// engine it had, and turning hosting off and on brings it up to date.
+fn update_host(folder: &Path) {
+    let pong = folder.join("pong.exe");
+    let status = Command::new(&pong)
+        .args(["status", "--json"])
+        .creation_flags(CREATE_NO_WINDOW)
+        .output();
+    if !status.is_ok_and(|out| hosting_on(&out.stdout)) {
+        return;
+    }
+    tracing::info!("hosting is on: the host's engine is updated as an administrator");
+    // Stop: a refused prompt is an error, and the exit code says so.
+    let script = format!(
+        "$ErrorActionPreference = 'Stop'; \
+         $p = Start-Process -FilePath {} -ArgumentList enable -Verb RunAs -WindowStyle Hidden \
+         -Wait -PassThru; exit $p.ExitCode",
+        ps_quote(&pong.to_string_lossy())
+    );
+    match Command::new(powershell())
+        .args(["-NoProfile", "-NonInteractive", "-Command", &script])
+        .creation_flags(CREATE_NO_WINDOW)
+        .output()
+    {
+        Ok(out) if out.status.success() => tracing::info!("the host runs the new engine"),
+        Ok(out) => tracing::warn!(
+            code = ?out.status.code(),
+            error = %String::from_utf8_lossy(&out.stderr).trim(),
+            "the host's engine was not updated: it runs the one it had until hosting is \
+             turned off and on"
+        ),
+        Err(e) => tracing::warn!(error = %e, "the host's engine was not updated"),
     }
 }
 
-/// Whether `name` is one of Ping's own files: only those are renamed aside
-/// or deleted, in a folder that may hold anything (Downloads).
+/// Whether what `pong status --json` printed says hosting is on (starting,
+/// on, or on but failing: the service runs an engine either way).
+fn hosting_on(status: &[u8]) -> bool {
+    serde_json::from_slice::<serde_json::Value>(status)
+        .ok()
+        .and_then(|v| v.get("state")?.as_str().map(|s| s != "off"))
+        .unwrap_or(false)
+}
+
+/// Whether `name` is one of the app's own files: only those are renamed
+/// aside or deleted, in a folder that may hold anything (Downloads).
 fn ours(name: &str) -> bool {
     let lower = name.to_ascii_lowercase();
     let dll = |prefix: &str| {
@@ -146,6 +176,7 @@ fn ours(name: &str) -> bool {
             .is_some_and(|n| !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit()))
     };
     lower == "ping.exe"
+        || lower == "pong.exe"
         || lower == "ffmpeg license.txt"
         || dll("avcodec-")
         || dll("avutil-")
@@ -314,11 +345,7 @@ fn listed_version() -> Option<String> {
 /// and before) copies the new files and runs no installer, and someone may
 /// have copied the files by hand: the script beside Ping writes the entry
 /// then. Run on the update check's thread, not the window's.
-pub(crate) fn keep_listed(program: Program, version: &str) {
-    if program != Program::Ping {
-        // Pong is only ever installed by its install.ps1, which lists it.
-        return;
-    }
+pub(crate) fn keep_listed(version: &str) {
     let Some(dir) = std::env::current_exe()
         .ok()
         .and_then(|e| e.parent().map(Path::to_path_buf))
@@ -336,96 +363,18 @@ pub(crate) fn keep_listed(program: Program, version: &str) {
     register(&dir, &dir);
 }
 
-/// Start the script that runs the archive's install.ps1 as an
-/// administrator once Pong's window has quit, then opens the window again.
-fn run_installer(unpacked: &Path, stage: &Path, dir: &Path, window: &Path) -> Result<(), String> {
-    let install = unpacked.join("install.ps1");
-    if !install.is_file() {
-        return Err("the archive has no install.ps1".into());
-    }
-    let script = installer_script(
-        std::process::id(),
-        &super::log_path(dir),
-        &install,
-        &powershell(),
-        window,
-    );
-    let path = stage.join("update.ps1");
-    std::fs::write(&path, script).map_err(|e| e.to_string())?;
-    tracing::info!("installing Pong's update once the window has quit");
-    Command::new(powershell())
-        .args([
-            "-NoProfile",
-            "-ExecutionPolicy",
-            "Bypass",
-            "-WindowStyle",
-            "Hidden",
-            "-File",
-        ])
-        .arg(&path)
-        .creation_flags(CREATE_NO_WINDOW)
-        .spawn()
-        .map(drop)
-        .map_err(|e| format!("the installer did not start: {e}"))
-}
-
-/// `install::rehearse`: Ping's files replaced in `folder` as in its own,
-/// and its entry in Settings > Apps written if `folder` is where Ping is
-/// installed; Pong's archive only checked for its installer (running it
-/// replaces the service).
-pub(crate) fn rehearse(program: Program, unpacked: &Path, folder: &Path) -> Result<(), String> {
-    match program {
-        Program::Ping => {
-            replace_files(unpacked, folder)?;
-            register(unpacked, folder);
-            Ok(())
-        }
-        Program::Pong if unpacked.join("install.ps1").is_file() => Ok(()),
-        Program::Pong => Err("the archive has no install.ps1".into()),
-    }
-}
-
-/// The script that runs `install` (the archive's install.ps1) as an
-/// administrator once process `pid` (Pong's window) has quit, writing why
-/// it failed to `log`, then opens Pong's window again: the installed one,
-/// else `window` (the one that ran).
-fn installer_script(
-    pid: u32,
-    log: &Path,
-    install: &Path,
-    powershell: &Path,
-    window: &Path,
-) -> String {
-    format!(
-        "# Pong's update (pingpong-update): once Pong's window has quit, the\r\n\
-         # release's install.ps1 as an administrator (Windows asks), then the\r\n\
-         # window again, updated or not.\r\n\
-         $ErrorActionPreference = 'Continue'\r\n\
-         Wait-Process -Id {pid} -Timeout 20 -ErrorAction SilentlyContinue\r\n\
-         $log = {log}\r\n\
-         try {{\r\n\
-         \x20   $arguments = '-NoProfile -ExecutionPolicy Bypass -File \"{{0}}\" -Log \"{{1}}\"' -f {install}, $log\r\n\
-         \x20   $installer = Start-Process -FilePath {powershell} -Verb RunAs -WindowStyle Hidden -PassThru -ArgumentList $arguments\r\n\
-         \x20   $installer.WaitForExit()\r\n\
-         }} catch {{\r\n\
-         \x20   \"Windows did not run the installer: $($_.Exception.Message)\" | Out-File -Append -Encoding utf8 $log\r\n\
-         }}\r\n\
-         $window = Join-Path $env:ProgramFiles 'Pong\\Pong Control.exe'\r\n\
-         if (-not (Test-Path $window)) {{ $window = {own} }}\r\n\
-         Start-Process -FilePath $window\r\n",
-        log = ps_quote(&log.to_string_lossy()),
-        install = ps_quote(&install.to_string_lossy()),
-        powershell = ps_quote(&powershell.to_string_lossy()),
-        own = ps_quote(&window.to_string_lossy()),
-    )
+/// `install::rehearse`: the app's files replaced in `folder` as in its
+/// own, and its entry in Settings > Apps written if `folder` is where the
+/// app is installed. The host is left alone.
+pub(crate) fn rehearse(unpacked: &Path, folder: &Path) -> Result<(), String> {
+    replace_files(unpacked, folder)?;
+    register(unpacked, folder);
+    Ok(())
 }
 
 /// Delete what an update renamed aside in Ping's folder, now that nothing
 /// holds it.
-pub(crate) fn tidy(program: Program) {
-    if program != Program::Ping {
-        return;
-    }
+pub(crate) fn tidy() {
     let Some(dir) = std::env::current_exe()
         .ok()
         .and_then(|e| e.parent().map(Path::to_path_buf))
@@ -494,36 +443,26 @@ mod tests {
     }
 
     #[test]
-    fn the_installer_script_is_powershell_that_parses() {
-        let dir = tempfile::tempdir().unwrap();
-        // A user name with an apostrophe, a folder with a space.
-        let home = Path::new(r"C:\Users\o'brien\AppData");
-        let script = installer_script(
-            4242,
-            &home.join(r"Roaming\Pong\update.log"),
-            &home.join(r"Local\Temp\pingpong-update\Pong-0.10.0\unpacked\install.ps1"),
-            &powershell(),
-            Path::new(r"C:\Program Files\Pong\Pong Control.exe"),
-        );
-        let path = dir.path().join("update.ps1");
-        std::fs::write(&path, &script).unwrap();
-        if let Err(errors) = parse(&path) {
-            panic!("{errors}\n{script}");
+    fn the_release_installer_is_powershell_that_parses() {
+        // What the archive carries as install.ps1 (tools/package-windows.ps1),
+        // and an update runs.
+        let script = Path::new(env!("CARGO_MANIFEST_DIR")).join("../tools/install-ping.ps1");
+        if let Err(errors) = parse(&script) {
+            panic!("{errors}");
         }
-        assert!(script.contains("-Id 4242"));
-        assert!(script.contains(r"'C:\Users\o''brien\AppData\Roaming\Pong\update.log'"));
     }
 
     #[test]
-    fn the_release_installers_are_powershell_that_parses() {
-        // What the archives carry as install.ps1 (tools/package-windows.ps1),
-        // and an update runs.
-        let tools = Path::new(env!("CARGO_MANIFEST_DIR")).join("../tools");
-        for script in ["install-ping.ps1", "host-deploy.ps1"] {
-            if let Err(errors) = parse(&tools.join(script)) {
-                panic!("{script}: {errors}");
-            }
-        }
+    fn the_host_is_updated_only_while_hosting_is_on() {
+        assert!(!hosting_on(br#"{"state":"off"}"#));
+        assert!(hosting_on(br#"{"state":"on","api":true}"#));
+        assert!(hosting_on(br#"{"state":"starting"}"#));
+        assert!(hosting_on(
+            br#"{"state":"failed","reason":"the host exited with code 3"}"#
+        ));
+        // An engine that could not say: nothing is asked of the user.
+        assert!(!hosting_on(b""));
+        assert!(!hosting_on(b"not json"));
     }
 
     #[test]
@@ -560,9 +499,10 @@ mod tests {
     }
 
     #[test]
-    fn only_pings_own_files_are_renamed_or_deleted() {
+    fn only_the_apps_own_files_are_renamed_or_deleted() {
         for name in [
             "Ping.exe",
+            "pong.exe",
             "avcodec-62.dll",
             "AVUTIL-60.dll",
             "swresample-6.dll",
@@ -574,7 +514,7 @@ mod tests {
             "thesis.docx",
             "avcodec-.dll",
             "avcodec-x.dll",
-            "pong.exe",
+            "pong.exe.lnk",
             "ping.exe.lnk",
         ] {
             assert!(!ours(name), "{name}");

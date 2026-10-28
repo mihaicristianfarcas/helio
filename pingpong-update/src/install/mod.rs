@@ -1,21 +1,26 @@
 //! Installing a newer release from the app itself: "Install and Restart" in
 //! the update sheet.
 //!
-//! The release's own archive for this program and system is downloaded
-//! from GitHub (the files the website and the Homebrew casks hand out too),
-//! and its SHA-256 checked against the one GitHub keeps for it (the API's
-//! `digest`, worked out by GitHub when the file was uploaded). On a Mac the
-//! new app must also carry a Developer ID signature of the same team as the
-//! app that installs it. Then each system puts it in place its own way:
+//! The release's own archive for this system is downloaded from GitHub (the
+//! file the website and the Homebrew cask hand out too), and its SHA-256
+//! checked against the one GitHub keeps for it (the API's `digest`, worked
+//! out by GitHub when the file was uploaded). On a Mac the new app must also
+//! carry a Developer ID signature of the same team as the app that installs
+//! it. The archive is the whole app, the host it runs when hosting is on
+//! included, so an update brings both. Then each system puts it in place
+//! its own way:
 //!
-//! - **Windows**, Ping: its files are replaced where it runs (a running
-//!   program cannot be overwritten, but it can be renamed aside). Pong: the
-//!   archive's `install.ps1` runs as an administrator (Windows asks), as
-//!   when Pong was installed, and opens Pong's window again after.
-//! - **macOS**: the app bundles are swapped for the new ones, and the host
-//!   restarted. A copy Homebrew installed is upgraded by Homebrew
-//!   (`brew upgrade --cask`), so that Homebrew's record stays true.
-//! - **Linux**: the archive's `install.sh`, as when it was installed.
+//! - **Windows**: the app's files are replaced where it runs (a running
+//!   program cannot be overwritten, but it can be renamed aside). While
+//!   hosting is on, `pong enable` runs again as an administrator (Windows
+//!   asks): the service runs the engine's own copy in Program Files, which
+//!   only that replaces.
+//! - **macOS**: the app bundle is swapped for the new one, and the host,
+//!   which runs from the helper inside it, restarted. A copy Homebrew
+//!   installed is upgraded by Homebrew (`brew upgrade --cask`), so that
+//!   Homebrew's record stays true.
+//! - **Linux**: the archive's `install.sh`, as when it was installed; it
+//!   restarts a host that runs.
 //!
 //! The app then quits, and its new copy starts with `--after-update PID`:
 //! it waits for the old one to be gone ([`after_update`]) before it claims
@@ -48,46 +53,20 @@ use sha2::{Digest, Sha256};
 use crate::github::{self, Asset, Fetch};
 use crate::{Build, Status, Version, REPOSITORY};
 
-/// Which program installs itself.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Program {
-    Ping,
-    /// Pong: the host and its window, which installs both.
-    Pong,
+/// The release archive of `version` for this system, as the packaging
+/// scripts name it: `Ping-0.9.0-windows-x86_64.zip`.
+pub fn archive(version: &str) -> String {
+    archive_name(version, std::env::consts::OS, std::env::consts::ARCH)
 }
 
-impl Program {
-    /// Its name, which is also how its release archives begin.
-    pub fn name(self) -> &'static str {
-        match self {
-            Program::Ping => "Ping",
-            Program::Pong => "Pong",
-        }
-    }
-
-    /// The Homebrew cask that installs it on a Mac.
-    pub fn cask(self) -> &'static str {
-        match self {
-            Program::Ping => "ping",
-            Program::Pong => "pong",
-        }
-    }
-
-    /// The release archive of `version` for this system, as the packaging
-    /// scripts name it: `Ping-0.9.0-windows-x86_64.zip`.
-    pub fn archive(self, version: &str) -> String {
-        archive_name(self, version, std::env::consts::OS, std::env::consts::ARCH)
-    }
-}
-
-fn archive_name(program: Program, version: &str, os: &str, arch: &str) -> String {
+fn archive_name(version: &str, os: &str, arch: &str) -> String {
     // tools/package-macos names Apple silicon as `uname -m` does.
     let arch = match (os, arch) {
         ("macos", "aarch64") => "arm64",
         (_, arch) => arch,
     };
     let ext = if os == "linux" { "tar.gz" } else { "zip" };
-    format!("{}-{version}-{os}-{arch}.{ext}", program.name())
+    format!("{}-{version}-{os}-{arch}.{ext}", crate::APP)
 }
 
 /// How far an installation has come, for the window to show.
@@ -121,10 +100,10 @@ pub fn pretend_available() {
     let _ = AVAILABLE.set(Ok(()));
 }
 
-/// Whether this copy of `program` can install updates itself, and if not,
-/// why: a sentence for the update sheet. Worked out once (it looks at where
-/// the app is and whether that folder can be written).
-pub fn available(program: Program, build: &Build) -> Result<(), String> {
+/// Whether this copy can install updates itself, and if not, why: a
+/// sentence for the update sheet. Worked out once (it looks at where the
+/// app is and whether that folder can be written).
+pub fn available(build: &Build) -> Result<(), String> {
     AVAILABLE
         .get_or_init(|| {
             if !build.release {
@@ -132,7 +111,7 @@ pub fn available(program: Program, build: &Build) -> Result<(), String> {
                     "It was built from a checkout: pull main and build again to update.".into(),
                 );
             }
-            platform::method(program).map(|_| ())
+            platform::method().map(|_| ())
         })
         .clone()
 }
@@ -172,20 +151,20 @@ pub(crate) fn log_path(dir: &Path) -> PathBuf {
 
 /// Where an update is downloaded and unpacked, apart from the app's data
 /// (on Windows that is the roaming profile, no place for an archive).
-fn staging(program: Program, version: &str) -> PathBuf {
+fn staging(version: &str) -> PathBuf {
     std::env::temp_dir()
         .join("pingpong-update")
-        .join(format!("{}-{version}", program.name()))
+        .join(format!("{}-{version}", crate::APP))
 }
 
 /// The start after an update the app began: was it installed? `None` when
 /// none was pending; otherwise what to show if it was not. The staging
 /// folder goes either way.
-pub(crate) fn finish(program: Program, build: &Build, dir: &Path) -> Option<Install> {
-    platform::tidy(program);
-    platform::keep_listed(program, build.version);
+pub(crate) fn finish(build: &Build, dir: &Path) -> Option<Install> {
+    platform::tidy();
+    platform::keep_listed(build.version);
     let pending = Pending::take(dir)?;
-    let _ = std::fs::remove_dir_all(staging(program, &pending.version));
+    let _ = std::fs::remove_dir_all(staging(&pending.version));
     let (Some(wanted), Some(mine)) = (
         Version::parse(&pending.version),
         Version::parse(build.version),
@@ -271,24 +250,17 @@ fn save_verified(
     result
 }
 
-/// Install the latest release of `program`, on the calling thread (the
-/// update check's install thread), saying how it goes in `status`. `dir`
-/// is the app's data folder. On success the status is
-/// [`Install::Restarting`] and the app must quit.
-pub(crate) fn run(
-    program: Program,
-    build: &Build,
-    dir: &Path,
-    status: &Mutex<Status>,
-    wake: &dyn Fn(),
-) {
+/// Install the latest release, on the calling thread (the update check's
+/// install thread), saying how it goes in `status`. `dir` is the app's data
+/// folder. On success the status is [`Install::Restarting`] and the app
+/// must quit.
+pub(crate) fn run(build: &Build, dir: &Path, status: &Mutex<Status>, wake: &dyn Fn()) {
     let say = |install: Install| {
         status.lock().install = Some(install);
         wake();
     };
     say(Install::Starting);
     match install(
-        program,
         build,
         dir,
         &|done, total| say(Install::Downloading { done, total }),
@@ -306,14 +278,13 @@ pub(crate) fn run(
 }
 
 fn install(
-    program: Program,
     build: &Build,
     dir: &Path,
     downloading: &dyn Fn(u64, u64),
     installing: &dyn Fn(),
 ) -> Result<(), String> {
-    available(program, build)?;
-    let method = platform::method(program)?;
+    available(build)?;
+    let method = platform::method()?;
     let api = github::Api::new(build);
     let slug = github::slug(REPOSITORY).ok_or("this build does not know its repository")?;
     let (latest, _) =
@@ -322,20 +293,20 @@ fn install(
     if latest.version <= mine {
         return Err(format!(
             "{} {} is the newest release: there is nothing to install",
-            program.name(),
+            crate::APP,
             build.version
         ));
     }
     let version = latest.version.to_string();
-    let stage = staging(program, &version);
+    let stage = staging(&version);
     let _ = std::fs::remove_dir_all(&stage);
     std::fs::create_dir_all(&stage).map_err(|e| format!("{}: {e}", stage.display()))?;
     if !platform::needs_archive(&method) {
         // A package manager's upgrade: it fetches and checks its own.
         installing();
-        return place(&method, program, &version, &stage, &stage, dir);
+        return place(&method, &version, &stage, &stage, dir);
     }
-    let name = program.archive(&version);
+    let name = archive(&version);
     let asset = latest
         .assets
         .iter()
@@ -364,14 +335,13 @@ fn install(
     let unpacked = stage.join("unpacked");
     std::fs::create_dir_all(&unpacked).map_err(|e| e.to_string())?;
     platform::unpack(&archive, &unpacked)?;
-    place(&method, program, &version, &unpacked, &stage, dir)
+    place(&method, &version, &unpacked, &stage, dir)
 }
 
 /// The last step, which may hand over to an installer that outlives the
 /// app: the note for the next start first.
 fn place(
     method: &platform::Method,
-    program: Program,
     version: &str,
     unpacked: &Path,
     stage: &Path,
@@ -383,33 +353,29 @@ fn place(
     }
     .save(dir)
     .map_err(|e| format!("the update's note could not be written: {e}"))?;
-    let placed = platform::place(method, program, unpacked, stage, dir);
+    let placed = platform::place(method, unpacked, stage, dir);
     if placed.is_err() {
         let _ = Pending::take(dir);
     }
     placed
 }
 
-/// A check of the installer that leaves the installed apps alone
-/// (`examples/install.rs`): the latest release's archive of `program` for
-/// this system, downloaded and checked as an update is, unpacked, and put
-/// in `folder` the way the app would put it in its own (macOS: the bundles
-/// swapped, signed by the team that signed those already in `folder`;
-/// Windows: Ping's files replaced; Linux: only unpacked, as install.sh
-/// would restart the user's own host). Nothing quits or opens. Returns the
-/// version.
-pub fn rehearse(
-    program: Program,
-    folder: &Path,
-    progress: &dyn Fn(u64, u64),
-) -> Result<String, String> {
+/// A check of the installer that leaves the installed app alone
+/// (`examples/install.rs`): the latest release's archive for this system,
+/// downloaded and checked as an update is, unpacked, and put in `folder`
+/// the way the app would put it in its own (macOS: the bundle swapped,
+/// signed by the team that signed the one already in `folder`; Windows: the
+/// app's files replaced; Linux: only unpacked, as install.sh would restart
+/// the user's own host). Nothing quits or opens, and no host restarts.
+/// Returns the version.
+pub fn rehearse(folder: &Path, progress: &dyn Fn(u64, u64)) -> Result<String, String> {
     let build = Build::this();
     let api = github::Api::new(&build);
     let slug = github::slug(REPOSITORY).ok_or("this build does not know its repository")?;
     let (latest, _) =
         github::latest(&api as &dyn Fetch, slug)?.ok_or("GitHub lists no release to install")?;
     let version = latest.version.to_string();
-    let name = program.archive(&version);
+    let name = archive(&version);
     let asset = latest
         .assets
         .iter()
@@ -417,7 +383,7 @@ pub fn rehearse(
         .ok_or_else(|| format!("release {version} has no {name} with a checksum"))?;
     let stage = std::env::temp_dir()
         .join("pingpong-update-rehearsal")
-        .join(format!("{}-{version}", program.name()));
+        .join(format!("{}-{version}", crate::APP));
     let _ = std::fs::remove_dir_all(&stage);
     std::fs::create_dir_all(&stage).map_err(|e| e.to_string())?;
     let archive = stage.join(&asset.name);
@@ -427,7 +393,7 @@ pub fn rehearse(
     std::fs::create_dir_all(&unpacked).map_err(|e| e.to_string())?;
     platform::unpack(&archive, &unpacked)?;
     std::fs::create_dir_all(folder).map_err(|e| e.to_string())?;
-    platform::rehearse(program, &unpacked, folder)?;
+    platform::rehearse(&unpacked, folder)?;
     let _ = std::fs::remove_dir_all(&stage);
     Ok(version)
 }
@@ -506,19 +472,19 @@ mod tests {
     #[test]
     fn each_system_gets_the_archive_its_packaging_script_makes() {
         assert_eq!(
-            archive_name(Program::Ping, "0.10.0", "windows", "x86_64"),
+            archive_name("0.10.0", "windows", "x86_64"),
             "Ping-0.10.0-windows-x86_64.zip"
         );
         assert_eq!(
-            archive_name(Program::Pong, "0.10.0", "macos", "aarch64"),
-            "Pong-0.10.0-macos-arm64.zip"
+            archive_name("0.10.0", "macos", "aarch64"),
+            "Ping-0.10.0-macos-arm64.zip"
         );
         assert_eq!(
-            archive_name(Program::Pong, "0.10.0", "macos", "x86_64"),
-            "Pong-0.10.0-macos-x86_64.zip"
+            archive_name("0.10.0", "macos", "x86_64"),
+            "Ping-0.10.0-macos-x86_64.zip"
         );
         assert_eq!(
-            archive_name(Program::Ping, "0.10.0", "linux", "x86_64"),
+            archive_name("0.10.0", "linux", "x86_64"),
             "Ping-0.10.0-linux-x86_64.tar.gz"
         );
     }
@@ -563,14 +529,14 @@ mod tests {
             ..old
         };
         // Nothing pending: nothing to say.
-        assert_eq!(finish(Program::Ping, &new, dir.path()), None);
+        assert_eq!(finish(&new, dir.path()), None);
 
         Pending {
             version: "0.10.0".into(),
         }
         .save(dir.path())
         .unwrap();
-        assert_eq!(finish(Program::Ping, &new, dir.path()), None);
+        assert_eq!(finish(&new, dir.path()), None);
         // Said once.
         assert!(!Pending::path(dir.path()).exists());
 
@@ -586,7 +552,7 @@ mod tests {
         .unwrap();
         // Still the old version: the installer's last word is why.
         assert_eq!(
-            finish(Program::Pong, &old, dir.path()),
+            finish(&old, dir.path()),
             Some(Install::Failed(
                 "Copy-Item : Access to the path is denied.".into()
             ))

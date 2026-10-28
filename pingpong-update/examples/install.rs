@@ -1,27 +1,23 @@
-//! Installs the latest release of Ping or Pong into a folder of your
-//! choosing the way the apps install an update into their own (see
+//! Installs the latest release of the app into a folder of your choosing
+//! the way the app installs an update into its own (see
 //! `pingpong_update::install::rehearse`), to check the installer without
-//! touching the installed apps:
+//! touching the installed app or its host:
 //!
-//!   cargo run -p pingpong-update --example install -- ping|pong FOLDER
+//!   cargo run -p pingpong-update --example install -- FOLDER
 //!
-//! On a Mac, put the release's apps of an older version in FOLDER first:
-//! the new ones must be signed by the same team.
+//! On a Mac, put the release's app of an older version in FOLDER first: the
+//! new one must be signed by the same team.
 
-use pingpong_update::install::{rehearse, Program};
+use pingpong_update::install::rehearse;
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
-    let (program, folder) = match args.as_slice() {
-        [p, folder] if p == "ping" => (Program::Ping, folder),
-        [p, folder] if p == "pong" => (Program::Pong, folder),
-        _ => {
-            eprintln!("usage: install ping|pong FOLDER");
-            std::process::exit(2);
-        }
+    let [folder] = args.as_slice() else {
+        eprintln!("usage: install FOLDER");
+        std::process::exit(2);
     };
     let last = std::cell::Cell::new(0u64);
-    let result = rehearse(program, std::path::Path::new(folder), &|done, total| {
+    let result = rehearse(std::path::Path::new(folder), &|done, total| {
         // A line per 10%.
         let step = total / 10 + 1;
         if done / step != last.get() / step || done == total {
@@ -30,7 +26,7 @@ fn main() {
         last.set(done);
     });
     match result {
-        Ok(version) => println!("installed {} {version} in {folder}", program.name()),
+        Ok(version) => println!("installed {} {version} in {folder}", pingpong_update::APP),
         Err(e) => {
             eprintln!("not installed: {e}");
             std::process::exit(1);

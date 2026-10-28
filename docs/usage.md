@@ -294,21 +294,21 @@ it does not have instead.
 
 How each system installs it:
 
-| | Ping | Pong |
+| | The app | The host, while hosting is on |
 |---|---|---|
-| macOS | The app is replaced where it is (Applications) | Pong is replaced, and the host restarts |
-| macOS, installed with Homebrew | `brew upgrade --cask ping`, run for you | `brew upgrade --cask pong`, run for you; the host is started again |
-| Windows | Ping's files are replaced in its folder; Settings > Apps shows the new version | The new release's `install.ps1` runs: Windows asks for an administrator's permission, PongService restarts, and Settings > Apps shows the new version |
-| Linux | The new release's `install.sh` (into `~/.local/bin`) | The same; the host's user service restarts |
+| macOS | The app is replaced where it is (Applications), the host inside it too | Restarts from the new app |
+| macOS, installed with Homebrew | `brew upgrade --cask ping`, run for you | Started again from the new app |
+| Windows | The app's files, `pong.exe` among them, are replaced in its folder; Settings > Apps shows the new version | `pong enable` runs again from the new files: Windows asks for an administrator's permission, and PongService restarts on the new engine. Declined, the host keeps the engine it had until hosting is turned off and on |
+| Linux | The new release's `install.sh` (into `~/.local/bin`) | The host's user service restarts |
 
 The download is checked against the SHA-256 GitHub records for the
 release's file. On a Mac the new app must also be signed with the same
 team's Developer ID as the one it replaces, which a copy built from source
 is not: download those updates yourself. A stream that runs ends when the
-app restarts (on the host: streams to it stop while it restarts). If an
-update does not install, the app says why when it opens again; nothing of
-the copy that runs is changed, and **Try Again** or the release's page are
-left.
+app restarts (and while hosting is on, streams to this computer stop while
+the host restarts). If an update does not install, the app says why when
+it opens again; nothing of the copy that runs is changed, and **Try
+Again** or the release's page are left.
 
 They ask GitHub's public API, without an account: a few seconds after
 starting when the last answer is more than a day old, and once a day while
