@@ -1,7 +1,7 @@
 //! The host's log, following its end.
 
 use gpui::{div, prelude::*, px, AnyElement, ClipboardItem, Context};
-use pingpong_ui::{button, IconName, Ink, Radius, Theme};
+use pingpong_ui::{button, IconName, Ink, Metrics, Radius, Theme};
 
 use super::HostPages;
 
@@ -71,38 +71,54 @@ impl HostPages {
             .flex()
             .flex_col()
             .child(bar)
+            // The page's column, as every page's; the log fills the rest of
+            // the window's height.
             .child(
                 div()
                     .flex_none()
+                    .flex()
+                    .justify_center()
                     .px(px(28.0))
                     .pb(px(14.0))
-                    .child(pingpong_ui::page_header(
-                        "Logs",
-                        Some("The last 400 lines of pong.log.".into()),
-                        beside,
-                        t,
+                    .child(div().w_full().min_w_0().max_w(px(Metrics::PAGE)).child(
+                        pingpong_ui::page_header(
+                            "Logs",
+                            Some("The last 400 lines of pong.log.".into()),
+                            beside,
+                            t,
+                        ),
                     )),
             )
             .child(
-                div().flex_1().min_h_0().px(px(28.0)).pb(px(24.0)).child(
-                    div()
-                        .id("logs")
-                        .size_full()
-                        .overflow_y_scroll()
-                        .track_scroll(&self.logs_scroll)
-                        .rounded(px(Radius::CARD))
-                        .border_1()
-                        .border_color(t.card_stroke)
-                        .bg(t.card)
-                        .p(px(12.0))
-                        .font_family(pingpong_ui::mono_font())
-                        .text_size(px(11.0))
-                        .line_height(px(16.0))
-                        .when(empty, |d| {
-                            d.child(div().text_color(t.tertiary).child("Reading the log…"))
-                        })
-                        .children(lines),
-                ),
+                div()
+                    .flex_1()
+                    .min_h_0()
+                    .flex()
+                    .justify_center()
+                    .px(px(28.0))
+                    .pb(px(24.0))
+                    .child(
+                        div()
+                            .id("logs")
+                            .h_full()
+                            .w_full()
+                            .min_w_0()
+                            .max_w(px(Metrics::PAGE))
+                            .overflow_y_scroll()
+                            .track_scroll(&self.logs_scroll)
+                            .rounded(px(Radius::CARD))
+                            .border_1()
+                            .border_color(t.card_stroke)
+                            .bg(t.card)
+                            .p(px(12.0))
+                            .font_family(pingpong_ui::mono_font())
+                            .text_size(px(11.0))
+                            .line_height(px(16.0))
+                            .when(empty, |d| {
+                                d.child(div().text_color(t.tertiary).child("Reading the log…"))
+                            })
+                            .children(lines),
+                    ),
             )
             .into_any_element()
     }

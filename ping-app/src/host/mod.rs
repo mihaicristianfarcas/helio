@@ -1,7 +1,8 @@
 //! This computer: the host on it, as Pong's window showed it, now pages of
-//! the one window (This computer in the sidebar). The host at a glance (the
+//! the one window (This computer in the sidebar): the host at a glance (the
 //! session, with its numbers; an agent's, with its controls), the devices
-//! (pairing requests first), the host's settings, its log. What the web UI
+//! (pairing requests first), its log; and the host's settings, in Settings
+//! → Hosting under the switch (each setting in one place). What the web UI
 //! does, native, for this computer.
 //!
 //! The pages are a client of the host's web API on localhost, with the
@@ -40,14 +41,11 @@ use worker::{Cmd, Conn, Done, Snapshot};
 
 pub use demo::pretend;
 
+/// This computer's pages, under it in the sidebar.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Page {
     Overview,
     Devices,
-    General,
-    Video,
-    Network,
-    Agents,
     Logs,
 }
 
@@ -56,10 +54,6 @@ impl Page {
         Some(match s {
             "overview" => Page::Overview,
             "devices" => Page::Devices,
-            "general" => Page::General,
-            "video" => Page::Video,
-            "network" => Page::Network,
-            "agents" => Page::Agents,
             "logs" => Page::Logs,
             _ => return None,
         })
@@ -449,7 +443,6 @@ impl HostPages {
             Conn::Ready => match self.page {
                 Page::Overview => self.overview(t, cx),
                 Page::Devices => self.devices(t, cx),
-                Page::General | Page::Video | Page::Network | Page::Agents => self.settings(t, cx),
                 Page::Logs => self.logs(t, cx),
             },
         }
@@ -575,7 +568,7 @@ fn page(
     id: &'static str,
     content: impl IntoElement,
 ) -> AnyElement {
-    pingpong_ui::page(id, scroll, None, Metrics::FORM + 60.0, t, content)
+    pingpong_ui::page(id, scroll, None, Metrics::PAGE, t, content)
 }
 
 fn info_row(label: &'static str, value: String, mono: bool, t: Theme) -> AnyElement {

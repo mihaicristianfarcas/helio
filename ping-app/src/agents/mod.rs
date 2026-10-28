@@ -410,7 +410,7 @@ impl PingApp {
             "agents-first",
             &scroll,
             t,
-            Metrics::FORM + 60.0,
+            Metrics::PAGE,
             div()
                 .flex()
                 .flex_col()
@@ -457,7 +457,7 @@ impl PingApp {
             "agents-new",
             &scroll,
             t,
-            Metrics::FORM + 60.0,
+            Metrics::PAGE,
             div()
                 .flex()
                 .flex_col()

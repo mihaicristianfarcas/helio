@@ -102,8 +102,9 @@ impl Metrics {
     } else {
         0.0
     };
-    /// A page's column.
-    pub const FORM: f32 = 640.0;
+    /// Every page's column, so the pages line up as the sidebar moves
+    /// between them; what is on a page fills it.
+    pub const PAGE: f32 = 700.0;
 }
 
 /// The order floating things paint in over the window (GPUI's `deferred`

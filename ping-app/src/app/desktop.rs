@@ -62,7 +62,7 @@ impl PingApp {
                 "desktop-page",
                 &self.page_scroll,
                 t,
-                pingpong_ui::Metrics::FORM + 60.0,
+                pingpong_ui::Metrics::PAGE,
                 div()
                     .flex()
                     .flex_col()

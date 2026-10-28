@@ -1028,10 +1028,14 @@ impl Render for PingApp {
 }
 
 impl PingApp {
-    /// Whether the host's sheets (a device's permissions, unpairing) open
-    /// over this page: the host's pages', and setup's pairing step's.
+    /// Whether the host's sheets (a device's permissions, unpairing, a
+    /// confirmation) open over this page: the host's pages', its settings'
+    /// and setup's pairing step's.
     fn shows_host_sheets(&self) -> bool {
-        matches!(self.page, Page::Host(_) | Page::Setup)
+        matches!(
+            self.page,
+            Page::Host(_) | Page::Settings(crate::settings::Tab::Hosting) | Page::Setup
+        )
     }
 
     /// The host's connection, while there is a host: its pages change with

@@ -95,7 +95,8 @@ const SETTINGS: [Nav; 7] = [
 ];
 
 /// This computer's pages while hosting is on; its one page while it is off.
-const HOST_PAGES: [Nav; 4] = [
+/// Its settings are the host's, in Settings → Hosting.
+const HOST_PAGES: [Nav; 3] = [
     nav(
         Page::Host(HostPage::Overview),
         "nav-host-overview",
@@ -107,12 +108,6 @@ const HOST_PAGES: [Nav; 4] = [
         "nav-host-devices",
         "Devices",
         IconName::Devices,
-    ),
-    nav(
-        Page::Host(HostPage::General),
-        "nav-host-settings",
-        "Settings",
-        IconName::Settings,
     ),
     nav(
         Page::Host(HostPage::Logs),
@@ -127,16 +122,6 @@ const HOSTING_OFF: Nav = nav(
     "Overview",
     IconName::Activity,
 );
-
-/// The row a page is shown under: the host's four settings pages are one.
-fn row_of(page: Page) -> Page {
-    match page {
-        Page::Host(HostPage::Video | HostPage::Network | HostPage::Agents) => {
-            Page::Host(HostPage::General)
-        }
-        page => page,
-    }
-}
 
 impl PingApp {
     /// The pages the sidebar lists now, in order (sessions after Agents).
@@ -166,7 +151,7 @@ impl PingApp {
 
     pub(super) fn sidebar(&mut self, t: Theme, cx: &mut Context<Self>) -> impl IntoElement {
         let page = self.page;
-        let shown = row_of(page);
+        let shown = page;
         let paired = self.model.items.iter().filter(|i| i.is_paired()).count();
         let glide = self.nav_glide.clone();
         let order = self.nav_pages();

@@ -103,6 +103,13 @@ impl PingApp {
                 self.render_agent_setup(t, window, cx),
             ),
         };
+        // The host's own settings of this kind, after the app's: only while
+        // hosting is on (a computer that only plays has none).
+        let hosted = self
+            .host
+            .clone()
+            .map(|h| h.update(cx, |h, cx| h.settings_for(tab, t, cx)))
+            .unwrap_or_default();
         div()
             .size_full()
             .flex()
@@ -112,7 +119,7 @@ impl PingApp {
                 "settings-page",
                 &self.page_scroll,
                 t,
-                pingpong_ui::Metrics::FORM + 60.0,
+                pingpong_ui::Metrics::PAGE,
                 div()
                     .flex()
                     .flex_col()
@@ -123,7 +130,8 @@ impl PingApp {
                         None,
                         t,
                     ))
-                    .child(body),
+                    .child(body)
+                    .children(hosted),
             ))
             .into_any_element()
     }
