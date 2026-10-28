@@ -306,13 +306,15 @@ impl PingApp {
             .flex()
             .flex_col()
             .child(
+                // The steps between two halves that move the window.
                 div()
                     .flex_none()
                     .h(px(Metrics::TOOLBAR))
                     .flex()
                     .items_center()
-                    .justify_center()
-                    .child(progress),
+                    .child(pingpong_ui::drag_area().flex_1().h_full())
+                    .child(progress)
+                    .child(pingpong_ui::drag_area().flex_1().h_full()),
             )
             .child(pingpong_ui::scrolled(
                 div()

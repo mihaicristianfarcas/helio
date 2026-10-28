@@ -12,6 +12,10 @@ use crate::app::PingApp;
 
 use super::{Act, Chat, ChatState, Item};
 
+/// The session's bar: as tall as the title bar's strip on a Mac, where it is
+/// that strip.
+const BAR: f32 = 44.0;
+
 pub(super) fn action_row(a: &Act, t: Theme) -> impl IntoElement {
     let glyph = if a.text.starts_with("type") {
         IconName::Type
@@ -146,18 +150,23 @@ impl PingApp {
 
         // Along the title bar: the session's title, and what can be done with
         // it. Its state, host and figures are the side panel's and the
-        // sidebar row's to say.
+        // sidebar row's to say. On Windows the title bar is the caption
+        // buttons' strip, and this its own row under it.
         let bar = div()
             .flex_none()
-            .h(px(pingpong_ui::Metrics::TOOLBAR))
-            .px(px(14.0))
+            .h(px(BAR))
             .pl(px(24.0))
+            .pr(px(14.0))
             .flex()
             .items_center()
             .gap(px(8.0))
             .child(
-                div()
+                // The title moves the window, as the rest of the strip.
+                pingpong_ui::drag_area()
                     .flex_1()
+                    .h_full()
+                    .flex()
+                    .items_center()
                     .min_w_0()
                     .overflow_hidden()
                     .whitespace_nowrap()
@@ -270,6 +279,7 @@ impl PingApp {
             .size_full()
             .flex()
             .flex_col()
+            .when(cfg!(windows), |d| d.child(pingpong_ui::toolbar_row([])))
             .child(bar)
             .child(pingpong_ui::hairline(t))
             .child(

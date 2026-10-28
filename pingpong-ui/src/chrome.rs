@@ -6,17 +6,34 @@
 //! The window's root paints nothing: the sidebar tints the glass with
 //! `Theme::sidebar`, the page column with `Theme::background` (setup with
 //! `Theme::reading`).
+//!
+//! The strips along the top are the title bar: where nothing is on them,
+//! they move the window ([`drag_area`]). On Windows the app draws the
+//! caption buttons too ([`caption_buttons`]); Windows itself moves,
+//! snaps and maximizes the window from them, as it does from its own title
+//! bar (GPUI's `WindowControlArea`).
 
-use gpui::{div, prelude::*, px, AnyElement, Div, ElementId, FontWeight, ScrollHandle, Stateful};
+use gpui::{
+    div, prelude::*, px, AnyElement, Div, ElementId, FontWeight, Pixels, ScrollHandle, Stateful,
+    Window, WindowControlArea,
+};
 
 use crate::focus::{focus_ring, scrolled};
 use crate::icon::{icon, IconName};
 use crate::motion::Glide;
 use crate::theme::{rgba, Metrics, Radius, Theme, Type};
 
-/// The sidebar's column: the title bar's lane (the traffic lights on a Mac;
-/// elsewhere the system's title bar is above, and a little air does), then
-/// what goes in it.
+/// The air above the sidebar's rows and below its foot, where nothing else
+/// sits there (no traffic lights).
+const SIDEBAR_EDGE: f32 = 14.0;
+/// The air the rows' list keeps above its first row.
+const NAV_TOP: f32 = 6.0;
+
+/// The sidebar's column: the title bar's lane, then what goes in it. On a
+/// Mac the lane holds the traffic lights; elsewhere (the caption buttons
+/// are over the page on Windows, the system's title bar above on Linux)
+/// the first row is as far from the top as the foot's line is from the
+/// bottom.
 pub fn sidebar(t: Theme) -> Div {
     div()
         .flex_none()
@@ -27,11 +44,100 @@ pub fn sidebar(t: Theme) -> Div {
         .bg(t.sidebar)
         .border_r_1()
         .border_color(t.hairline)
-        .child(div().flex_none().h(px(if cfg!(target_os = "macos") {
+        .child(drag_area().flex_none().h(px(if cfg!(target_os = "macos") {
             Metrics::TOOLBAR
         } else {
-            10.0
+            SIDEBAR_EDGE - NAV_TOP
         })))
+}
+
+/// Where the window is moved from: an empty part of a strip along the top.
+/// Nothing on it may be clickable: Windows takes a press there for its own
+/// (a move, a double-click maximizing).
+pub fn drag_area() -> Div {
+    div().window_control_area(WindowControlArea::Drag)
+}
+
+/// The caption buttons' height, as Windows 11 draws them.
+const CAPTION_HEIGHT: Pixels = px(32.0);
+
+/// Windows: minimize, maximize (or restore) and close at the window's top
+/// right, over everything (sheets too: the window can always be closed).
+/// Windows' own glyphs (Segoe Fluent Icons; Segoe MDL2 Assets before Windows
+/// 11), and its own red under the close button. Windows handles the presses
+/// and the maximize button's snap layouts. Elsewhere none.
+pub fn caption_buttons(window: &Window, t: Theme) -> Option<AnyElement> {
+    if !cfg!(windows) {
+        return None;
+    }
+    let font = if crate::glass::windows_build() >= 22000 {
+        "Segoe Fluent Icons"
+    } else {
+        "Segoe MDL2 Assets"
+    };
+    let ink = if window.is_window_active() {
+        t.primary
+    } else {
+        t.tertiary
+    };
+    let button = |id: &'static str, glyph: &'static str, area: WindowControlArea| {
+        let close = area == WindowControlArea::Close;
+        div()
+            .id(id)
+            // The strip under it moves the window; this one does not.
+            .occlude()
+            .window_control_area(area)
+            .w(px(Metrics::CAPTION_BUTTON))
+            .h_full()
+            .flex()
+            .items_center()
+            .justify_center()
+            .text_size(px(10.0))
+            .text_color(ink)
+            .hover(move |s| {
+                if close {
+                    // Windows 11's close red, with a white glyph.
+                    s.bg(crate::theme::hex(0xc42b1c, 1.0))
+                        .text_color(gpui::white())
+                } else {
+                    s.bg(t.hover)
+                }
+            })
+            .active(move |s| {
+                if close {
+                    s.bg(crate::theme::hex(0xc42b1c, 0.9))
+                        .text_color(gpui::white())
+                } else {
+                    s.bg(t.pressed)
+                }
+            })
+            .child(glyph)
+    };
+    Some(
+        div()
+            .absolute()
+            .top_0()
+            .right_0()
+            .h(CAPTION_HEIGHT)
+            .flex()
+            .font_family(font)
+            .child(button(
+                "caption-minimize",
+                "\u{e921}",
+                WindowControlArea::Min,
+            ))
+            .child(if window.is_maximized() {
+                button("caption-restore", "\u{e923}", WindowControlArea::Max)
+            } else {
+                button("caption-maximize", "\u{e922}", WindowControlArea::Max)
+            })
+            .child(button(
+                "caption-close",
+                "\u{e8bb}",
+                WindowControlArea::Close,
+            ))
+            .into_any_element(),
+    )
 }
 
 /// The sidebar's rows, the glass pill behind the one `selected` (its index
@@ -41,7 +147,7 @@ pub fn nav_list(glide: &Glide, selected: Option<usize>, t: Theme) -> Div {
         .flex_1()
         .min_h_0()
         .px(px(8.0))
-        .pt(px(6.0))
+        .pt(px(NAV_TOP))
         .flex()
         .flex_col()
         .gap(px(2.0))
@@ -124,7 +230,7 @@ pub fn sidebar_foot(t: Theme) -> Div {
     div()
         .flex_none()
         .px(px(17.0))
-        .pb(px(14.0))
+        .pb(px(SIDEBAR_EDGE))
         .pt(px(6.0))
         .text_size(px(12.0))
         .text_color(t.tertiary)
@@ -144,7 +250,7 @@ pub fn page(
         .size_full()
         .flex()
         .flex_col()
-        .child(toolbar.unwrap_or_else(|| div().flex_none().h(px(Metrics::TOOLBAR))))
+        .child(toolbar.unwrap_or_else(|| drag_area().flex_none().h(px(Metrics::TOOLBAR))))
         .child(scrolled(
             div()
                 .id(id)

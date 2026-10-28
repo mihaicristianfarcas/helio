@@ -6,10 +6,17 @@
 //!   `native::set_glass` keeps the blur to the pill's shapes, which a window
 //!   of pages has none of), and GPUI's alpha blending made "over"
 //!   ([`blend_alpha_over`]).
-//! - Windows: GPUI's acrylic (`SetWindowCompositionAttribute`, Windows 10
-//!   1809 and later), the nearest Windows has to blur behind a window. Mica
-//!   is Windows 11's own material, but it tints with the wallpaper rather
-//!   than blurring what is behind.
+//! - Windows 11 (2022 Update, build 22621, and later): the system's own
+//!   acrylic (`DWMWA_SYSTEMBACKDROP_TYPE`, `DWMSBT_TRANSIENTWINDOW`), set by
+//!   [`dress`] once the window is open. GPUI has none of its own: it is
+//!   asked for Mica, which makes it draw the window see-through over a
+//!   system backdrop, and the backdrop is then made acrylic. GPUI's own
+//!   blur, the older acrylic (`SetWindowCompositionAttribute`), thins out
+//!   where the window meets the screen's edge, until what is behind shows
+//!   nearly sharp there. Mica itself tints with the wallpaper rather than
+//!   blurring what is behind.
+//! - Windows 10 (1809 and later) and the first Windows 11: that older
+//!   acrylic, the nearest they have.
 //! - Linux: GPUI blurs through KDE's `org_kde_kwin_blur`, under Wayland,
 //!   where the compositor offers it: KWin does while it blurs (its blur
 //!   effect on, compositing with OpenGL), not when it draws with QPainter
@@ -77,11 +84,87 @@ fn compositor_blurs() -> bool {
 
 /// What a main window's background is: glass where [`supported`].
 pub fn window_background() -> WindowBackgroundAppearance {
-    if supported() {
-        WindowBackgroundAppearance::Blurred
-    } else {
-        WindowBackgroundAppearance::Opaque
+    if !supported() {
+        return WindowBackgroundAppearance::Opaque;
     }
+    #[cfg(windows)]
+    if windows_build() >= SYSTEM_BACKDROPS {
+        // Made acrylic by `dress`.
+        return WindowBackgroundAppearance::MicaBackdrop;
+    }
+    WindowBackgroundAppearance::Blurred
+}
+
+/// Windows 11 2022 Update: DWM's system backdrops.
+#[cfg(windows)]
+const SYSTEM_BACKDROPS: u32 = 22621;
+
+/// What a main window's glass needs once it is open: on Windows 11, the
+/// system's acrylic in place of the Mica GPUI asked for (see the module's
+/// words). Elsewhere nothing.
+pub fn dress(window: &gpui::Window) {
+    #[cfg(windows)]
+    {
+        use raw_window_handle::{HasWindowHandle, RawWindowHandle};
+        use windows::Win32::Foundation::HWND;
+        use windows::Win32::Graphics::Dwm::{
+            DwmSetWindowAttribute, DWMSBT_TRANSIENTWINDOW, DWMWA_SYSTEMBACKDROP_TYPE,
+        };
+
+        if window_background() != WindowBackgroundAppearance::MicaBackdrop {
+            return;
+        }
+        let Ok(handle) = HasWindowHandle::window_handle(window) else {
+            return;
+        };
+        let RawWindowHandle::Win32(h) = handle.as_raw() else {
+            return;
+        };
+        let hwnd = HWND(h.hwnd.get() as *mut _);
+        let backdrop = DWMSBT_TRANSIENTWINDOW;
+        // SAFETY: `hwnd` is this window's, open; the attribute takes a
+        // DWM_SYSTEMBACKDROP_TYPE, passed with its size.
+        let set = unsafe {
+            DwmSetWindowAttribute(
+                hwnd,
+                DWMWA_SYSTEMBACKDROP_TYPE,
+                &backdrop as *const _ as *const _,
+                std::mem::size_of_val(&backdrop) as u32,
+            )
+        };
+        if let Err(e) = set {
+            tracing::warn!(error = %e, "the window keeps Mica: no acrylic");
+        }
+    }
+    #[cfg(not(windows))]
+    let _ = window;
+}
+
+/// Windows' build number (22000 is Windows 11), once asked; 0 elsewhere.
+pub fn windows_build() -> u32 {
+    #[cfg(windows)]
+    {
+        use std::sync::OnceLock;
+        use windows::Wdk::System::SystemServices::RtlGetVersion;
+        use windows::Win32::System::SystemInformation::OSVERSIONINFOW;
+
+        static BUILD: OnceLock<u32> = OnceLock::new();
+        *BUILD.get_or_init(|| {
+            let mut info = OSVERSIONINFOW {
+                dwOSVersionInfoSize: std::mem::size_of::<OSVERSIONINFOW>() as u32,
+                ..Default::default()
+            };
+            // SAFETY: `info` is an OSVERSIONINFOW with its size filled in, as
+            // RtlGetVersion takes (unlike GetVersionEx, it says the real
+            // version whatever the program's manifest).
+            match unsafe { RtlGetVersion(&mut info) }.ok() {
+                Ok(()) => info.dwBuildNumber,
+                Err(_) => 0,
+            }
+        })
+    }
+    #[cfg(not(windows))]
+    0
 }
 
 /// GPUI blends alpha by adding it (its pipelines' destination alpha factor is
@@ -200,10 +283,12 @@ mod tests {
 
     #[test]
     fn glass_windows_blur_and_others_are_opaque() {
-        let expected = if supported() {
-            WindowBackgroundAppearance::Blurred
-        } else {
+        let expected = if !supported() {
             WindowBackgroundAppearance::Opaque
+        } else if cfg!(windows) && windows_build() >= 22621 {
+            WindowBackgroundAppearance::MicaBackdrop
+        } else {
+            WindowBackgroundAppearance::Blurred
         };
         assert_eq!(window_background(), expected);
         if cfg!(any(target_os = "macos", windows)) {

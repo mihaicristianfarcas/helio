@@ -36,7 +36,8 @@ action on a page. Light and dark follow the system
 | System | Window | Surfaces |
 |---|---|---|
 | macOS | `WindowBackgroundAppearance::Blurred`: an `NSVisualEffectView` under GPUI's view blurs what is behind the window; GPUI's Metal pipelines blend alpha "over" (`glass::blend_alpha_over`), so what fades in over the glass never hides the blur first | The theme's tints over the blur, exactly asides' |
-| Windows | `Blurred`: GPUI's acrylic (`SetWindowCompositionAttribute`, Windows 10 1809 and later) | The same tints |
+| Windows 11 (22H2, build 22621, and later) | The system's acrylic backdrop (`DWMSBT_TRANSIENTWINDOW`): GPUI is asked for Mica, which makes it draw the window see-through over a system backdrop, then `glass::dress` makes that backdrop acrylic. GPUI's own blur, the older acrylic, thins out where the window meets the screen's edge, until what is behind shows nearly sharp there | The same tints |
+| Windows 10 (1809 and later), Windows 11 21H2 | `Blurred`: GPUI's acrylic (`SetWindowCompositionAttribute`) | The same tints |
 | Linux, Wayland, where the compositor offers `org_kde_kwin_blur_manager` (KWin with its blur, compositing with OpenGL) | `Blurred`: KDE's `org_kde_kwin_blur`. The app asks the compositor's registry once, at the start | The same tints |
 | Linux, elsewhere (GNOME, X11, KWin drawing with QPainter) | Opaque: GPUI has no blur there, and a "blurred" window would only be see-through | The same colours, solid (`Theme::solid_surfaces`) |
 
@@ -51,6 +52,14 @@ stream's renderer draws video without blending, and its overlays blend
 alpha "over" already.
 
 ## The window
+
+The title bar is the window's own strip along the top, over the glass:
+where nothing is on it, it moves the window. On a Mac the traffic lights sit
+over the sidebar; on Windows the app draws minimize, maximize and close at
+the top right in Windows' own glyphs (`chrome::caption_buttons`), and
+Windows handles them as its own (snap layouts on maximize, the double-click
+maximizing), since its title bar would sit opaque and dark above the glass.
+Linux keeps the system's title bar.
 
 A sidebar on the glass, as asides': **Hosts**; **This computer**; **Agents**
 (**New Session**, the Agents page) and the open **Sessions**; the
