@@ -379,16 +379,6 @@ impl PingApp {
         if self.agents.host.is_empty() || !hosts.iter().any(|(n, _)| *n == self.agents.host) {
             self.agents.host = hosts.first().map(|h| h.0.clone()).unwrap_or_default();
         }
-        let trailing =
-            vec![
-                pingpong_ui::icon_button("agent-setup", IconName::Settings, "Agent setup", t)
-                    .on_click(
-                        cx.listener(|this, _, _, cx| {
-                            this.set_page(Page::Settings(Tab::Agents), cx)
-                        }),
-                    )
-                    .into_any_element(),
-            ];
         let body = if hosts.is_empty() {
             self.agents_first_host(t, cx)
         } else {
@@ -398,7 +388,7 @@ impl PingApp {
             .size_full()
             .flex()
             .flex_col()
-            .child(toolbar(trailing))
+            .child(toolbar([]))
             .child(body)
             .into_any_element()
     }
