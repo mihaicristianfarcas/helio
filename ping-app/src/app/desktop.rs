@@ -36,7 +36,7 @@ impl PingApp {
             format!("{} h {} min", secs / 3600, secs / 60 % 60)
         };
         let host = s.host.clone();
-        let (bar, beside) = pingpong_ui::page_actions(vec![
+        let actions = pingpong_ui::page_actions(vec![
             button("desk-show", "Show Window", t)
                 .icon(IconName::Display)
                 .on_click(cx.listener(move |this, _, _, _| {
@@ -57,7 +57,7 @@ impl PingApp {
             .size_full()
             .flex()
             .flex_col()
-            .child(bar)
+            .child(pingpong_ui::page_strip())
             .child(page_body(
                 "desktop-page",
                 &self.page_scroll,
@@ -70,7 +70,7 @@ impl PingApp {
                     .child(pingpong_ui::page_header(
                         host.clone(),
                         Some(format!("Your desktop session, for {since}.").into()),
-                        beside,
+                        Some(actions),
                         t,
                     ))
                     .child(pingpong_ui::section("", t).child(pingpong_ui::rows(

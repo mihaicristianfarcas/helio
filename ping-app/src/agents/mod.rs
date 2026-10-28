@@ -20,7 +20,7 @@ use pingpong_ui::{
     Metrics, Radius, TextField, Theme, Type,
 };
 
-use crate::app::{page_body, toolbar, Page, PingApp};
+use crate::app::{page_body, Page, PingApp};
 use crate::chat::{provider_name, Chat};
 use crate::settings::Tab;
 
@@ -388,7 +388,7 @@ impl PingApp {
             .size_full()
             .flex()
             .flex_col()
-            .child(toolbar([]))
+            .child(pingpong_ui::page_strip())
             .child(body)
             .into_any_element()
     }

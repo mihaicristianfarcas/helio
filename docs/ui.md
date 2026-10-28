@@ -104,9 +104,9 @@ the logs, reporting an issue).
   place, and a computer that only plays has none of the host's.
 
 Every page has the same column (`Metrics::PAGE`), and what is on it fills
-the column. On Windows a page's actions (Add Host, Copy) sit beside its
-title, as the caption buttons end the strip along the top; on a Mac they
-are in that strip.
+the column. On every system a page's actions (Add Host, Copy) sit beside
+its title, not in the strip along the top: on Windows the caption buttons
+end that strip, and on Linux the system's title bar is above it.
 - **Agents** starts agent sessions; **Sessions** lists them and your own
   desktop streams ([ai-agents.md](ai-agents.md#2-work-with-it-sessions)).
 - **Settings**, each row naming a setting and saying in a line what it does:

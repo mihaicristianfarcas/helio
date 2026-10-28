@@ -126,7 +126,7 @@ impl PingApp {
                     )),
             );
         let scroll = self.page_scroll.clone();
-        pingpong_ui::page("hosting-page", &scroll, None, Metrics::PAGE, t, content)
+        pingpong_ui::page("hosting-page", &scroll, Metrics::PAGE, t, content)
     }
 
     /// Hosting's switch, with what it is doing, or why it did not.
