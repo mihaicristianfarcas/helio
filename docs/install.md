@@ -99,11 +99,11 @@ menu bar. macOS asks for Screen Recording and Accessibility for **Pong
 Host**, the host inside Ping, the first time (see
 [Hosting on macOS](#hosting-on-macos)).
 
-**Install and Restart** in Ping, when it says there is an update, runs
-`brew upgrade --cask ping` for you and keeps hosting as it was
-([usage.md](usage.md#updates)). Run by hand, `brew upgrade` turns hosting
-off (the cask's uninstall step stops the host): turn it on again in Ping.
-The app is signed with a Developer ID and notarized by Apple.
+`brew upgrade --cask ping` (or a plain `brew upgrade`) updates it, and so
+does **Install and Restart** in Ping, which runs that command for you
+([usage.md](usage.md#updates)). Either way hosting stays as it was: the
+host sees the new app and restarts on it 15 s later. The app is signed
+with a Developer ID and notarized by Apple.
 
 ## Building from source
 
@@ -286,8 +286,8 @@ anywhere ([networking.md](networking.md)). Next: [usage.md](usage.md).
 
 | | |
 |---|---|
-| Homebrew | `brew uninstall --cask ping`: it turns hosting off (`pong disable`: the host stopped, its LaunchAgent and its copy removed), removes Ping's start at login, and quits Ping; `--zap` also deletes the data folders, Ping's and the host's |
-| macOS | Turn hosting off in Ping (or run `pong disable` from inside it: `"/Applications/Ping.app/Contents/Helpers/Pong Host.app/Contents/MacOS/pong" disable`), quit Ping, then delete Ping.app. Deleted with hosting on, the host notices within a minute and turns hosting off itself. Your data is in `~/Library/Application Support/Ping` and `~/Library/Application Support/Pong` (the host's identity and pairings) |
+| Homebrew | `brew uninstall --cask ping`: it quits Ping, and the host, finding the app gone, turns hosting off itself 15 s later (its LaunchAgent and copy removed); `--zap` stops it at once and also deletes the data folders, Ping's and the host's, and Ping's start at login |
+| macOS | Turn hosting off in Ping (or run `pong disable` from inside it: `"/Applications/Ping.app/Contents/Helpers/Pong Host.app/Contents/MacOS/pong" disable`), quit Ping, then delete Ping.app. Deleted with hosting on, the host notices and, 15 s later, turns hosting off itself. Your data is in `~/Library/Application Support/Ping` and `~/Library/Application Support/Pong` (the host's identity and pairings) |
 | Windows | **Settings > Apps > Installed apps**, **Ping**, **Uninstall** (or `install.ps1 -Uninstall` in `%LOCALAPPDATA%\Programs\Ping`). While hosting is on, it turns it off first (`pong disable`: PongService, its firewall rules and the host's copy), and Windows asks for an administrator. It leaves your hosts and settings, and the host's identity and pairings: delete `%APPDATA%\Ping` and `C:\ProgramData\Pong` too to remove them. A copy run from its extracted folder: turn hosting off in it, then delete the folder |
 | Linux | `install.sh --uninstall` from the download, or `tools/linux/install-apps --uninstall`: it turns hosting off first (`pong disable`), then removes the programs, the host's unit and the launcher entry. Then `~/.config/ping` and `~/.config/pong` |
 

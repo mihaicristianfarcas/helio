@@ -15,10 +15,11 @@
 //!   hosting is on, `pong enable` runs again as an administrator (Windows
 //!   asks): the service runs the engine's own copy in Program Files, which
 //!   only that replaces.
-//! - **macOS**: the app bundle is swapped for the new one, and the host,
-//!   which runs from the helper inside it, restarted. A copy Homebrew
+//! - **macOS**: the app bundle is swapped for the new one; a copy Homebrew
 //!   installed is upgraded by Homebrew (`brew upgrade --cask`), so that
-//!   Homebrew's record stays true.
+//!   Homebrew's record stays true. Either way the host, which runs from a
+//!   copy of the helper inside the app, sees the app replaced and restarts
+//!   on its new helper (`pong/src/hosting/mac.rs`).
 //! - **Linux**: the archive's `install.sh`, as when it was installed; it
 //!   restarts a host that runs.
 //!

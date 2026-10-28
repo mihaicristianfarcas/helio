@@ -111,13 +111,34 @@ outside, it is Pong Host's. Accessibility was the helper's either way
 refuses (`pong/src/hosting/mac.rs`). An update of Ping copies the new
 helper and restarts the host while hosting is on.
 
-The copy would outlive the app: Ping.app dragged to the Trash would leave
-a host that starts at every login with nothing to turn it off. So the
-LaunchAgent names the app the copy came from (`pong host --app PATH`), and
-the host turns hosting off itself when that app is gone: at start, and
-while it runs, a minute after the app was moved or deleted (kqueue tells
-it; an update's new app in the same place within that minute keeps it
-running).
+The copy has to follow the app. So the LaunchAgent names the app the copy
+came from (`pong host --app PATH`), and the host watches it: kqueue says
+when the app is moved, renamed or deleted, or what is in it changes
+(Homebrew's upgrade keeps the app folder and replaces its contents), and
+15 s later the host looks again (every update puts the new app in place
+within a few seconds).
+
+- **Replaced** (Homebrew's upgrade, the app's own update, a new download
+  dragged over it): the host checks the new app's helper meets the
+  running copy's designated requirement (its code-signing identity, by
+  which macOS keeps the permissions it granted) and, when the app is
+  still marked as downloaded, that Gatekeeper accepts it (`spctl
+  --assess`: its notarization). Then it copies the helper over its own,
+  clears that copy's quarantine flag (an app Homebrew upgraded comes
+  marked as never opened, and launchd would wait on Gatekeeper's dialog),
+  and restarts on it. Signed otherwise (a development build over a
+  release) or refused, the host goes on as it was, and its log says why.
+  The same check runs at start, for an app replaced while no host ran.
+- **Gone** (uninstalled, dragged to the Trash): the host turns hosting off
+  itself, its LaunchAgent and copy removed, rather than start at every
+  login with no app to turn it off; at start too.
+
+So every update keeps hosting as it was, with nothing asked of the
+package manager. Homebrew could not do it: it upgrades a cask by
+uninstalling and installing it, tells neither step which it is doing, and
+runs a cask's install steps in a sandbox with a home folder of its own
+(`tools/update-casks`). `brew uninstall` quits Ping, and the host stops by
+itself 15 s later; `brew uninstall --zap` stops it at once.
 
 While hosting is on, Ping shows the host's icon in the menu bar: what the
 host does, a device asking to pair (a notification says so too), the

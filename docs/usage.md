@@ -297,8 +297,8 @@ How each system installs it:
 
 | | The app | The host, while hosting is on |
 |---|---|---|
-| macOS | The app is replaced where it is (Applications), the host inside it too | Restarts from the new app |
-| macOS, installed with Homebrew | `brew upgrade --cask ping`, run for you | Started again from the new app |
+| macOS | The app is replaced where it is (Applications), the host inside it too | Sees the new app and restarts on it 15 s later |
+| macOS, installed with Homebrew | `brew upgrade --cask ping`, run for you | Sees the new app and restarts on it 15 s later |
 | Windows | The app's files, `pong.exe` among them, are replaced in its folder; Settings > Apps shows the new version | `pong enable` runs again from the new files: Windows asks for an administrator's permission, and PongService restarts on the new engine. Declined, the host keeps the engine it had until hosting is turned off and on |
 | Linux | The new release's `install.sh` (into `~/.local/bin`) | The host's user service restarts |
 

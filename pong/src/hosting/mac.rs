@@ -21,16 +21,25 @@
 //! the helper either way (macOS 26.5, Developer ID and development
 //! signatures alike).
 //!
-//! A copy outside the app outlives it: Ping.app dragged to the Trash would
-//! leave a host that starts at every login with no app to turn it off. So
-//! the agent names the app the copy came from (`pong host --app PATH`), and
-//! the host turns hosting off when that app is gone: at start, and while
-//! it runs, a minute after the app was moved or deleted ([`watch_app`]).
+//! A copy outside the app has to follow it. So the agent names the app the
+//! copy came from (`pong host --app PATH`), and the host watches that app
+//! ([`watch_app`]):
+//!
+//! - replaced (an update: Homebrew's, the app's own, a download dragged over
+//!   it), the host moves onto the new app's helper, once that is known to
+//!   be signed as the running copy is and Gatekeeper accepts it, and
+//!   restarts on it;
+//! - gone (uninstalled, dragged to the Trash), the host turns hosting off,
+//!   rather than start at every login with no app to turn it off.
+//!
+//! Every update path ends the same way, with hosting as it was, and needs
+//! nothing of the package manager: Homebrew upgrades a cask by uninstalling
+//! and installing it, tells neither step which it is doing, and runs its
+//! install steps in a sandbox with a home folder of its own, where no
+//! LaunchAgent could be loaded (`tools/update-casks` says more).
 //!
 //! The agent is in `~/Library/LaunchAgents` and the copy in the user's own
-//! data folder: nothing here needs an administrator. The Homebrew cask's
-//! uninstall runs `pong disable`, then unloads the same label
-//! (`tools/update-casks`).
+//! data folder: nothing here needs an administrator.
 
 use std::path::{Path, PathBuf};
 use std::process::Output;
@@ -177,18 +186,21 @@ pub fn enable() -> Result<String, Error> {
     ))
 }
 
-/// After the app was moved or deleted, how long the host waits before it
-/// looks again: an update puts the new app in place by renames, a moment
-/// apart, and replacing it in the Finder is one; a minute is far longer
-/// than either, and short enough that a host whose app is gone stops soon
-/// after.
-const APP_GONE_AFTER: Duration = Duration::from_secs(60);
+/// After the app was changed, how long the host waits before it looks
+/// again. Updates put the new app in place a moment after the old one
+/// goes: Homebrew's upgrade deletes what is in the app folder and moves the
+/// new app's contents in (the whole upgrade took 2 to 3 s, the download's
+/// check included, Homebrew 7.0 on macOS 26.5), the app's own update swaps
+/// the folder by two renames, and replacing it in the Finder is one. 15 s
+/// is far longer than any of those, and short enough that a host whose app
+/// was uninstalled stops soon after.
+const APP_GONE_AFTER: Duration = Duration::from_secs(15);
 
-/// `pong host --app APP`, started by the agent: turn hosting off if APP is
-/// gone, now or later. Returns false when it is gone already (the host
-/// does not start); otherwise watches it on a thread of its own. Without
-/// `--app` (a host started by hand, a helper on its own): true, and
-/// nothing is watched.
+/// `pong host --app APP`, started by the agent: follow APP, or turn hosting
+/// off if it is gone, now or later. Returns false when this process is not
+/// to go on (APP gone, or this host replaced by APP's newer helper);
+/// otherwise watches APP on a thread of its own. Without `--app` (a host
+/// started by hand, a helper on its own): true, and nothing is watched.
 pub fn watch_app(args: &[String]) -> bool {
     let Some(app) = args
         .iter()
@@ -202,11 +214,22 @@ pub fn watch_app(args: &[String]) -> bool {
         retire(&app);
         return false;
     }
+    // Updated while no host ran (logged out, say): onto the new helper
+    // before anything listens, in this same process.
+    if !same_program(&helper_in(&app), &installed()) && follow(&app) {
+        restart_in_place(args);
+    }
     let spawned = std::thread::Builder::new()
         .name("app-watch".into())
         .spawn(move || loop {
-            if !wait_for_move(&app) {
-                tracing::warn!(app = %app.display(), "cannot watch the app the host came with");
+            if !wait_for_change(&app) {
+                // Gone before it could be watched again (just after an
+                // update the host did not follow, say).
+                if !app.is_dir() {
+                    retire(&app);
+                } else {
+                    tracing::warn!(app = %app.display(), "cannot watch the app the host came with");
+                }
                 return;
             }
             // A single wait until it is due to look again, not polling.
@@ -215,7 +238,18 @@ pub fn watch_app(args: &[String]) -> bool {
                 retire(&app);
                 return;
             }
-            tracing::info!(app = %app.display(), "the app was replaced: the host goes on");
+            // The same build put back (a download dragged over it again):
+            // nothing to restart for.
+            if same_program(&helper_in(&app), &installed()) {
+                continue;
+            }
+            if follow(&app) {
+                // SAFETY: a signal to this process, which handles SIGTERM
+                // by stopping the host as `pong disable` would; launchd
+                // (KeepAlive) then starts the new copy.
+                unsafe { libc::kill(libc::getpid(), libc::SIGTERM) };
+                return;
+            }
         });
     if let Err(e) = spawned {
         tracing::warn!(error = %e, "cannot watch the app the host came with");
@@ -223,9 +257,14 @@ pub fn watch_app(args: &[String]) -> bool {
     true
 }
 
-/// Block until `path` (a folder) is moved, renamed or deleted; false if it
-/// cannot be watched. kqueue says when, so nothing is polled.
-fn wait_for_move(path: &Path) -> bool {
+/// Block until `path` (a folder) is moved, renamed or deleted, or what is
+/// in it changes; false if it cannot be watched. kqueue says when, so
+/// nothing is polled. What is in it: Homebrew's upgrade keeps the app
+/// folder and replaces its `Contents` (Homebrew's `cask/artifact/moved.rb`:
+/// macOS takes a deleted app folder for an uninstalled app), so the folder
+/// is neither moved nor deleted, only written (`NOTE_WRITE`: an entry
+/// removed or added).
+fn wait_for_change(path: &Path) -> bool {
     use std::os::unix::ffi::OsStrExt;
     let Ok(c_path) = std::ffi::CString::new(path.as_os_str().as_bytes()) else {
         return false;
@@ -247,7 +286,7 @@ fn wait_for_move(path: &Path) -> bool {
             ident: fd as libc::uintptr_t,
             filter: libc::EVFILT_VNODE,
             flags: libc::EV_ADD | libc::EV_CLEAR,
-            fflags: libc::NOTE_DELETE | libc::NOTE_RENAME | libc::NOTE_REVOKE,
+            fflags: libc::NOTE_DELETE | libc::NOTE_RENAME | libc::NOTE_REVOKE | libc::NOTE_WRITE,
             data: 0,
             udata: std::ptr::null_mut(),
         };
@@ -262,6 +301,141 @@ fn wait_for_move(path: &Path) -> bool {
         libc::close(fd);
         n == 1 && event.flags & libc::EV_ERROR == 0
     }
+}
+
+/// The helper inside `app`, which the host's copy is made from (named as
+/// the copy is).
+fn helper_in(app: &Path) -> PathBuf {
+    app.join("Contents/Helpers").join(COPY)
+}
+
+/// Whether the bundles `a` and `b` have the same program, byte for byte (a
+/// few MB each, read at start and when the app was replaced).
+fn same_program(a: &Path, b: &Path) -> bool {
+    let program = |bundle: &Path| std::fs::read(bundle.join("Contents/MacOS/pong")).ok();
+    matches!((program(a), program(b)), (Some(a), Some(b)) if a == b)
+}
+
+/// What `bundle`'s signature requires of code that is to count as it: its
+/// designated requirement (`codesign -d -r-`), the one macOS keeps TCC's
+/// grants by.
+fn requirement_of(bundle: &Path) -> Result<String, String> {
+    let out = std::process::Command::new("/usr/bin/codesign")
+        .args(["-d", "-r-"])
+        .arg(bundle)
+        .output()
+        .map_err(|e| format!("codesign did not run: {e}"))?;
+    let text = format!(
+        "{}{}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+    designated(&text).ok_or_else(|| format!("{} has no designated requirement", bundle.display()))
+}
+
+/// The designated requirement in what `codesign -d -r-` printed.
+fn designated(said: &str) -> Option<String> {
+    said.lines()
+        .find_map(|l| l.trim().strip_prefix("designated => "))
+        .map(str::to_string)
+        .filter(|r| !r.is_empty())
+}
+
+/// Whether `bundle` is whole and meets `requirement`.
+fn satisfies(bundle: &Path, requirement: &str) -> Result<(), String> {
+    let out = std::process::Command::new("/usr/bin/codesign")
+        .args(["--verify", "--strict", "-R"])
+        .arg(format!("={requirement}"))
+        .arg(bundle)
+        .output()
+        .map_err(|e| format!("codesign did not run: {e}"))?;
+    if out.status.success() {
+        Ok(())
+    } else {
+        Err(said(&out))
+    }
+}
+
+/// Whether `path` is still marked as downloaded and never opened (its
+/// quarantine flag), which has Gatekeeper check it before it runs.
+fn quarantined(path: &Path) -> bool {
+    std::process::Command::new("/usr/bin/xattr")
+        .args(["-p", "com.apple.quarantine"])
+        .arg(path)
+        .output()
+        .is_ok_and(|out| out.status.success())
+}
+
+/// Gatekeeper's verdict on `app`, when its `helper` came in a download no
+/// one has opened (quarantined, as Homebrew's upgrade leaves it): what
+/// opening it would have checked beyond the signature, its notarization
+/// among it. The app, not the helper: the app carries the stapled ticket,
+/// so this holds offline too (0.6 s on this Mac, macOS 26.5).
+fn gatekeeper_accepts(app: &Path, helper: &Path) -> Result<(), String> {
+    if !quarantined(helper) {
+        return Ok(());
+    }
+    let out = std::process::Command::new("/usr/sbin/spctl")
+        .args(["--assess", "--type", "execute"])
+        .arg(app)
+        .output()
+        .map_err(|e| format!("spctl did not run: {e}"))?;
+    if out.status.success() {
+        Ok(())
+    } else {
+        Err(format!("Gatekeeper refuses it: {}", said(&out)))
+    }
+}
+
+/// The app at `app` replaced (an update): its helper copied over the
+/// host's copy, if it meets the running copy's designated requirement (so
+/// it is the same app's, and keeps the permissions macOS granted by that
+/// requirement) and Gatekeeper accepts the app. The copy's quarantine flag
+/// then goes, since Gatekeeper has had its say: launchd would otherwise
+/// wait on Gatekeeper's dialog for it, which no one sees for a host
+/// launchd starts (an app Homebrew upgraded comes marked as never opened).
+/// Whether the copy was replaced: the caller restarts the host on it. Not:
+/// the host goes on as it is, and the log says why.
+fn follow(app: &Path) -> bool {
+    let helper = helper_in(app);
+    let copy = installed();
+    let checked = requirement_of(&copy)
+        .and_then(|r| satisfies(&helper, &r))
+        .and_then(|()| gatekeeper_accepts(app, &helper));
+    if let Err(why) = checked {
+        tracing::warn!(
+            app = %app.display(),
+            why,
+            "the app was replaced, but its host is not one this host may run: \
+                the host goes on as it is"
+        );
+        return false;
+    }
+    if let Err(e) = copy_bundle(&helper, &copy) {
+        tracing::warn!(error = e, "the app was replaced; its host was not copied");
+        return false;
+    }
+    let cleared = std::process::Command::new("/usr/bin/xattr")
+        .args(["-dr", "com.apple.quarantine"])
+        .arg(&copy)
+        .status();
+    if !cleared.is_ok_and(|s| s.success()) {
+        tracing::warn!("the host's new copy keeps its quarantine flag");
+    }
+    tracing::info!(app = %app.display(), "the app was replaced: the host restarts on its helper");
+    true
+}
+
+/// Run the host's copy again in this process (exec), with `args`: at
+/// start, before anything listens, launchd sees the same process.
+fn restart_in_place(args: &[String]) {
+    use std::os::unix::process::CommandExt;
+    let program = installed().join("Contents/MacOS/pong");
+    let e = std::process::Command::new(&program)
+        .arg("host")
+        .args(args.iter().skip_while(|a| *a != "--app"))
+        .exec();
+    tracing::warn!(error = %e, "the host's new copy did not start; this one goes on");
 }
 
 /// Hosting off from inside the host, its app gone: the agent's file and
@@ -380,5 +554,27 @@ pub fn state() -> State {
         ),
         Ok(_) => State::Off,
         Err(e) => State::Failed(e),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::designated;
+
+    #[test]
+    fn the_requirement_a_new_host_must_meet_is_read_from_codesign() {
+        let said = "Executable=/A/Pong Host.app/Contents/MacOS/pong\n\
+            designated => identifier \"dev.pingpong.Pong\" and anchor apple generic and \
+            certificate leaf[subject.OU] = \"ABCDE12345\"\n";
+        assert_eq!(
+            designated(said).as_deref(),
+            Some(
+                "identifier \"dev.pingpong.Pong\" and anchor apple generic and \
+                 certificate leaf[subject.OU] = \"ABCDE12345\""
+            )
+        );
+        // Unsigned, or codesign's complaint instead.
+        assert_eq!(designated("Executable=/x\n"), None);
+        assert_eq!(designated("/x: code object is not signed at all\n"), None);
     }
 }
