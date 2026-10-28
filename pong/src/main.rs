@@ -169,16 +169,22 @@ fn main() -> ExitCode {
     // the hosting switch and its status, which the app runs, unelevated for
     // status and often before the host ever ran: a folder this created
     // would be that user's own.
-    if !matches!(command, "clipboard-agent" | "enable" | "disable" | "status") {
-        private::secure_data_dir(&dir);
+    let secured = if !matches!(command, "clipboard-agent" | "enable" | "disable" | "status") {
+        private::secure_data_dir(&dir)
+    } else {
+        None
+    };
+    // The host and the service log it; any other command says it now.
+    if let (Some(said), false) = (&secured, matches!(command, "host" | "service")) {
+        eprintln!("{said}");
     }
     match command {
         // Clipboard sharing as the signed-in user, for the host (Windows).
         #[cfg(windows)]
         "clipboard-agent" => clipagent::run(&args),
-        "host" => run_host(dir, opened_by_hand),
+        "host" => run_host(dir, opened_by_hand, secured),
         #[cfg(windows)]
-        "service" => run_service(&dir),
+        "service" => run_service(&dir, secured),
         "enable" => hosting::switch(true),
         "disable" => hosting::switch(false),
         "status" => hosting::print_status(&dir, args.iter().any(|a| a == "--json")),
@@ -206,9 +212,13 @@ fn fail(e: impl std::fmt::Display) -> ExitCode {
 
 /// `pong host`: run the host in this session until it is asked to stop.
 /// `opened_by_hand`: Pong.app opened from the Finder (a Mac), which brings
-/// its icon up too.
-fn run_host(dir: std::path::PathBuf, opened_by_hand: bool) -> ExitCode {
+/// its icon up too. `secured`: what making the data folder private did
+/// that the log should say.
+fn run_host(dir: std::path::PathBuf, opened_by_hand: bool, secured: Option<String>) -> ExitCode {
     let _guard = init_logging(&dir);
+    if let Some(said) = secured {
+        tracing::warn!("{said}");
+    }
     // Before the host: one already running (the LaunchAgent's) makes this
     // one fail to start, and the icon is still what was asked for.
     #[cfg(target_os = "macos")]
@@ -262,8 +272,11 @@ fn run_host(dir: std::path::PathBuf, opened_by_hand: bool) -> ExitCode {
 
 /// `pong service`: the Windows service, which keeps `pong host` running.
 #[cfg(windows)]
-fn run_service(dir: &std::path::Path) -> ExitCode {
+fn run_service(dir: &std::path::Path, secured: Option<String>) -> ExitCode {
     let _guard = init_logging_named(dir, "pong-service.log");
+    if let Some(said) = secured {
+        tracing::warn!("{said}");
+    }
     match service::run() {
         Ok(()) => ExitCode::SUCCESS,
         Err(e) => {
