@@ -97,17 +97,18 @@ fn host() -> Result<(PathBuf, PathBuf), String> {
 }
 
 /// `bundle` copied to `to`, replacing what was there: ditto, which keeps
-/// the bundle's signature as it is, without the download's quarantine (the
-/// app it comes from has been opened, and so checked, already). Copied
-/// beside first and renamed into place, so a copy that broke off leaves
-/// none half made.
+/// the bundle's signature as it is. The copy also keeps the app's
+/// quarantine flag, which by then says the user opened that app (a process
+/// run from a quarantined file passes the flag on to the files it writes,
+/// `--noqtn` or not): launchd runs it without asking (macOS 26.5, installed
+/// by Homebrew). Copied beside first and renamed into place, so a copy that
+/// broke off leaves none half made.
 fn copy_bundle(bundle: &Path, to: &Path) -> Result<(), String> {
     let dir = to.parent().ok_or("the host's folder is unknown")?;
     std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
     let new = dir.join(format!(".{COPY}.new"));
     let _ = std::fs::remove_dir_all(&new);
     let out = std::process::Command::new("/usr/bin/ditto")
-        .arg("--noqtn")
         .arg(bundle)
         .arg(&new)
         .output()
