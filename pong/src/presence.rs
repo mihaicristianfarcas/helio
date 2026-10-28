@@ -11,6 +11,11 @@
 //! - a client that wants to connect now publishes an intent; the host answers
 //!   with handshake initiations towards it at once (the slower path, for
 //!   when the warm one did not hold).
+//!
+//! All of it only while internet access is on (`internet_access`): off, the
+//! host is not on the DHT at all (it leaves it when the setting goes off),
+//! asks no STUN server, and maps no port; it is reachable on the local
+//! network alone.
 
 use std::collections::HashMap;
 use std::net::SocketAddr;
@@ -51,15 +56,8 @@ pub fn run(host: Arc<Host>) {
     let Some(secret) = host.rendezvous.secret else {
         return;
     };
-    host.stun.resolve_servers();
-    let rv = match Rendezvous::join() {
-        Ok(r) => r,
-        Err(e) => {
-            tracing::warn!(error = %e, "cannot join the DHT; clients can only connect from \
-                the local network");
-            return;
-        }
-    };
+    // The DHT, joined while internet access is on.
+    let mut dht: Option<Rendezvous> = None;
     let port = host.endpoint.local_port();
     let mut published: Option<(Vec<SocketAddr>, Instant)> = None;
     let mut last_probe: Option<Instant> = None;
@@ -77,9 +75,28 @@ pub fn run(host: Arc<Host>) {
         };
         if !internet {
             mapping.release(&host);
+            if dht.take().is_some() {
+                tracing::info!("internet access off: left the DHT");
+                published = None;
+                present.clear();
+            }
             std::thread::sleep(IDLE);
             continue;
         }
+        let rv = match &mut dht {
+            Some(rv) => rv,
+            empty => {
+                host.stun.resolve_servers();
+                match Rendezvous::join() {
+                    Ok(rv) => empty.insert(rv),
+                    Err(e) => {
+                        tracing::warn!(error = %e, "cannot join the DHT; clients can only \
+                            connect from the local network");
+                        return;
+                    }
+                }
+            }
+        };
         if want_mapping {
             mapping.keep(&host, port);
         } else {
@@ -91,6 +108,11 @@ pub fn run(host: Arc<Host>) {
                 let _ = host.endpoint.send_raw(d, to);
             });
             std::thread::sleep(Duration::from_millis(800));
+        }
+        // Turned off meanwhile: publish nothing more (the top of the loop
+        // leaves the DHT).
+        if !host.config.read().internet_access {
+            continue;
         }
 
         let mut endpoints = host.stun.public();

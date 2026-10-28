@@ -85,6 +85,11 @@ app or another process (`ping stream`): its handshake would replace that
 stream's keys on the host. Streams hold `tunnel.lock` in the data folder,
 shared; the probe takes it alone or waits for the next poll.
 
+With internet access off (**Allow streaming over the internet**,
+`internet_access`), the host is not on the DHT at all, asks no STUN server
+and maps no port: it leaves the DHT when the setting goes off, and joins it
+again when it comes back on, without a restart.
+
 ### Port mapping
 
 With internet access on, Pong also asks the router to forward the tunnel's
