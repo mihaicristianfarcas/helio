@@ -37,8 +37,8 @@ action on a page. Light and dark follow the system
 |---|---|---|
 | macOS | `WindowBackgroundAppearance::Blurred`: an `NSVisualEffectView` under GPUI's view blurs what is behind the window; GPUI's Metal pipelines blend alpha "over" (`glass::blend_alpha_over`), so what fades in over the glass never hides the blur first | The theme's tints over the blur, exactly asides' |
 | Windows | `Blurred`: GPUI's acrylic (`SetWindowCompositionAttribute`, Windows 10 1809 and later) | The same tints |
-| Linux, KDE Plasma on Wayland | `Blurred`: KDE's `org_kde_kwin_blur` | The same tints |
-| Linux, elsewhere (GNOME, X11) | Opaque: GPUI has no blur there, and a "blurred" window would only be see-through | The same colours, solid (`Theme::solid_surfaces`) |
+| Linux, Wayland, where the compositor offers `org_kde_kwin_blur_manager` (KWin with its blur, compositing with OpenGL) | `Blurred`: KDE's `org_kde_kwin_blur`. The app asks the compositor's registry once, at the start | The same tints |
+| Linux, elsewhere (GNOME, X11, KWin drawing with QPainter) | Opaque: GPUI has no blur there, and a "blurred" window would only be see-through | The same colours, solid (`Theme::solid_surfaces`) |
 
 No GPUI shadows on glass: under a translucent element a shadow fills under
 it too, and turns it near black. Menus, tooltips and sheets are solid, and

@@ -29,6 +29,9 @@ objc2 = "0.6"
 objc2-foundation = { version = "0.3", features = ["std", "NSString", "NSData", "NSGeometry", "NSDictionary", "NSArray"] }
 objc2-app-kit = { version = "0.3", features = ["std", "NSApplication", "NSResponder", "NSRunningApplication", "NSEvent", "NSStatusBar", "NSStatusItem", "NSStatusBarButton", "NSButton", "NSControl", "NSView", "NSMenu", "NSMenuItem", "NSImage", "NSImageRep", "NSBitmapImageRep"] }
 
+[target.'cfg(target_os = "linux")'.dependencies]
+wayland-client = "0.31"
+
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.61", features = [
     "Win32_Foundation",
