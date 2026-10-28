@@ -207,6 +207,12 @@ changed or otherwise-signed engine, including one whose certificate shares
 only the common name. The feature does not build without the publisher; a
 debug build never requires the signature.
 
+An MSVC build of `pong.exe` is linked with `/DEPENDENTLOADFLAG:0x800`
+(`pong/build.rs`): the DLLs it imports load from System32 only, never from
+beside it, which matters when `pong enable` runs elevated from a folder its
+user can write to. A MinGW cross-build (`tools/xcheck-windows`) cannot set
+this; use one for checks, not for an install.
+
 A **version** is released by merging the change that sets it: the
 workspace's version in `Cargo.toml` (`[workspace.package]`), which every
 program has. When a push to `main` has a version with no `vVERSION` tag

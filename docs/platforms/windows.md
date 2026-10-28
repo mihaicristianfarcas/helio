@@ -32,8 +32,11 @@ Administrators can change it, checks the copy's Authenticode signature, and
 registers the service, quoted, on the copy (`pong/src/hosting/windows.rs`).
 The service, and the host when it starts the clipboard helper as the
 signed-in user, launch nothing else. Pong loads DLLs only from System32 and
-from beside `pong.exe`, never from `PATH`. `pong disable` removes the
-service, its firewall rules and the copy.
+from beside `pong.exe`, never from `PATH`; the DLLs `pong.exe` imports,
+loaded before it runs, from System32 alone (`pong/build.rs`), so a
+`dwmapi.dll` put beside a `pong.exe` in a user's folder is ignored even when
+`pong enable` runs there elevated. `pong disable` removes the service, its
+firewall rules and the copy.
 
 State lives in `C:\ProgramData\Pong\`: `config.toml`, the host's identity,
 paired clients, the web UI's certificate and accounts, and `logs\`. The host
