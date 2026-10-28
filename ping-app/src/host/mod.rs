@@ -1,46 +1,44 @@
-//! Pong's window: the host at a glance (the session, with its numbers; an
-//! agent's, with its controls), the devices (pairing requests first), the
-//! settings, the log. What the web UI does, native, for this computer.
+//! This computer: the host on it, as Pong's window showed it, now pages of
+//! the one window (This computer in the sidebar). The host at a glance (the
+//! session, with its numbers; an agent's, with its controls), the devices
+//! (pairing requests first), the host's settings, its log. What the web UI
+//! does, native, for this computer.
 //!
-//! The window comes and goes; what it shows (the host's state, the update
-//! check) is the app's, and outlives it (see `background`).
+//! The pages are a client of the host's web API on localhost, with the
+//! certificate the host made pinned (`api`), through one worker thread
+//! (`worker`) whose word the app keeps (`link`) while hosting is on
+//! (`switch`); the tray icon reads the same (`tray`).
 
+pub mod api;
 mod demo;
 mod devices;
+pub mod link;
 mod logs;
 mod overview;
 mod permissions;
 mod settings;
-mod sidebar;
 mod signin;
+pub mod switch;
+pub mod tray;
+pub mod worker;
 
 use std::collections::HashMap;
-use std::rc::Rc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use crossbeam_channel::Sender;
 use gpui::{
-    div, prelude::*, px, AnyElement, Context, Entity, FocusHandle, FontWeight, ScrollHandle,
-    SharedString, Window,
+    div, prelude::*, px, AnyElement, Context, Entity, FontWeight, ScrollHandle, SharedString,
+    Window,
 };
-use pingpong_ui::updates::UpdateApp;
 use pingpong_ui::{button, sheet, FieldEvent, IconName, Ink, Metrics, TextField, Theme, Type};
-use pingpong_update::{Build, Checker, Program};
 use serde_json::{json, Value};
 
-use crate::api::Client;
-use crate::link::Link;
-use crate::prefs::Prefs;
-use crate::worker::{Cmd, Conn, Done, Snapshot};
-use demo::Demo;
+use api::Client;
+use link::Link;
+use switch::Hosting;
+use worker::{Cmd, Conn, Done, Snapshot};
 
 pub use demo::pretend;
-
-/// Pong, to the update check.
-pub const UPDATE_APP: UpdateApp = UpdateApp {
-    program: Program::Pong,
-    build: Build::this(),
-};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Page {
@@ -54,7 +52,7 @@ pub enum Page {
 }
 
 impl Page {
-    fn parse(s: &str) -> Option<Page> {
+    pub fn parse(s: &str) -> Option<Page> {
         Some(match s {
             "overview" => Page::Overview,
             "devices" => Page::Devices,
@@ -75,20 +73,12 @@ enum Confirm {
     SignOut,
 }
 
-pub struct PongApp {
+pub struct HostPages {
     page: Page,
     snap: Snapshot,
     cmds: Sender<Cmd>,
-    /// The update check (the app's: it runs with no window open too).
-    updates: Rc<Checker>,
-    /// The window's own settings.
-    prefs: Prefs,
-    /// The sheet that says what the update check found.
-    update_sheet: bool,
-    /// Whether the app's icon starts at login, as last looked up.
-    starts_at_login: bool,
-    /// Why "Start Pong" did not start it.
-    start_error: Option<String>,
+    /// Hosting on or off: the not-running page turns it on again.
+    hosting: Entity<Hosting>,
     /// A config just changed here, ahead of the host's word on it.
     config_ahead: Option<(Value, Instant)>,
     pins: HashMap<u32, Entity<TextField>>,
@@ -110,23 +100,19 @@ pub struct PongApp {
     ports: [Entity<TextField>; 3],
     logs_scroll: ScrollHandle,
     logs_len: usize,
-    demo: Demo,
-    focus: FocusHandle,
-    /// The glass pill behind the page shown in the sidebar.
-    nav_glide: pingpong_ui::Glide,
     /// Where the page shown is scrolled to (its bar).
-    page_scroll: ScrollHandle,
+    pub page_scroll: ScrollHandle,
 }
 
 const PORT_KEYS: [&str; 3] = ["port", "pairing_port", "web_port"];
 
-impl PongApp {
+impl HostPages {
     pub fn new(
         link: Entity<Link>,
-        updates: Rc<Checker>,
+        hosting: Entity<Hosting>,
         window: &mut Window,
         cx: &mut Context<Self>,
-    ) -> PongApp {
+    ) -> HostPages {
         // What the host says, and what it answers to what is asked of it.
         cx.observe_in(&link, window, |this, link, window, cx| {
             let snap = link.read(cx).snap.clone();
@@ -143,20 +129,17 @@ impl PongApp {
             let link = link.read(cx);
             (link.sender(), link.snap.clone())
         };
+        // A window shows the host: the worker asks it every second.
+        let _ = cmds.send(Cmd::Watched(true));
         cx.spawn_in(window, async move |this, cx| loop {
             cx.background_executor()
                 .timer(Duration::from_millis(300))
                 .await;
-            if this
-                .update_in(cx, |this, window, cx| this.tick(window, cx))
-                .is_err()
-            {
+            if this.update_in(cx, |this, _, cx| this.tick(cx)).is_err() {
                 break;
             }
         })
         .detach();
-        cx.observe_window_appearance(window, |_, _, cx| cx.notify())
-            .detach();
 
         let user = cx.new(|cx| TextField::new(cx).placeholder("User name"));
         let password = cx.new(|cx| TextField::new(cx).password().placeholder("Password"));
@@ -189,18 +172,11 @@ impl PongApp {
             .detach();
         }
 
-        let demo = Demo::from_env();
-        let focus = cx.focus_handle();
-        window.focus(&focus, cx);
-        let mut app = PongApp {
+        let mut app = HostPages {
             page: Page::Overview,
             snap: Snapshot::default(),
             cmds,
-            updates,
-            prefs: Prefs::load(&crate::api::app_dir()),
-            update_sheet: false,
-            starts_at_login: false,
-            start_error: None,
+            hosting,
             config_ahead: None,
             pins: HashMap::new(),
             pin_errors: HashMap::new(),
@@ -218,9 +194,6 @@ impl PongApp {
             ports,
             logs_scroll: ScrollHandle::new(),
             logs_len: 0,
-            demo,
-            focus,
-            nav_glide: pingpong_ui::Glide::new(cx),
             page_scroll: ScrollHandle::new(),
         };
         // A window opened over a host the app already knows shows it at
@@ -244,9 +217,6 @@ impl PongApp {
         if (page == Page::Logs) != (self.page == Page::Logs) {
             self.send(Cmd::WantLogs(page == Page::Logs));
         }
-        if page == Page::General {
-            self.starts_at_login = settings::starts_at_login();
-        }
         if page != self.page {
             self.page_scroll.set_offset(gpui::point(px(0.0), px(0.0)));
         }
@@ -254,30 +224,36 @@ impl PongApp {
         cx.notify();
     }
 
-    /// Show `page` (from the tray icon's menu, a notification, the menu
-    /// bar).
+    /// Show `page` (from the sidebar, the tray icon's menu, a
+    /// notification, the menu bar).
     pub fn go(&mut self, page: Page, cx: &mut Context<Self>) {
         self.confirm = None;
-        self.close_update_sheet();
         self.editing = None;
         self.set_page(page, cx);
     }
 
-    /// Put the update sheet away, and what it said about an installation
-    /// that did not take.
-    fn close_update_sheet(&mut self) {
-        self.update_sheet = false;
-        self.updates.dismiss_install();
+    /// The host as last heard from.
+    pub fn snapshot(&self) -> &Snapshot {
+        &self.snap
     }
 
-    /// Open the update sheet. With nothing newer known, that is a question:
-    /// GitHub is asked.
-    pub fn show_updates(&mut self, cx: &mut Context<Self>) {
-        self.update_sheet = true;
-        if self.updates.status().update.is_none() {
-            self.updates.check_now();
-        }
+    /// Escape: the sheet open closes; whether there was one.
+    pub fn dismiss(&mut self, cx: &mut Context<Self>) -> bool {
+        let open = self.confirm.take().is_some() | self.editing.take().is_some();
         cx.notify();
+        open
+    }
+
+    /// Sign out of the host here (asked first).
+    pub fn ask_sign_out(&mut self, cx: &mut Context<Self>) {
+        self.confirm = Some(Confirm::SignOut);
+        cx.notify();
+    }
+
+    /// Ask the host how things are now (the window came forward: from
+    /// System Settings, say).
+    pub fn refresh(&self) {
+        self.send(Cmd::Refresh);
     }
 
     fn take_snapshot(&mut self, mut s: Snapshot, _window: &mut Window, cx: &mut Context<Self>) {
@@ -380,7 +356,7 @@ impl PongApp {
         }
     }
 
-    fn tick(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    fn tick(&mut self, cx: &mut Context<Self>) {
         if self
             .note
             .as_ref()
@@ -397,7 +373,6 @@ impl PongApp {
         {
             cx.notify();
         }
-        self.run_demo(window, cx);
     }
 
     fn config(&self) -> Option<&Value> {
@@ -550,92 +525,43 @@ impl PongApp {
             );
         Some(sheet("confirm", 360.0, t, body).into_any_element())
     }
+}
 
-    /// What the update check found (the sidebar's notice, the tray's menu
-    /// and Check for Updates open it).
-    fn updates_sheet(&mut self, t: Theme, cx: &mut Context<Self>) -> Option<AnyElement> {
-        if !self.update_sheet {
-            return None;
-        }
-        let (check, install, close) =
-            (self.updates.clone(), self.updates.clone(), cx.weak_entity());
-        let body = pingpong_ui::updates::sheet_body(
-            &UPDATE_APP,
-            &self.updates.status(),
-            t,
-            move |_, _| check.check_now(),
-            move |_, _| install.install(),
-            move |_, cx| {
-                let _ = close.update(cx, |this, cx| {
-                    this.close_update_sheet();
-                    cx.notify();
-                });
-            },
-        );
-        Some(sheet("updates", 380.0, t, body).into_any_element())
+/// The window gone, only the tray icon looks: the worker asks less often.
+impl Drop for HostPages {
+    fn drop(&mut self) {
+        self.send(Cmd::Watched(false));
     }
 }
 
-impl Render for PongApp {
-    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let t = Theme::of(window);
-        pingpong_ui::scroll_areas([self.page_scroll.clone(), self.logs_scroll.clone()]);
-        let body = self.body(t, window, cx);
-        // Each page fades in as it is picked (asides).
-        let shown =
-            gpui::ElementId::Name(format!("page-{:?}-{:?}", self.page, self.snap.conn).into());
-        let body =
-            pingpong_ui::fade_in(div().size_full().flex().flex_col().child(body), shown, 0.0)
-                .into_any_element();
+impl HostPages {
+    /// The page shown, for the window's page column.
+    pub fn render_page(
+        &mut self,
+        t: Theme,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        self.body(t, window, cx)
+    }
+
+    /// The sheet open over the window (a confirmation, a device's
+    /// permissions), if one is.
+    pub fn render_sheet(
+        &mut self,
+        t: Theme,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Option<AnyElement> {
         let window_h = f32::from(window.viewport_size().height);
-        let confirm = self
-            .confirm_sheet(t, cx)
-            .or_else(|| self.updates_sheet(t, cx))
-            .or_else(|| self.permissions_sheet(window_h, t, cx));
-        div()
-            .key_context("PongApp")
-            .track_focus(&self.focus)
-            .on_action(cx.listener(|this, _: &crate::Dismiss, _, cx| {
-                this.confirm = None;
-                this.close_update_sheet();
-                this.editing = None;
-                cx.notify();
-            }))
-            .on_action(
-                cx.listener(|this, _: &crate::GoOverview, _, cx| this.go(Page::Overview, cx)),
-            )
-            .on_action(cx.listener(|this, _: &crate::GoDevices, _, cx| this.go(Page::Devices, cx)))
-            .on_action(cx.listener(|this, _: &crate::GoGeneral, _, cx| this.go(Page::General, cx)))
-            .on_action(cx.listener(|this, _: &crate::GoVideo, _, cx| this.go(Page::Video, cx)))
-            .on_action(cx.listener(|this, _: &crate::GoNetwork, _, cx| this.go(Page::Network, cx)))
-            .on_action(cx.listener(|this, _: &crate::GoAgents, _, cx| this.go(Page::Agents, cx)))
-            .on_action(cx.listener(|this, _: &crate::GoLogs, _, cx| this.go(Page::Logs, cx)))
-            .size_full()
-            .relative()
-            .flex()
-            .font_family(pingpong_ui::ui_font())
-            .text_color(t.primary)
-            .text_size(px(Type::BODY))
-            .on_mouse_down(
-                gpui::MouseButton::Left,
-                cx.listener(|_, _, _, cx| {
-                    if pingpong_ui::clicked() {
-                        cx.notify();
-                    }
-                }),
-            )
-            .child(self.sidebar(t, cx))
-            .child(
-                div()
-                    .flex_1()
-                    .min_w_0()
-                    .h_full()
-                    .flex()
-                    .flex_col()
-                    .bg(t.background)
-                    .child(body),
-            )
-            .children(confirm)
+        self.confirm_sheet(t, cx)
+            .or_else(|| self.permissions_sheet(window_h, t, cx))
+    }
+
+    /// The pages' scroll areas, for what the keyboard moves to to be
+    /// scrolled into view.
+    pub fn scroll_handles(&self) -> [ScrollHandle; 2] {
+        [self.page_scroll.clone(), self.logs_scroll.clone()]
     }
 }
 

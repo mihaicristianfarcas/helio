@@ -4,7 +4,7 @@
 # are named after the windows' app ids, so the desktop groups each window
 # under its entry (Wayland's app_id, X11's WM_CLASS).
 #
-#   cargo build --release -p ping-app          # and/or -p pong-app
+#   cargo build --release -p ping-app
 #   tools/linux/install-apps                   # installs what was built
 #   tools/linux/install-apps --uninstall
 #
@@ -18,7 +18,6 @@ TARGET=${CARGO_TARGET_DIR:-$REPO/target}/release
 # app PROGRAM ID ICON
 apps=(
     "ping-app dev.pingpong.Ping $REPO/ping-app/assets/icon-256.png"
-    "pong-app dev.pingpong.PongApp $REPO/pong-app/assets/icon-256.png"
 )
 
 for app in "${apps[@]}"; do

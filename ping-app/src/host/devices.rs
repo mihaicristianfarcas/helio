@@ -9,13 +9,13 @@ use pingpong_ui::{
     Type,
 };
 
-use crate::api::{Client, Pending};
-use crate::worker::Cmd;
+use crate::host::api::{Client, Pending};
+use crate::host::worker::Cmd;
 
 use super::permissions::summary;
-use super::{date, duration, page, Confirm, PongApp};
+use super::{date, duration, page, Confirm, HostPages};
 
-impl PongApp {
+impl HostPages {
     pub(super) fn devices(&mut self, t: Theme, cx: &mut Context<Self>) -> AnyElement {
         let pending: Vec<Pending> = self
             .snap

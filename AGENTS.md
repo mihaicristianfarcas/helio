@@ -12,10 +12,10 @@ change.
 
 pingpong streams a computer's desktop to another the way Moonlight and
 Sunshine do, inside one post-quantum WireGuard tunnel. **Ping** is
-the client (`ping-app`, `ping-core`), **Pong** the host (`pong`,
-`pong-app`); both run on macOS, Windows and Linux, over shared libraries
-(`pingpong-*`). `ping-agent` lets AI agents use hosts as clients of their
-own.
+the app (`ping-app`, `ping-core`): the client for everyone, and hosting as a
+switch in it, off by default, which runs **Pong**, the host (`pong`). Both
+run on macOS, Windows and Linux, over shared libraries (`pingpong-*`).
+`ping-agent` lets AI agents use hosts as clients of their own.
 
 ## Principles
 
@@ -71,7 +71,7 @@ own.
   `Recipients`), not how it is implemented.
 - Keep files and functions a size a reader can hold: split a file by concern
   when it grows past roughly 800 lines (see `ping-core/src/stream/`,
-  `pong-app/src/app/`), and a function into named steps when it passes
+  `ping-app/src/host/`), and a function into named steps when it passes
   roughly 150 (UI element trees excepted).
 - Constants get names and a doc comment on why that value, with the
   measurement where there is one.
@@ -109,11 +109,13 @@ own.
 
 ### The UI
 
-- Both windows use GPUI through `pingpong-ui`: its controls and theme tokens
-  (`Theme`, `Ink`, `Type`, `Metrics`, `Radius`), never raw colours or sizes.
+- The window uses GPUI through `pingpong-ui`, in asides' look: its controls,
+  theme tokens (`Theme`, `Ink`, `Type`, `Metrics`, `Radius`) and motion
+  (`FADE`, `RESIZE`, `ease`, `Glide`), never raw colours, sizes or timings.
+  No GPUI shadows on glass, and nothing of this on the stream's window.
 - One module per page or panel; the page's state stays in the app struct.
-- A new page or state gets a `PING_UI_DEMO` / `PONG_UI_DEMO` step, so it can
-  be screenshotted without clicking ([docs/ui.md](docs/ui.md)).
+- A new page or state gets a `PING_UI_DEMO` step, so it can be
+  screenshotted without clicking ([docs/ui.md](docs/ui.md)).
 - Every row in a settings page says in a line what it does.
 
 ### Tests

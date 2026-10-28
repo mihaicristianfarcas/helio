@@ -17,7 +17,8 @@ the host lists it as an **AI agent**.
 
 - Ping: **Allow…** beside the host, on the Agents page (under **Your
   hosts**) or in **Agent setup** (under **Hosts the agent may use**). Type
-  the PIN into Pong's window or web UI, as for Ping.
+  the PIN into the host's Ping (This computer → Devices) or its web UI, as
+  for Ping.
 - CLI: `ping pair-agent HOST`.
 - By hand (headless hosts): `ping-agent identity` prints the agent's keys;
   `pong add-client NAME X25519 MLKEM --agent` on the host, and
@@ -233,7 +234,7 @@ connects again.
   (in Ping or Pong), use the host's own keyboard or mouse, a secure screen
   is up, or nobody watches an agent that may act only while watched.
   **Stop** or **End Session** end the wait at once.
-- **Pong's window and web UI** show an agent's session — who watches, what
+- **The host's Ping (This computer) and web UI** show an agent's session — who watches, what
   holds the agent, and each action as the agent described it — with
   **Pause**, **Resume**, **Hand back** and **Stop**. Under **Devices**, each
   agent's permissions: **See the screen**, **Keyboard**, **Mouse** and **Act

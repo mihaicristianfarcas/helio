@@ -199,6 +199,9 @@ pub struct Model {
     /// Hosts found on the network are left out (PING_UI_DEMO's `alone`, so
     /// the page with no hosts can be seen on a network that has some).
     pub alone: bool,
+    /// This computer's own host (its short id), once hosting has been on:
+    /// not one to play from here, so not in the list.
+    own: Option<String>,
 }
 
 impl Model {
@@ -248,6 +251,7 @@ impl Model {
             paused,
             foreground,
             alone: false,
+            own: None,
         };
         model.rebuild();
         model
@@ -323,6 +327,15 @@ impl Model {
     }
 
     /// Re-read the paired hosts and merge in what the network says.
+    /// This computer's own host is the one with this short id (None: not
+    /// known yet). Whether that changed (then [`Model::rebuild`]).
+    pub fn set_own(&mut self, id: Option<String>) -> bool {
+        let id = id.filter(|id| !id.is_empty());
+        let changed = self.own != id;
+        self.own = id;
+        changed
+    }
+
     pub fn rebuild(&mut self) {
         let hosts = Hosts::load(&self.dir);
         let mut list: Vec<Item> = hosts
@@ -359,6 +372,7 @@ impl Model {
                 });
             }
         }
+        leave_out_own(&mut list, self.own.as_deref());
         list.sort_by(|a, b| (!a.is_paired(), &a.name).cmp(&(!b.is_paired(), &b.name)));
         // Hosts coming, going, waking up or going away.
         for item in &list {
@@ -538,9 +552,30 @@ impl Pairing {
     }
 }
 
+/// This computer's own host (short id `own`) is not one to play from here.
+fn leave_out_own(list: &mut Vec<Item>, own: Option<&str>) {
+    list.retain(|i| own != Some(i.id.as_str()));
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn this_computers_own_host_is_left_out_of_the_list() {
+        let mut list = vec![paired("192.168.1.20:47800", None), {
+            let mut mine = paired("192.168.1.30:47800", None);
+            mine.id = "0123456789abcdef".into();
+            mine
+        }];
+        leave_out_own(&mut list, None);
+        assert_eq!(list.len(), 2);
+        leave_out_own(&mut list, Some("0123456789abcdef"));
+        assert_eq!(
+            list.iter().map(|i| i.id.as_str()).collect::<Vec<_>>(),
+            ["abcd"]
+        );
+    }
 
     fn paired(address: &str, local: Option<&str>) -> Item {
         Item {

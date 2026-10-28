@@ -3,10 +3,11 @@
 Stream a computer's desktop — games included — to another computer, with the
 latency of Moonlight and Sunshine/Apollo, inside one post-quantum WireGuard
 tunnel.
-**Ping** is the client, **Pong** the host; both run on macOS, Windows and
-Linux.
+**Ping** is the app: it plays your other computers, and with hosting on (a
+switch, off until you turn it on) it lets them play this one, through
+**Pong**, the host. Both run on macOS, Windows and Linux.
 
-![Pong's window during a session](docs/images/pong-overview.png)
+![This computer in Ping during a session](docs/images/pong-overview.png)
 
 - **Moonlight-class streaming**: up to 4K and 120+ fps, HEVC or H.264,
   hardware encode and decode, HDR and YUV 4:4:4, loss repaired by
@@ -39,11 +40,13 @@ Linux.
    on a Mac with Homebrew
    (`brew tap mihaicristianfarcas/pingpong https://github.com/mihaicristianfarcas/pingpong`,
    then `brew install --cask ping` or `pong`), or build them from source.
-2. Open Ping, click the host, and type the PIN it shows into Pong.
+2. On the host, turn hosting on in Ping (setup asks, or **Settings →
+   Hosting**). On the other computer open Ping, click the host, and type
+   the PIN it shows into the host's Ping (**This computer → Devices**).
 3. Click the host again to stream. Ctrl+Alt+Shift+Q ends the stream
-   ([usage](docs/usage.md)). Pong's icon in the menu bar or the taskbar's
-   notification area says what the host is doing; both apps say when there
-   is an update.
+   ([usage](docs/usage.md)). While hosting is on, Ping's icon in the menu
+   bar or the taskbar's notification area says what the host is doing;
+   Ping says when there is an update.
 
 ## Status
 

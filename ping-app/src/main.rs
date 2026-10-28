@@ -1,7 +1,14 @@
-//! Ping: stream a PC or Mac running Pong -- the host list, pairing, settings
-//! and AI agents, one app for macOS, Windows and Linux, drawn with GPUI in
-//! the look Pong shares (pingpong-ui). Streams open in their own window,
-//! from ping-core.
+//! Ping, the one app: play your other computers from this one (the host
+//! list, pairing, streaming, AI agents), and, with hosting on, let your
+//! devices play this one (This computer: the host's pages, its icon in the
+//! menu bar or notification area). One app for macOS, Windows and Linux,
+//! drawn with GPUI in asides' look (pingpong-ui). Streams open in their own
+//! window, from ping-core; the host runs on its own (`pong`), started and
+//! stopped by the hosting switch (`host::switch`).
+//!
+//! `--background` (at login, with Open at login): no window, just the
+//! host's icon, when hosting is on; nothing at all, and the app quits, when
+//! it is off.
 
 // No console window behind the app on Windows.
 #![cfg_attr(windows, windows_subsystem = "windows")]
@@ -9,15 +16,21 @@
 mod agents;
 mod app;
 mod chat;
+mod host;
+mod hosting;
 mod hosts;
 mod model;
 mod notify;
 mod platform;
 mod prefs;
 mod settings;
+mod setup;
 
-use gpui::{actions, App, AppContext, KeyBinding, Menu, MenuItem};
+use std::rc::Rc;
+
+use gpui::{actions, App, KeyBinding, Menu, MenuItem};
 use pingpong_ui::menus;
+use pingpong_update::{Channel, Checker, Program};
 
 actions!(
     ping,
@@ -30,6 +43,10 @@ actions!(
         ShowAudio,
         ShowInput,
         ShowAgentSetup,
+        ShowHostingSettings,
+        ShowUpdates,
+        ShowThisComputer,
+        ShowDevices,
         Refresh,
         AddHost,
         Dismiss,
@@ -55,6 +72,7 @@ fn main() {
     }
     // Started by an update: the old copy quits first.
     pingpong_update::install::after_update();
+    let background = std::env::args().skip(1).any(|a| a == "--background");
     // One copy of the app: a second start shows the first one's window. A
     // check (PING_UI_DEMO) is not the app started again, and runs beside it.
     // Before the log is opened: opening it moves the last runs' logs aside,
@@ -63,9 +81,14 @@ fn main() {
     let _instance = if std::env::var_os("PING_UI_DEMO").is_some() {
         None
     } else {
-        match pingpong_ui::instance::claim(&ping_core::store::data_dir(), "ping", true, move || {
-            let _ = show.unbounded_send(());
-        }) {
+        match pingpong_ui::instance::claim(
+            &ping_core::store::data_dir(),
+            "ping",
+            !background,
+            move || {
+                let _ = show.unbounded_send(());
+            },
+        ) {
             Some(instance) => Some(instance),
             None => {
                 eprintln!("Ping is running already: it was asked to show itself");
@@ -78,6 +101,7 @@ fn main() {
     tracing::info!(
         version = build.version,
         commit = build.short_commit(),
+        background,
         "Ping app"
     );
     // Join the DHT now, and keep hosts' internet addresses fresh and a path
@@ -89,53 +113,77 @@ fn main() {
     let application = gpui_platform::application().with_assets(pingpong_ui::Assets);
     // The Dock icon brings the window back (it hides while a stream has
     // the screen).
-    application.on_reopen(show_windows);
-    application.run(|cx: &mut App| {
+    application.on_reopen(|cx| app::open(app::Show::Window, cx));
+    application.run(move |cx: &mut App| {
         pingpong_ui::init(cx);
+        // Notifications (a device asking to pair) are from the app.
+        cx.set_app_identity(host::tray::APP_ID, "Ping");
         bind_keys(cx);
-        let options = pingpong_ui::window_options(
-            "Ping",
-            "dev.pingpong.Ping",
-            940.0,
-            620.0,
-            (680.0, 440.0),
-            cx,
-        );
-        let window = cx
-            .open_window(options, |window, cx| {
-                cx.new(|cx| app::PingApp::new(window, cx))
-            })
-            .expect("opening Ping's window");
-        // Closing the window quits, as it did.
+        let dir = ping_core::store::data_dir();
+        let prefs = prefs::Prefs::load(&dir);
+        // The update check is the app's: the window and the host's icon
+        // both show what it found. A check (PING_UI_DEMO) asks GitHub
+        // nothing on its own: what it shows is made up, or asked for.
+        let channel = if std::env::var_os("PING_UI_DEMO").is_some() {
+            Channel::Off
+        } else {
+            prefs.update_channel()
+        };
+        let (news, mut update_news) = futures::channel::mpsc::unbounded::<()>();
+        let updates = Rc::new(Checker::start(
+            Program::Ping,
+            build,
+            dir,
+            channel,
+            move || {
+                let _ = news.unbounded_send(());
+            },
+        ));
+        let hosting = host::switch::Hosting::start(cx);
+        app::start(hosting.clone(), updates.clone(), cx);
+        host::tray::start(hosting.clone(), updates, cx);
+        // Closing the window quits, unless the host's icon stays (hosting
+        // on): the app goes on behind it.
         cx.on_window_closed(|cx, _| {
-            if cx.windows().is_empty() {
+            if !cx.windows().is_empty() {
+                return;
+            }
+            let icon = host::tray::HostIcon::shown(cx);
+            tracing::info!(stays = icon, "the window closed");
+            if icon {
+                // The host's icon is what is left of the app: no Dock tile
+                // without a window.
+                pingpong_ui::desktop::hide_from_dock();
+            } else {
                 cx.quit();
             }
         })
         .detach();
-        // Started again while it runs: the window comes forward.
+        // The update check's news and a second copy asking this one to show
+        // itself: both arrive from other threads.
         cx.spawn(async move |cx| {
             use futures::StreamExt;
-            while shows.next().await.is_some() {
-                cx.update(show_windows);
+            while update_news.next().await.is_some() {
+                cx.update(|cx| {
+                    host::tray::HostIcon::refresh(cx);
+                    app::update_news(cx);
+                });
             }
         })
         .detach();
-        let _ = window.update(cx, |_, window, cx| {
-            window.activate_window();
-            cx.activate(true);
-        });
+        cx.spawn(async move |cx| {
+            use futures::StreamExt;
+            while shows.next().await.is_some() {
+                cx.update(|cx| app::open(app::Show::Window, cx));
+            }
+        })
+        .detach();
+        if background {
+            app::stay_in_background(hosting, cx);
+        } else {
+            app::open(app::Show::Window, cx);
+        }
     });
-}
-
-/// Bring the app's window back and forward.
-fn show_windows(cx: &mut App) {
-    for w in cx.windows() {
-        let _ = w.update(cx, |_, window, _| {
-            pingpong_ui::set_window_visible(window, true)
-        });
-    }
-    cx.activate(true);
 }
 
 fn bind_keys(cx: &mut App) {
@@ -164,7 +212,8 @@ fn bind_keys(cx: &mut App) {
         KeyBinding::new(&format!("{cmd}-r"), Refresh, None),
         KeyBinding::new(&format!("{cmd}-n"), AddHost, None),
         KeyBinding::new(&format!("{cmd}-1"), ShowHosts, None),
-        KeyBinding::new(&format!("{cmd}-2"), ShowAgents, None),
+        KeyBinding::new(&format!("{cmd}-2"), ShowThisComputer, None),
+        KeyBinding::new(&format!("{cmd}-3"), ShowAgents, None),
         KeyBinding::new("escape", Dismiss, Some("PingApp")),
     ]);
     // The menu bar, as a Mac app has it: the app's own menu, then File,
@@ -180,6 +229,8 @@ fn bind_keys(cx: &mut App) {
         menus::edit_menu(),
         Menu::new("View").items([
             MenuItem::action("Hosts", ShowHosts),
+            MenuItem::action("This Computer", ShowThisComputer),
+            MenuItem::action("Devices", ShowDevices),
             MenuItem::action("Agents", ShowAgents),
             MenuItem::separator(),
             MenuItem::action("General", ShowGeneral),
@@ -187,6 +238,8 @@ fn bind_keys(cx: &mut App) {
             MenuItem::action("Audio", ShowAudio),
             MenuItem::action("Input", ShowInput),
             MenuItem::action("Agent Setup", ShowAgentSetup),
+            MenuItem::action("Hosting", ShowHostingSettings),
+            MenuItem::action("Updates", ShowUpdates),
         ]),
         menus::window_menu(),
         menus::help_menu("Ping"),

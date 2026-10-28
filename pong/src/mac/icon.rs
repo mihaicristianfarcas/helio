@@ -1,14 +1,14 @@
-//! Pong's icon in the menu bar, for a host opened by hand on a Mac.
+//! The host's icon in the menu bar, for a host opened by hand on a Mac.
 //!
 //! Pong.app is the host alone: a background app (LSUIElement) with no
-//! window or icon of its own. Its icon and window are Pong Control.app,
-//! installed beside it, which starts at login by a login item of its own
-//! (General > "Show Pong's icon at login" in its window). Opened from the
-//! Finder, Launchpad or Spotlight, Pong.app starts Pong Control too, in the
-//! background, so the icon is there whenever someone started Pong; without
-//! it, the host ran with nothing on screen to say so. The host started at
-//! login by its LaunchAgent (`pong host`) leaves the icon to that login
-//! item, which the user may have turned off.
+//! window or icon of its own. Its icon and window are Ping's, the app that
+//! holds Pong.app (in `Contents/Helpers`) or is installed beside it, which
+//! starts at login by a login item of its own (General > Open at login).
+//! Opened from the Finder, Launchpad or Spotlight, Pong.app starts Ping too,
+//! in the background, so the icon is there whenever someone started Pong;
+//! without it, the host ran with nothing on screen to say so. The host
+//! started at login by its LaunchAgent (`pong host`) leaves the icon to that
+//! login item, which the user may have turned off.
 
 use std::path::PathBuf;
 
@@ -23,22 +23,31 @@ pub fn opened_by_hand(args: &[String]) -> bool {
     }
 }
 
-/// Pong Control.app beside the Pong.app this runs in.
-fn control_app() -> Option<PathBuf> {
+/// Ping.app: the app the Pong.app this runs in is inside of
+/// (`Ping.app/Contents/Helpers/Pong.app`), or beside it.
+fn ping_app() -> Option<PathBuf> {
     let exe = std::env::current_exe().ok()?;
     // Pong.app/Contents/MacOS/pong
     let bundle = exe.parent()?.parent()?.parent()?;
     if bundle.extension()? != "app" {
         return None;
     }
-    let control = bundle.parent()?.join("Pong Control.app");
-    control.is_dir().then_some(control)
+    let helpers = bundle.parent()?;
+    let holder = helpers
+        .parent()
+        .and_then(|contents| contents.parent())
+        .filter(|_| helpers.file_name().is_some_and(|n| n == "Helpers"))
+        .filter(|app| app.extension().is_some_and(|e| e == "app"))
+        .map(PathBuf::from);
+    holder
+        .or_else(|| Some(helpers.join("Ping.app")))
+        .filter(|app| app.is_dir())
 }
 
-/// Start Pong Control in the background: its icon, without its window.
+/// Start Ping in the background: its icon, without its window.
 pub fn show() {
-    let Some(app) = control_app() else {
-        tracing::info!("no Pong Control.app beside Pong.app: no icon in the menu bar");
+    let Some(app) = ping_app() else {
+        tracing::info!("no Ping.app holding or beside Pong.app: no icon in the menu bar");
         return;
     };
     // `-n`, a new copy every time: a copy that runs already would otherwise
@@ -59,9 +68,9 @@ pub fn show() {
         .args(["--args", "--background"])
         .status();
     match started {
-        Ok(s) if s.success() => tracing::info!("Pong's icon in the menu bar"),
-        Ok(s) => tracing::warn!(status = %s, "Pong Control did not start: no icon in the menu bar"),
-        Err(e) => tracing::warn!(error = %e, "Pong Control did not start: no icon in the menu bar"),
+        Ok(s) if s.success() => tracing::info!("the host's icon in the menu bar"),
+        Ok(s) => tracing::warn!(status = %s, "Ping did not start: no icon in the menu bar"),
+        Err(e) => tracing::warn!(error = %e, "Ping did not start: no icon in the menu bar"),
     }
 }
 

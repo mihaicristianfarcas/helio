@@ -34,11 +34,11 @@ version and commit they are.
 
 ### On macOS
 
-Open the zip and move the apps to Applications: Ping, or Pong and Pong
-Control. They are signed with a Developer ID and notarized by Apple, so
-macOS opens them as any app from the internet, asking once whether you
-want to. Then, for the host, open **Pong Control** and choose **Start
-Pong**, as in [Pong on macOS](#pong-on-macos).
+Open the zip and move the apps to Applications: Ping, and for hosting
+Pong (the host Ping runs). They are signed with a Developer ID and
+notarized by Apple, so macOS opens them as any app from the internet,
+asking once whether you want to. Then, to host, turn hosting on in Ping
+(setup asks, or **Settings → Hosting**), as in [Pong on macOS](#pong-on-macos).
 
 ### On Windows
 
@@ -55,10 +55,9 @@ each one, and names its publisher as unknown.
   first (an NVIDIA GPU, SudoVDA). Extract the zip and double-click
   **Install Pong.cmd**. Windows asks whether to run it, then whether
   Windows PowerShell may make changes as an administrator. It does what
-  `host-deploy.ps1` does there (PongService, the Start menu entry, the
-  icon at sign-in, the entry in **Settings > Apps**). Pong's window
-  installs updates itself ([usage.md](usage.md#updates)); running
-  **Install Pong.cmd** from a newer download does the same.
+  `host-deploy.ps1` does there (PongService, the entry in **Settings >
+  Apps**). Hosting is then on; Ping's **Settings → Hosting** turns it off
+  and on. Running **Install Pong.cmd** from a newer download updates it.
 
 SmartScreen judges an unsigned program by the file itself, so it may ask
 again after an update: each build is a new file. On a PC where **Smart
@@ -92,11 +91,12 @@ latest release (Apple silicon and Intel).
 ```sh
 brew tap mihaicristianfarcas/pingpong https://github.com/mihaicristianfarcas/pingpong
 brew install --cask ping          # the client
-brew install --cask pong          # the host: Pong.app and Pong Control.app
+brew install --cask pong          # the host: Pong.app
 ```
 
-For the host, open **Pong Control** and choose **Start Pong**: the host
-then runs whenever you are logged in, and Pong's icon is in the menu bar.
+To host, turn hosting on in Ping (setup asks, or **Settings → Hosting**):
+the host then runs whenever you are logged in, and Ping's icon is in the
+menu bar.
 macOS asks for Screen Recording and Accessibility the first time (see
 [Pong on macOS](#pong-on-macos)).
 
@@ -162,18 +162,17 @@ created one (`tools/dev-signing-identity`, see
 tools/build-pong-app --install
 ```
 
-This installs **Pong.app** (the host) and **Pong Control.app** (its window,
-and Pong's menu bar icon) in `/Applications`, and two LaunchAgents: one
-starts the host at login and keeps it running
+This installs **Pong.app** (the host) in `/Applications` and turns hosting
+on: a LaunchAgent starts the host at login and keeps it running
 (`~/Library/LaunchAgents/dev.pingpong.Pong.plist`, which `pong enable`
-writes; see [usage.md](usage.md#hosting-on-and-off)), the other puts Pong's
-icon in the menu bar at login (`dev.pingpong.PongControl.plist`; **Show
-Pong's icon at login** in the window turns it off). On first start Pong
+writes; see [usage.md](usage.md#hosting-on-and-off)). Ping's hosting switch
+does the same, and finds Pong.app there. On first start Pong
 asks for **Screen Recording** (to capture) and **Accessibility** (to use
 the keyboard and mouse); grant both in System Settings > Privacy &
 Security. Without Accessibility, clients can watch but not control.
 
-Without `--install`, the apps are left in `target/`. To run the host from a
+Without `--install`, Pong.app is left in `target/`, where a Ping run from
+`target/debug` or `target/release` finds it. To run the host from a
 terminal instead: `cargo run --release -p pong -- host` (the terminal then
 needs those permissions). Details and limits: [platforms/macos.md](platforms/macos.md).
 
@@ -199,17 +198,14 @@ First, on the host PC:
 Then, from the repository, in an **administrator** PowerShell:
 
 ```powershell
-cargo build --release -p pong -p pong-app
+cargo build --release -p pong
 powershell -ExecutionPolicy Bypass -File tools\host-deploy.ps1
 ```
 
 `host-deploy.ps1` turns hosting on with `pong enable`, which copies the host
 to `C:\Program Files\Pong`, installs and starts **PongService** from there
 (it starts at boot, before anyone signs in, and adds Windows Firewall rules
-for Pong), puts Pong's window in the Start menu as
-**Pong**, and puts Pong's icon in the taskbar's notification area from your
-next sign-in on (your `Run` key; **Show Pong's icon at login** in the window
-turns it off), and lists Pong in **Settings > Apps > Installed apps**. Run
+for Pong), and lists Pong in **Settings > Apps > Installed apps**. Run
 it again after each build to update. `host-deploy.ps1 -Uninstall`, or
 **Uninstall** in Settings, removes all of that again; `pong disable` (as
 administrator) removes only the service, its firewall rules and the host's
@@ -251,7 +247,7 @@ Run `target/release/ping-app`, or install it as a desktop app for your
 user, with a launcher entry and its icon:
 
 ```sh
-tools/linux/install-apps          # ping-app and pong-app, whichever are built
+tools/linux/install-apps          # ping-app, with a launcher entry
 ```
 
 Details: [platforms/linux.md](platforms/linux.md).
@@ -271,9 +267,9 @@ install -Dm644 tools/linux/pong.service ~/.config/systemd/user/pong.service
 
 Pong runs in your desktop session, as you. Under Wayland, the desktop asks
 once whether Pong may share the screen (on GNOME, switch on **Allow Remote
-Interaction** for the keyboard and mouse). Pong's window is
-`cargo build --release -p pong-app`, then `target/release/pong-app` (or
-`tools/linux/install-apps` for a launcher entry). Data and logs are in
+Interaction** for the keyboard and mouse). Ping's This computer pages show
+the host, and its hosting switch runs `pong enable` and `pong disable` for
+you, finding `pong` beside Ping or on the `PATH`. Data and logs are in
 `~/.config/pong`. Details: [platforms/linux.md](platforms/linux.md).
 
 ## Pairing
@@ -281,7 +277,7 @@ Interaction** for the keyboard and mouse). Pong's window is
 1. Open Ping. Hosts on your local network appear on the **Hosts** page;
    others can be added by address (**Add Host**, or ⌘N / Ctrl+N).
 2. Click the host: Ping shows a four-digit PIN.
-3. On the host, open Pong's window (**Devices**) or its web UI
+3. On the host, open Ping (**This computer → Devices**) or its web UI
    (`https://HOST:47802`, whose certificate is self-signed) and type the
    PIN.
 
@@ -295,7 +291,7 @@ anywhere ([networking.md](networking.md)). Next: [usage.md](usage.md).
 |---|---|
 | Homebrew | `brew uninstall --cask ping pong` (the host's LaunchAgents go too); `--zap` also deletes the data folders |
 | Ping, macOS | Delete `/Applications/Ping.app` and `~/Library/Application Support/Ping` |
-| Pong, macOS | `/Applications/Pong.app/Contents/MacOS/pong disable` (the host's LaunchAgent), `launchctl bootout gui/$(id -u) ~/Library/LaunchAgents/dev.pingpong.PongControl.plist` and delete that file, the two apps, and `~/Library/Application Support/Pong` |
+| Pong, macOS | Turn hosting off in Ping (or `/Applications/Pong.app/Contents/MacOS/pong disable`: the host's LaunchAgent), then delete Pong.app and `~/Library/Application Support/Pong` |
 | Ping, Windows | **Settings > Apps > Installed apps**, **Ping**, **Uninstall** (or `install.ps1 -Uninstall` in `%LOCALAPPDATA%\Programs\Ping`). It leaves your hosts and settings: delete `%APPDATA%\Ping` too to remove them. A copy run from its extracted folder: delete the folder |
 | Pong, Windows | **Settings > Apps > Installed apps**, **Pong**, **Uninstall** (or `install.ps1 -Uninstall` in `C:\Program Files\Pong`); Windows asks for an administrator. It turns hosting off (`pong disable`: PongService, its firewall rules and the host's copy), then removes the programs, the Start menu entry and the icon at sign-in, and leaves the host's identity, pairings and settings: delete `C:\ProgramData\Pong` and `%APPDATA%\Pong` too to remove them |
 | Ping, Linux | `install.sh --uninstall` from the download, or `tools/linux/install-apps --uninstall` (or delete the binary); and `~/.config/ping` |

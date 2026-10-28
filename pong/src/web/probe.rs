@@ -2,7 +2,7 @@
 //!
 //! `GET /api/state` over HTTPS on localhost, trusting only the certificate
 //! the host made for itself (`web-cert.pem`, the one Pong's window pins,
-//! `pong-app/src/api.rs`): something else on the port is not the host.
+//! `ping-app/src/host/api.rs`): something else on the port is not the host.
 //!
 //! Read-only: `pong status` runs without an administrator, often before the
 //! host has ever run, and must create nothing in the host's folder.

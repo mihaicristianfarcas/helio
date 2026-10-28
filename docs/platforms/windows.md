@@ -55,20 +55,26 @@ LaunchAgent or a unit that keeps restarting.
 window to the Start menu and lists Pong in Settings > Apps (whose
 **Uninstall** runs it with `-Uninstall`); see [../install.md](../install.md).
 
-### Pong's icon in the notification area
+### Hosting from Ping, and its icon in the notification area
 
-Pong's window (`Pong Control.exe`) is also Pong's icon in the taskbar's
+Ping's hosting switch runs `pong.exe enable` (or `disable`) from beside
+Ping or from `C:\Program Files\Pong`. Run as you, it needs an
+administrator and exits with 740 having changed nothing; Ping then runs it
+again through UAC (`ShellExecuteEx` with `runas`), says it waits for
+Windows meanwhile, and that nothing changed if you choose No. Its Hosting
+page says whether there are NVIDIA graphics (NVENC; else H.264 in software,
+Media Foundation) and SudoVDA (a virtual display; else the main display,
+scaled).
+
+While hosting is on, Ping is also the host's icon in the taskbar's
 notification area, as Sunshine's is: it runs as the signed-in user, not as
 the service, so what its menu opens opens on that user's desktop. A click
 on the icon opens the window; the right button has the menu (what the host
-does, a device asking to pair, the window, an update, **Quit Pong
-Control**). A device asking to pair is also a Windows notification. The
-icon starts at sign-in from the user's `Run` key
-(`"C:\Program Files\Pong\Pong Control.exe" --background`), which
-`host-deploy.ps1` sets and **Show Pong's icon at login** turns on and off.
-If Explorer restarts, the icon comes back with it (the app listens for
-`TaskbarCreated`). Starting the window again while it runs opens the running
-one's window.
+does, a device asking to pair, the window, an update, **Quit Ping**). A
+device asking to pair is also a Windows notification. **Open at login** in
+General starts Ping at sign-in as the icon only, from the user's `Run`
+key (`Ping.exe --background`). If Explorer restarts, the icon comes back
+with it (the app listens for `TaskbarCreated`).
 
 ### A session, on Windows
 

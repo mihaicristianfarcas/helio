@@ -5,7 +5,7 @@
 #   powershell -NoProfile -ExecutionPolicy Bypass -File tools\package-windows.ps1 [-FFmpeg DIR]
 #     -> target\dist\Ping-VERSION-windows-x86_64.zip  (Ping.exe beside FFmpeg's DLLs,
 #                                                        install.ps1, Install Ping.cmd)
-#        target\dist\Pong-VERSION-windows-x86_64.zip  (pong.exe, Pong Control.exe,
+#        target\dist\Pong-VERSION-windows-x86_64.zip  (pong.exe,
 #                                                        install.ps1, Install Pong.cmd)
 #
 # VERSION is the workspace's. -FFmpeg (default: FFMPEG_DIR) and LLVM are what
@@ -31,7 +31,7 @@ try {
     # cargo's progress on stderr is not an error (Windows PowerShell makes
     # it one under 'Stop').
     $ErrorActionPreference = 'Continue'
-    cargo build --release -p ping-app -p pong -p pong-app
+    cargo build --release -p ping-app -p pong
     $ErrorActionPreference = 'Stop'
     if ($LASTEXITCODE -ne 0) { throw "cargo build failed ($LASTEXITCODE)" }
 
@@ -78,7 +78,6 @@ try {
     zip "Pong-$version-windows-x86_64" {
         param($dir)
         Copy-Item (Join-Path $release 'pong.exe') $dir
-        Copy-Item (Join-Path $release 'pong-app.exe') (Join-Path $dir 'Pong Control.exe')
         Copy-Item (Join-Path $PSScriptRoot 'host-deploy.ps1') (Join-Path $dir 'install.ps1')
         # What a person double-clicks: install.ps1 asks Windows for an
         # administrator itself.

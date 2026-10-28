@@ -99,6 +99,33 @@ fn cstr14(s: &str) -> [i8; 14] {
     out
 }
 
+/// Whether the SudoVDA driver is installed and started: its control device
+/// is there (it is not opened). The app's Hosting page says so before a
+/// session needs it.
+pub fn present() -> bool {
+    // SAFETY: SetupAPI calls with a GUID that lives for the call; the list
+    // is destroyed before returning.
+    unsafe {
+        let Ok(devinfo) = SetupDiGetClassDevsW(
+            Some(&SUVDA_INTERFACE_GUID),
+            PCWSTR::null(),
+            None,
+            DIGCF_PRESENT | DIGCF_DEVICEINTERFACE,
+        ) else {
+            return false;
+        };
+        let mut iface = SP_DEVICE_INTERFACE_DATA {
+            cbSize: std::mem::size_of::<SP_DEVICE_INTERFACE_DATA>() as u32,
+            ..Default::default()
+        };
+        let found =
+            SetupDiEnumDeviceInterfaces(devinfo, None, &SUVDA_INTERFACE_GUID, 0, &mut iface)
+                .is_ok();
+        let _ = SetupDiDestroyDeviceInfoList(devinfo);
+        found
+    }
+}
+
 /// An open handle to the SudoVDA control device.
 pub struct Device {
     handle: HANDLE,

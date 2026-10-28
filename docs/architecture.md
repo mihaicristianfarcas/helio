@@ -3,7 +3,8 @@
 pingpong streams a computer's desktop — picture, sound, keyboard, mouse,
 controllers and clipboard — to another computer, the way Moonlight and
 Sunshine do, with every byte inside one post-quantum WireGuard tunnel.
-**Ping** is the client, **Pong** the host.
+**Ping** is the app: the client for everyone, and hosting as a switch in
+it, off by default, which runs **Pong**, the host.
 
 This page is the map: what runs where, how a frame gets from the host's
 screen to the client's, and which crate does what. Why each piece is the way
@@ -16,13 +17,14 @@ it is, and what was measured on the way, is in the
  Ping (client)                                   Pong (host)
  ─────────────                                   ───────────
  ping-app  (GPUI window: hosts,                  pong  (service / app / user unit)
-            pairing, settings, agents)             ├─ web UI + API (HTTPS, 47802)
- ping      (CLI)                                   ├─ pairing (TCP, 47801) + mDNS
-   │                                               ├─ presence (DHT, STUN, UPnP)
+            pairing, settings, agents;             ├─ web UI + API (HTTPS, 47802)
+            This computer: the host's      ──API──▶├─ pairing (TCP, 47801) + mDNS
+            pages, the hosting switch,             ├─ presence (DHT, STUN, UPnP)
+            the host's icon)                       │
+ ping      (CLI)                                   │
    └─ ping-core ───── one UDP socket ─────────────┤
         stream: net thread, input thread           └─ session: display → capture →
         platform: window, decoder, renderer           encode → FEC → pace → tunnel
-                                                   pong-app (Pong's own window)
 ```
 
 - One **tunnel** per paired client, pq-boringtun (WireGuard with static
@@ -50,13 +52,12 @@ it is, and what was measured on the way, is in the
 | `pingpong-audio` | Opus, the client's jitter buffer and playback, WASAPI capture on Windows |
 | `pingpong-input` | Input injection on the host: `SendInput`, CoreGraphics events, XTest |
 | `pingpong-clipboard` | Sharing the clipboard both ways during a session |
-| `pingpong-ui` | The design system both windows use (GPUI): theme, icons, controls, Markdown; and what they need of the desktop: menus, the tray icon, one running copy, starting at login |
+| `pingpong-ui` | The app's design system (GPUI), asides' look: theme, glass, motion, keyboard focus, icons, controls, Markdown; and what it needs of the desktop: menus, the tray icon, one running copy, starting at login |
 | `pingpong-update` | Whether a newer release, or newer commits on `main`, exist (GitHub's public API, once a day), and installing a release from the app: the archive checked against GitHub's SHA-256, then each system's way of putting it in place |
 | `ping-core` | The client: session, stream, input, statistics, the host store; per-platform window, decoder and renderer; the `ping` CLI |
-| `ping-app` | Ping's window (GPUI), and `Ping mcp` |
+| `ping-app` | The app's window (GPUI): hosts, agents, settings, setup, and This computer (the host's pages, a client of its web API on localhost; the hosting switch, which runs `pong enable`, `disable` and `status`; the host's tray icon); and `Ping mcp` |
 | `ping-agent` | Computer use: a headless session, the actions, the MCP server, the agent runners; the `ping-agent` CLI |
 | `pong` | The host: sessions, the video and audio pipelines, pairing, presence, the web UI, the Windows service |
-| `pong-app` | Pong's window and tray icon (GPUI), a client of the host's web API on localhost |
 
 `vendor/` holds two tiny no-op crates GPUI names but does not use (see the
 workspace `Cargo.toml`); `spikes/` holds the early experiments
@@ -218,7 +219,8 @@ sees is the host's own.
 No keys are copied by hand:
 
 1. Ping finds Pong by mDNS (`_pingpong._udp`), or is given an address.
-2. Ping shows a PIN; you type it into Pong's window or web UI.
+2. Ping shows a PIN; you type it into the host's Ping (This computer →
+   Devices) or its web UI.
 3. SPAKE2 over the PIN, with an ML-KEM-768 exchange beside it, gives both
    sides a key that only they have — the pairing is hybrid, like the tunnel,
    so a recording of it stays closed to a future quantum computer. Each side

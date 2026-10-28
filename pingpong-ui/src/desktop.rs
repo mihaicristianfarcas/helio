@@ -1,5 +1,6 @@
-//! What the apps ask of the desktop beyond their own windows: the standard
-//! About panel, staying out of the Dock, and (for checks) what the menu bar
+//! What the app asks of the desktop beyond its own windows: the standard
+//! About panel, staying out of the Dock (and coming back to it), and (for
+//! checks) what the menu bar
 //! holds. These are a Mac's: Windows and Linux draw no menu bar for a GPUI
 //! window and have no Dock to stay out of, so each function says what it
 //! does there.
@@ -14,6 +15,15 @@
 pub fn hide_from_dock() {
     #[cfg(target_os = "macos")]
     mac::hide_from_dock();
+}
+
+/// Be a regular app again, in the Dock and the app switcher: a window opened
+/// by an app that was only its tray icon (see [`hide_from_dock`]).
+///
+/// Elsewhere nothing, as for [`hide_from_dock`].
+pub fn show_in_dock() {
+    #[cfg(target_os = "macos")]
+    mac::show_in_dock();
 }
 
 /// The system's About panel: the app's icon, `name`, `version`, and `build`
@@ -49,6 +59,16 @@ mod mac {
         NSEventModifierFlags, NSMenu,
     };
     use objc2_foundation::{NSDictionary, NSString};
+
+    pub(super) fn show_in_dock() {
+        let Some(mtm) = MainThreadMarker::new() else {
+            return;
+        };
+        let app = NSApplication::sharedApplication(mtm);
+        if app.activationPolicy() != NSApplicationActivationPolicy::Regular {
+            app.setActivationPolicy(NSApplicationActivationPolicy::Regular);
+        }
+    }
 
     pub(super) fn hide_from_dock() {
         let Some(mtm) = MainThreadMarker::new() else {

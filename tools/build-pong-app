@@ -1,24 +1,19 @@
 #!/usr/bin/env bash
 # Build Pong.app: the macOS host, bundled so that macOS grants Screen
 # Recording and Accessibility to Pong itself (signed as tools/build-ping-app
-# signs Ping.app); and Pong
-# Control.app, its window and menu bar icon (pong-app), which talks to the
-# running host.
+# signs Ping.app). Ping's hosting switch runs the pong inside it.
 #
-#   tools/build-pong-app            -> target/Pong.app, target/Pong Control.app
-#   tools/build-pong-app --install  -> also copy them to /Applications, start
-#                                      the host at login and keep it running,
-#                                      and put Pong's icon in the menu bar at
-#                                      login (two LaunchAgents)
+#   tools/build-pong-app            -> target/Pong.app
+#   tools/build-pong-app --install  -> also copy it to /Applications, and
+#                                      start the host at login and keep it
+#                                      running (its LaunchAgent)
 #
 # The bundles' version is the workspace's (Cargo.toml). PINGPONG_RELEASE=1
 # makes them a release build, as tools/package-macos does.
 set -euo pipefail
 REPO=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 APP="$REPO/target/Pong.app"
-CONTROL="$REPO/target/Pong Control.app"
 AGENT="$HOME/Library/LaunchAgents/dev.pingpong.Pong.plist"
-CONTROL_AGENT="$HOME/Library/LaunchAgents/dev.pingpong.PongControl.plist"
 VERSION=$(sed -n '/^\[workspace.package\]/,/^\[/ s/^version = "\(.*\)"/\1/p' "$REPO/Cargo.toml")
 
 export MACOSX_DEPLOYMENT_TARGET=14.0
@@ -30,7 +25,7 @@ if DEVELOPER_DIR=$XCODE xcrun metal --version >/dev/null 2>&1; then
     export DEVELOPER_DIR=$XCODE
     FEATURES=(--no-default-features)
 fi
-cargo build --release -p pong -p pong-app ${FEATURES[@]+"${FEATURES[@]}"} --manifest-path "$REPO/Cargo.toml"
+cargo build --release -p pong ${FEATURES[@]+"${FEATURES[@]}"} --manifest-path "$REPO/Cargo.toml"
 
 # Pong's icon, drawn by the same code as Ping's.
 ICNS="$REPO/target/Pong.icns"
@@ -68,48 +63,13 @@ cp "$REPO/target/release/pong" "$APP/Contents/MacOS/pong"
 codesign --force "${SIGN[@]}" --identifier dev.pingpong.Pong "$APP" >/dev/null
 echo "built $APP ($VERSION)"
 
-bundle "$CONTROL" "$REPO/pong-app/macos/Info.plist"
-cp "$REPO/target/release/pong-app" "$CONTROL/Contents/MacOS/Pong Control"
-codesign --force "${SIGN[@]}" --identifier dev.pingpong.PongControl "$CONTROL" >/dev/null
-echo "built $CONTROL ($VERSION)"
-
 if [[ ${1:-} == --install ]]; then
-    # The menu bar icon that runs is the old build: it quits (as its Quit
-    # does) and the new one starts below.
-    osascript -e 'tell application id "dev.pingpong.PongControl" to quit' >/dev/null 2>&1 || true
-    rm -rf /Applications/Pong.app "/Applications/Pong Control.app"
+    rm -rf /Applications/Pong.app
     cp -R "$APP" /Applications/Pong.app
-    cp -R "$CONTROL" "/Applications/Pong Control.app"
     # The host: hosting on, now and at login, kept running (the LaunchAgent
-    # $AGENT, which pong writes; Pong's window does the same with its "Start
-    # Pong" button).
+    # $AGENT, which pong writes; Ping's hosting switch does the same).
     /Applications/Pong.app/Contents/MacOS/pong enable
-    mkdir -p "$(dirname "$CONTROL_AGENT")"
-    # Pong's icon: at login, without its window, and not again once quit.
-    # "Show Pong's icon at login" in the window's General settings turns
-    # this same agent on and off.
-    cat > "$CONTROL_AGENT" <<PLIST
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-	<key>Label</key>
-	<string>dev.pingpong.PongControl</string>
-	<key>ProgramArguments</key>
-	<array>
-		<string>/Applications/Pong Control.app/Contents/MacOS/Pong Control</string>
-		<string>--background</string>
-	</array>
-	<key>RunAtLoad</key>
-	<true/>
-	<key>ProcessType</key>
-	<string>Interactive</string>
-</dict>
-</plist>
-PLIST
-    launchctl bootout "gui/$(id -u)" "$CONTROL_AGENT" 2>/dev/null || true
-    launchctl bootstrap "gui/$(id -u)" "$CONTROL_AGENT"
-    echo "installed /Applications/Pong.app and /Applications/Pong Control.app"
-    echo "the host starts at login ($AGENT), Pong's icon too ($CONTROL_AGENT)"
+    echo "installed /Applications/Pong.app"
+    echo "the host starts at login ($AGENT)"
     echo "macOS will ask for Screen Recording and Accessibility the first time."
 fi

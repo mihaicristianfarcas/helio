@@ -98,9 +98,9 @@ port: UPnP IGD first (an SSDP search, the WAN IP or PPP connection service,
 (RFC 6886) to the default gateway. The mapping's public address joins the
 published candidates, and is released when Pong stops or the setting is
 turned off. A router whose own "public" address is private (behind another
-NAT) is left alone: a mapping there would open nothing. Pong's window and
-web UI show what happened under **Router**; **Settings > Network > Ask the
-router to forward the port** turns it off.
+NAT) is left alone: a mapping there would open nothing. The host's Ping
+(This computer) and web UI show what happened under **Router**; **Settings
+> Network > Ask the router to forward the port** there turns it off.
 
 ## Limits
 
