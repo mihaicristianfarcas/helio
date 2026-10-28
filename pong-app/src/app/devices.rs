@@ -79,7 +79,7 @@ impl PongApp {
             clients.iter().map(|c| self.client_row(c, t, cx)).collect()
         };
         content = content.child(section("Paired", t).child(rows(paired, t)));
-        page(t, [], "devices-page", content)
+        page(&self.page_scroll, t, "devices-page", content)
     }
 
     pub(super) fn request_row(
@@ -126,7 +126,7 @@ impl PongApp {
                             .child(div().text_size(px(Type::META)).text_color(t.tertiary).child(format!("From {} · waiting {}", p.peer, duration(p.waiting_secs)))),
                     )
                     .children(pin.map(|f| div().w(px(92.0)).child(field(&f, t))))
-                    .child(button(ElementId::Name(format!("pin-{id}").into()), "Pair", t).solid().disabled(!has_pin).on_click(cx.listener(move |this, _, _, cx| {
+                    .child(button(ElementId::Name(format!("pin-{id}").into()), "Pair", t).accent().disabled(!has_pin).on_click(cx.listener(move |this, _, _, cx| {
                         if let Some(f) = &submit {
                             let pin = f.read(cx).text().trim().to_string();
                             this.submit_pin(id, pin);

@@ -60,7 +60,7 @@ impl PongApp {
                             Some("Enter the PIN it shows to let it connect.".into()),
                             t,
                         ))
-                        .child(button("go-pair", "Enter PIN", t).solid().on_click(
+                        .child(button("go-pair", "Enter PIN", t).accent().on_click(
                             cx.listener(|this, _, _, cx| this.set_page(Page::Devices, cx)),
                         )),
                 );
@@ -146,7 +146,7 @@ impl PongApp {
                 t,
             )));
         }
-        page(t, [], "overview-page", content)
+        page(&self.page_scroll, t, "overview-page", content)
     }
 
     pub(super) fn session_card(

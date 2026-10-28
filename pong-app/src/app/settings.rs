@@ -383,7 +383,7 @@ impl PongApp {
         if let Some((glyph, tint, text, _)) = self.note.clone() {
             content = content.child(notice(glyph, tint, text, t));
         }
-        page(t, [], "settings-page", content.child(body))
+        page(&self.page_scroll, t, "settings-page", content.child(body))
     }
 
     /// The window's own settings: its icon at login (where there is a tray
@@ -514,7 +514,7 @@ impl PongApp {
         setting(
             label.to_string(),
             Some(detail.to_string().into()),
-            select(ElementId::Name(key.into()), names, index, t)
+            select(key, names, index, t)
                 .width(170.0)
                 .on_select(move |i, _, cx| {
                     let v = values[i];

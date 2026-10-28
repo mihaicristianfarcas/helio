@@ -477,7 +477,7 @@ impl PingApp {
                             div()
                                 .flex()
                                 .gap(px(8.0))
-                                .child(button("answer-yes", "Allow", t).solid().on_click(
+                                .child(button("answer-yes", "Allow", t).accent().on_click(
                                     cx.listener(move |this, _, _, cx| {
                                         if let Some(c) = this.chat_mut(id) {
                                             c.answer(true);
@@ -591,7 +591,7 @@ impl PingApp {
                         .flex()
                         .items_center()
                         .justify_center()
-                        .bg(t.solid())
+                        .bg(t.accent)
                         .cursor_pointer()
                         .hover(|s| s.opacity(0.85))
                         .tooltip(|_, cx| {
@@ -603,7 +603,7 @@ impl PingApp {
                             }
                             cx.notify();
                         }))
-                        .child(div().size(px(10.0)).rounded(px(2.0)).bg(t.on_solid())),
+                        .child(div().size(px(10.0)).rounded(px(2.0)).bg(t.on_accent)),
                 )
                 .into_any_element()
         } else {
@@ -615,15 +615,11 @@ impl PingApp {
                 .flex()
                 .items_center()
                 .justify_center()
-                .bg(if can {
-                    t.solid()
-                } else {
-                    t.primary.alpha(0.12)
-                })
+                .bg(if can { t.accent } else { t.primary.alpha(0.12) })
                 .child(icon(
                     IconName::ArrowUp,
                     16.0,
-                    if can { t.on_solid() } else { t.quaternary },
+                    if can { t.on_accent } else { t.quaternary },
                 ))
                 .when(can, |d| {
                     d.cursor_pointer()

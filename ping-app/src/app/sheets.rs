@@ -67,7 +67,7 @@ impl PingApp {
                         t,
                     ))
                     .child(
-                        sheet_buttons().child(button("pair-done", "Done", t).solid().on_click(
+                        sheet_buttons().child(button("pair-done", "Done", t).accent().on_click(
                             cx.listener(|this, _, _, cx| {
                                 this.pairing = None;
                                 cx.notify();
@@ -171,7 +171,7 @@ impl PingApp {
                         )))
                         .child(
                             button("add-pair", "Pair…", t)
-                                .solid()
+                                .accent()
                                 .disabled(!ok)
                                 .on_click(cx.listener(move |this, _, _, cx| {
                                     let address = submit.read(cx).text().trim().to_string();
@@ -226,7 +226,7 @@ impl PingApp {
                 .child(sheet_title(a.title.clone(), t))
                 .child(sheet_text(a.message.clone(), t))
                 .child(
-                    sheet_buttons().child(button("alert-ok", "OK", t).solid().on_click(
+                    sheet_buttons().child(button("alert-ok", "OK", t).accent().on_click(
                         cx.listener(|this, _, _, cx| {
                             this.alert = None;
                             cx.notify();
@@ -327,9 +327,10 @@ impl PingApp {
                     .position(at)
                     .snap_to_window_with_margin(px(8.0))
                     .child(
-                        pingpong_ui::menu("host-menu", items, t)
+                        div()
                             .occlude()
-                            .on_mouse_down_out(close),
+                            .on_mouse_down_out(close)
+                            .child(pingpong_ui::menu("host-menu", items, t)),
                     ),
             )
             .priority(pingpong_ui::Layer::MENU)

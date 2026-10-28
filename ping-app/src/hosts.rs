@@ -96,6 +96,8 @@ impl PingApp {
             .child(bar)
             .child(page_body(
                 "hosts-page",
+                &self.page_scroll,
+                t,
                 1100.0,
                 div()
                     .flex()
@@ -319,6 +321,8 @@ impl PingApp {
         };
         page_body(
             "hosts-page",
+            &self.page_scroll,
+            t,
             1100.0,
             div()
                 .flex()
@@ -360,7 +364,7 @@ impl PingApp {
                                             PIN, as a host found on the network does."
                                             .into(),
                                     ),
-                                    button("empty-add", "Add Host…", t).solid().on_click(
+                                    button("empty-add", "Add Host…", t).accent().on_click(
                                         cx.listener(|this, _, window, cx| {
                                             this.show_add_host(window, cx)
                                         }),

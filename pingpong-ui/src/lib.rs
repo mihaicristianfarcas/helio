@@ -1,15 +1,21 @@
-//! The look Ping and Pong share, in GPUI: quiet neutral surfaces, hairlines,
-//! a sidebar with glass-pill selection, settings as cards of labelled rows,
-//! colour kept for status, and Ping's orange as the one accent. See
-//! docs/ui.md.
+//! The app's look, in GPUI: asides' (`asides-overlay`'s `controls.rs`, which
+//! started from this crate). Glass the window blurs what is behind it through,
+//! warm grays in dark mode and white in light mode, one hairline weight, a
+//! glass pill behind what is selected, settings as cards of rows that each
+//! say what they do, colour kept for status, asides' soft blue for the one
+//! main action, and its fade, rise and resize timings. See docs/ui.md.
 
+pub mod chrome;
 pub mod controls;
 pub mod desktop;
+pub mod focus;
+pub mod glass;
 pub mod icon;
 pub mod instance;
 pub mod login;
 pub mod markdown;
 pub mod menus;
+pub mod motion;
 pub mod text_field;
 pub mod theme;
 pub mod tray;
@@ -22,17 +28,25 @@ use gpui::{
     WindowOptions,
 };
 
+pub use chrome::{nav_count, nav_list, nav_row, page, sidebar, sidebar_foot, sidebar_header};
 pub use controls::*;
+pub use focus::{
+    arrow_step, clicked, focus_handle, focus_ring, keep_focus, keyboard_focus, keyboard_moved,
+    ringed, scroll_areas, scroll_into_view, scrollbar, scrolled,
+};
 pub use icon::{icon, Assets, Icon, IconName, IconSize};
 pub use markdown::markdown;
+pub use motion::{ease, fade_in, Fade, Glide, Grow, FADE, RESIZE};
 pub use text_field::{field, Field, FieldEvent, TextField};
-pub use theme::{rgba, Ink, Layer, Metrics, Radius, Theme, Type};
+pub use theme::{hex, rgba, Ink, Layer, Metrics, Radius, Theme, Type};
 
 static UI_FONT: OnceLock<SharedString> = OnceLock::new();
 static MONO_FONT: OnceLock<SharedString> = OnceLock::new();
 
-/// Once, when the app starts: fonts and the text field's keys.
+/// Once, when the app starts, before a window opens: fonts, the text field's
+/// keys, and how GPUI blends over glass (`glass::blend_alpha_over`).
 pub fn init(cx: &mut App) {
+    glass::blend_alpha_over();
     let names: std::collections::HashSet<String> =
         cx.text_system().all_font_names().into_iter().collect();
     let pick = |candidates: &[&'static str], fallback: &'static str| -> SharedString {
@@ -97,8 +111,9 @@ pub fn mono_font() -> SharedString {
         .unwrap_or_else(|| "monospace".into())
 }
 
-/// A main window: on a Mac the toolbar shares the title bar (traffic lights
-/// over the sidebar); elsewhere the system's own title bar.
+/// A main window: glass where the system blurs behind windows
+/// (`glass::window_background`); on a Mac the toolbar shares the title bar
+/// (traffic lights over the sidebar); elsewhere the system's own title bar.
 pub fn window_options(
     title: &str,
     app_id: &str,
@@ -131,6 +146,7 @@ pub fn window_options(
             traffic_light_position: cfg!(target_os = "macos").then_some(point(px(16.0), px(16.0))),
         }),
         window_min_size: Some(size(px(min.0), px(min.1))),
+        window_background: glass::window_background(),
         app_id: Some(app_id.to_string()),
         ..Default::default()
     }

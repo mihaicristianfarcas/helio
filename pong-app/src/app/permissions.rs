@@ -204,7 +204,7 @@ impl PongApp {
         let chosen = self.pair_choice.get(&id).copied().unwrap_or(default);
         let (choices, at) = preset_choices(agent, chosen);
         let this = cx.weak_entity();
-        select(ElementId::Name(format!("may-{id}").into()), choices, at, t)
+        select(format!("may-{id}"), choices, at, t)
             .width(170.0)
             .on_select(move |i, _, cx| {
                 let _ = this.update(cx, |app, cx| {
@@ -357,7 +357,7 @@ impl PongApp {
             .child(
                 div().flex_none().flex().justify_end().child(
                     button("permissions-done", "Done", t)
-                        .solid()
+                        .accent()
                         .on_click(cx.listener(|this, _, _, cx| {
                             this.editing = None;
                             cx.notify();

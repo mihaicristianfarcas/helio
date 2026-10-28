@@ -1007,7 +1007,7 @@ impl Element for FieldElement {
         );
         window.with_content_mask(Some(gpui::ContentMask { bounds }), |window| {
             for s in prepaint.selections.drain(..) {
-                window.paint_quad(fill(s, t.focus.alpha(0.28)));
+                window.paint_quad(fill(s, t.accent.opacity(0.35)));
             }
             let mut y = px(0.0);
             for line in &prepaint.lines {
@@ -1022,7 +1022,7 @@ impl Element for FieldElement {
                 y += prepaint.line_height * (line.wrap_boundaries().len() + 1) as f32;
             }
             if let Some(c) = prepaint.caret.take() {
-                window.paint_quad(fill(c, t.focus.alpha(1.0)));
+                window.paint_quad(fill(c, t.accent));
             }
         });
         let lines = std::mem::take(&mut prepaint.lines);
@@ -1080,7 +1080,7 @@ impl RenderOnce for Field {
         let disabled = f.disabled;
         let multiline = f.multiline;
         let text_size = Type::BODY;
-        let line_height = 19.0;
+        let line_height = 18.0;
         let entity = self.field.clone();
         div()
             .id(ElementId::Name(
@@ -1134,13 +1134,19 @@ impl RenderOnce for Field {
             .text_size(px(text_size))
             .line_height(px(line_height))
             .when(f.mono, |d| d.font_family(crate::mono_font()))
+            // asides' fields: a control's surface and outline; the caret
+            // shows which has the keyboard, and the ring when a key moved it.
             .when(self.chrome, |d| {
-                d.px(px(9.0))
-                    .py(px(if multiline { 7.0 } else { 3.5 }))
-                    .rounded(px(Radius::CONTROL))
+                d.relative()
+                    .px(px(if multiline { 12.0 } else { 8.0 }))
+                    .py(px(if multiline { 10.0 } else { 6.0 }))
+                    .rounded(px(if multiline { 8.0 } else { Radius::CONTROL }))
                     .bg(t.field)
                     .border_1()
-                    .border_color(if focused { t.focus } else { t.field_stroke })
+                    .border_color(t.field_stroke)
+                    .when(focused && crate::focus::keyboard_focus(), |d| {
+                        d.child(crate::focus::focus_ring(t, Radius::CONTROL, 2.0))
+                    })
             })
             .when(disabled, |d| d.opacity(0.6))
             .child(

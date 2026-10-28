@@ -112,6 +112,10 @@ pub struct PongApp {
     logs_len: usize,
     demo: Demo,
     focus: FocusHandle,
+    /// The glass pill behind the page shown in the sidebar.
+    nav_glide: pingpong_ui::Glide,
+    /// Where the page shown is scrolled to (its bar).
+    page_scroll: ScrollHandle,
 }
 
 const PORT_KEYS: [&str; 3] = ["port", "pairing_port", "web_port"];
@@ -216,6 +220,8 @@ impl PongApp {
             logs_len: 0,
             demo,
             focus,
+            nav_glide: pingpong_ui::Glide::new(cx),
+            page_scroll: ScrollHandle::new(),
         };
         // A window opened over a host the app already knows shows it at
         // once, not at the worker's next word.
@@ -240,6 +246,9 @@ impl PongApp {
         }
         if page == Page::General {
             self.starts_at_login = settings::starts_at_login();
+        }
+        if page != self.page {
+            self.page_scroll.set_offset(gpui::point(px(0.0), px(0.0)));
         }
         self.page = page;
         cx.notify();
@@ -570,7 +579,14 @@ impl PongApp {
 impl Render for PongApp {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let t = Theme::of(window);
+        pingpong_ui::scroll_areas([self.page_scroll.clone(), self.logs_scroll.clone()]);
         let body = self.body(t, window, cx);
+        // Each page fades in as it is picked (asides).
+        let shown =
+            gpui::ElementId::Name(format!("page-{:?}-{:?}", self.page, self.snap.conn).into());
+        let body =
+            pingpong_ui::fade_in(div().size_full().flex().flex_col().child(body), shown, 0.0)
+                .into_any_element();
         let window_h = f32::from(window.viewport_size().height);
         let confirm = self
             .confirm_sheet(t, cx)
@@ -597,10 +613,17 @@ impl Render for PongApp {
             .size_full()
             .relative()
             .flex()
-            .bg(t.background)
             .font_family(pingpong_ui::ui_font())
             .text_color(t.primary)
             .text_size(px(Type::BODY))
+            .on_mouse_down(
+                gpui::MouseButton::Left,
+                cx.listener(|_, _, _, cx| {
+                    if pingpong_ui::clicked() {
+                        cx.notify();
+                    }
+                }),
+            )
             .child(self.sidebar(t, cx))
             .child(
                 div()
@@ -609,6 +632,7 @@ impl Render for PongApp {
                     .h_full()
                     .flex()
                     .flex_col()
+                    .bg(t.background)
                     .child(body),
             )
             .children(confirm)
@@ -617,35 +641,15 @@ impl Render for PongApp {
 
 // ---------------------------------------------------------------------------
 
+/// A page: the strip along the title bar, then its content in a column,
+/// scrolling with its bar (asides' pages).
 fn page(
+    scroll: &ScrollHandle,
     t: Theme,
-    trailing: impl IntoIterator<Item = AnyElement>,
     id: &'static str,
     content: impl IntoElement,
 ) -> AnyElement {
-    let _ = t;
-    div()
-        .size_full()
-        .flex()
-        .flex_col()
-        .child(pingpong_ui::toolbar_row(trailing))
-        .child(
-            div().id(id).flex_1().min_h_0().overflow_y_scroll().child(
-                div()
-                    .w_full()
-                    .flex()
-                    .justify_center()
-                    .px(px(28.0))
-                    .pb(px(32.0))
-                    .child(
-                        div()
-                            .w_full()
-                            .max_w(px(Metrics::FORM + 60.0))
-                            .child(content),
-                    ),
-            ),
-        )
-        .into_any_element()
+    pingpong_ui::page(id, scroll, None, Metrics::FORM + 60.0, t, content)
 }
 
 fn info_row(label: &'static str, value: String, mono: bool, t: Theme) -> AnyElement {

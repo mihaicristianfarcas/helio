@@ -1,7 +1,7 @@
 //! The sidebar: the pages, and the host's name and state at its foot.
 
 use gpui::{div, prelude::*, px, AnyElement, Context, FontWeight};
-use pingpong_ui::{dot, icon, icon_button, live_dot, IconName, Ink, Metrics, Radius, Theme, Type};
+use pingpong_ui::{dot, icon, icon_button, live_dot, IconName, Ink, Radius, Theme, Type};
 
 use crate::worker::Conn;
 
@@ -23,6 +23,7 @@ impl PongApp {
             .as_ref()
             .and_then(|s| s.session.as_ref())
             .is_some();
+        let glide = self.nav_glide.clone();
         let nav = |id: &'static str,
                    label: &'static str,
                    name: IconName,
@@ -30,31 +31,11 @@ impl PongApp {
                    trailing: Option<AnyElement>,
                    cx: &mut Context<Self>| {
             let on = page == target && ready;
-            div()
-                .id(id)
-                .h(px(Metrics::NAV_ROW))
-                .px(px(8.0))
-                .flex()
-                .items_center()
-                .gap(px(8.0))
-                .rounded(px(Radius::ROW))
-                .border_1()
-                .border_color(pingpong_ui::rgba(0.0, 0.0, 0.0, 0.0))
-                .text_size(px(Type::BODY))
-                .text_color(if on { t.primary } else { t.primary.alpha(0.78) })
-                .when(on, |d| {
-                    d.bg(t.selected)
-                        .border_color(t.selected_stroke)
-                        .shadow(pingpong_ui::lift(0.06))
-                })
+            pingpong_ui::nav_row(id, label, name, on, target as usize, &glide, false, t)
                 .when(!ready, |d| d.opacity(0.45))
                 .when(!on && ready, |d| {
-                    d.cursor_pointer()
-                        .hover(|s| s.bg(t.hover))
-                        .on_click(cx.listener(move |this, _, _, cx| this.set_page(target, cx)))
+                    d.on_click(cx.listener(move |this, _, _, cx| this.set_page(target, cx)))
                 })
-                .child(icon(name, 15.0, if on { t.primary } else { t.secondary }))
-                .child(div().flex_1().child(label))
                 .children(trailing)
         };
         let overview_badge = streaming.then(|| live_dot(Ink::FRESH).into_any_element());
@@ -69,22 +50,12 @@ impl PongApp {
                 .child(pending.to_string())
                 .into_any_element()
         });
-        let header = |label: &'static str| {
-            div()
-                .pt(px(14.0))
-                .pb(px(4.0))
-                .px(px(9.0))
-                .text_size(px(Type::META))
-                .font_weight(FontWeight::SEMIBOLD)
-                .text_color(t.tertiary)
-                .child(label)
-        };
         let (dot_color, state) = match &self.snap.conn {
-            Conn::Ready if streaming => (Ink::FRESH, "Streaming"),
-            Conn::Ready => (Ink::FRESH, "Running"),
+            Conn::Ready if streaming => (t.fresh, "Streaming"),
+            Conn::Ready => (t.fresh, "Running"),
             Conn::Connecting => (Ink::IDLE, "Connecting…"),
-            Conn::NotRunning => (Ink::DANGER, "Not running"),
-            Conn::SignIn { .. } => (Ink::ATTENTION, "Signed out"),
+            Conn::NotRunning => (t.danger, "Not running"),
+            Conn::SignIn { .. } => (t.attention, "Signed out"),
         };
         let host = if self.snap.state.name.is_empty() {
             "This computer".to_string()
@@ -92,28 +63,9 @@ impl PongApp {
             self.snap.state.name.clone()
         };
         let can_sign_out = ready && !self.snap.local;
-        div()
-            .flex_none()
-            .w(px(Metrics::SIDEBAR))
-            .h_full()
-            .flex()
-            .flex_col()
-            .bg(t.sidebar)
-            .border_r_1()
-            .border_color(t.hairline)
-            .child(div().flex_none().h(px(if cfg!(target_os = "macos") {
-                Metrics::TOOLBAR
-            } else {
-                10.0
-            })))
+        pingpong_ui::sidebar(t)
             .child(
-                div()
-                    .flex_1()
-                    .px(px(8.0))
-                    .pt(px(6.0))
-                    .flex()
-                    .flex_col()
-                    .gap(px(2.0))
+                pingpong_ui::nav_list(&glide, ready.then_some(page as usize), t)
                     .child(nav(
                         "nav-overview",
                         "Overview",
@@ -130,7 +82,7 @@ impl PongApp {
                         devices_badge,
                         cx,
                     ))
-                    .child(header("Settings"))
+                    .child(pingpong_ui::sidebar_header("Settings", t))
                     .child(nav(
                         "nav-general",
                         "General",
