@@ -99,8 +99,9 @@ port: UPnP IGD first (an SSDP search, the WAN IP or PPP connection service,
 published candidates, and is released when Pong stops or the setting is
 turned off. A router whose own "public" address is private (behind another
 NAT) is left alone: a mapping there would open nothing. The host's Ping
-(This computer) and web UI show what happened under **Router**; **Settings
-> Network > Ask the router to forward the port** there turns it off.
+(This computer) and web UI show what happened under **Router**; **Ask the
+router to forward the port** (in Ping, Settings → Hosting, under Network;
+in the web UI, Settings > Network) turns it off.
 
 ## Limits
 

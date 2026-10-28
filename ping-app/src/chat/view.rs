@@ -256,7 +256,7 @@ impl PingApp {
                             .child(
                                 div()
                                     .w_full()
-                                    .max_w(px(720.0))
+                                    .max_w(px(pingpong_ui::Metrics::PAGE))
                                     .flex()
                                     .flex_col()
                                     .gap(px(14.0))
@@ -271,7 +271,12 @@ impl PingApp {
                     .pt(px(6.0))
                     .flex()
                     .justify_center()
-                    .child(div().w_full().max_w(px(720.0)).child(composer)),
+                    .child(
+                        div()
+                            .w_full()
+                            .max_w(px(pingpong_ui::Metrics::PAGE))
+                            .child(composer),
+                    ),
             );
         let width = window.bounds().size.width;
         let show_panel = panel && width > px(760.0);

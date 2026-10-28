@@ -81,8 +81,8 @@ the logs, reporting an issue).
   or a right click has the rest (Steam Big Picture, Wake, the web UI,
   Unpair). Under the cards, what a click streams at, and how to change it.
 - **This computer**: while hosting is off, one page (**Overview**) that says
-  what hosting is and holds its switch, and what the system must allow for
-  it. While it is on, the host's pages:
+  so, what hosting is, and leads to Settings → Hosting, where the switch
+  is. While it is on, the host's pages:
   - **Overview**: a pairing request as a banner when there is one; the
     session (who, the mode, End Session; an agent's with Pause, Hand Back,
     Stop) with its numbers (frames, bitrate, host latency, round trip,
@@ -93,11 +93,20 @@ the logs, reporting an issue).
     pairs) and what the device may do once paired; then the paired devices
     and agents, each with a button that names what it may do and opens the
     sheet that sets each permission, and unpairable.
-  - **Settings**: the host's own (General, Video, Network, AI agents, one
-    page each, picked along the top), saved as they change (text fields on
-    Return). Encoder settings a Mac host does not have (NVENC, AV1) are not
-    shown.
   - **Logs**: the last 400 lines of the host's log, following its end.
+- **Settings**: Ping's own pages, **Hosting** with the switch and what the
+  system must allow for it. While hosting is on, the host's own settings
+  follow Ping's on the page of their kind (`HostPages::settings_for`): its
+  name, taking over and network on Hosting, its encoder and limits on
+  Video, its clipboard on Input, what agents may do on it on Agent setup.
+  They save as they change (text fields on Return); encoder settings a Mac
+  host does not have (NVENC, AV1) are not shown. Each setting is in one
+  place, and a computer that only plays has none of the host's.
+
+Every page has the same column (`Metrics::PAGE`), and what is on it fills
+the column. On Windows a page's actions (Add Host, Copy) sit beside its
+title, as the caption buttons end the strip along the top; on a Mac they
+are in that strip.
 - **Agents** starts agent sessions; **Sessions** lists them and your own
   desktop streams ([ai-agents.md](ai-agents.md#2-work-with-it-sessions)).
 - **Settings**, each row naming a setting and saying in a line what it does:
@@ -242,8 +251,8 @@ open at that step), `hosting=off|on|starting|failed|switching|elevating`
 (hosting made up, and the switch runs nothing), `switch=on|off` (the switch
 turned, for real), `hosting-page` (This computer with hosting off).
 
-This computer's host: `host=overview|devices|general|video|network|agents|logs`
-(its pages), `host-sample` (a made-up session, request, devices and
+This computer's host: `host=overview|devices|logs` (its pages; its
+settings are on the settings pages, `settings=hosting|video|input|agents`), `host-sample` (a made-up session, request, devices and
 settings), `host-signin`, `host-setup`, `host-offline` (the real host made
 signed out, without an account yet, or not answering),
 `signin-as=USER:PASSWORD`, `permissions=NAME` (the permissions sheet of the

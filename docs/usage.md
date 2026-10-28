@@ -128,9 +128,9 @@ hosts (`hosts.toml`) and this device's keys:
 
 ## Hosting on and off
 
-Hosting is one switch, and it is off until you turn it on: in Ping, under
-**This computer** or **Settings → Hosting** (or in setup, by answering that
-your devices will play this computer). Off, nothing of the host runs on
+Hosting is one switch, and it is off until you turn it on: in Ping, in
+**Settings → Hosting** (or in setup, by answering that your devices will
+play this computer). Off, nothing of the host runs on
 your computer: no port is open for streaming, pairing or the web UI,
 nothing is published for finding the host from the internet, and it is not
 announced on the local network. Ping, the client, opens none of these.
@@ -171,10 +171,10 @@ pairings and settings stay in the data folder either way.
 
 ## This computer and the web UI
 
-With hosting on, Ping's **This computer** pages and the host's web UI
-(`https://HOST:47802`) do the same things: see and end the session, pair
-and unpair devices, set what each may do, change the host's settings, read
-its log. This computer is for the host's own screen; the web UI for a
+With hosting on, Ping's **This computer** pages and **Settings → Hosting**
+and the host's web UI (`https://HOST:47802`) do the same things: see and
+end the session, pair and unpair devices, set what each may do, change the
+host's settings, read its log. This computer is for the host's own screen; the web UI for a
 headless host or another computer. On Windows, Ping signs in to the host
 once with the web UI's admin account.
 
@@ -211,9 +211,14 @@ the host runs on.
 | AI agents | Allow paired AI agents | on | `agents` |
 | | Hold after local input | 10 s | `agent_local_input_hold_secs` |
 
-These are This computer → Settings (General, Video, Network, AI agents,
-picked along the top of the page). A changed name or port applies after
-the host restarts (the page offers to).
+The groups are the web UI's. In Ping, with hosting on, each setting is on
+the settings page of its kind, after Ping's own: the name, taking over and
+the Network group in **Settings → Hosting**, under the switch; keeping the
+monitors on and the Video group in **Settings → Video** ("Streaming from
+this PC", "What devices may ask of this PC"); the clipboard in **Settings →
+Input**; the AI agents group in **Settings → Agent setup**. A computer that
+only plays shows none of them. A changed name or port applies after the
+host restarts (the page offers to).
 Pong's data folder holds `config.toml`, its identity, the paired clients,
 the web UI's certificate and account, and `logs/`:
 

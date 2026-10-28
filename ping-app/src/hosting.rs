@@ -90,11 +90,18 @@ fn gpu_lines(gpu: Gpu) -> [(bool, &'static str, &'static str); 2] {
 }
 
 impl PingApp {
-    /// This computer, hosting off: what hosting is, and the switch.
+    /// This computer, hosting off: that it is off, what hosting is, and
+    /// the way to the switch (Settings → Hosting, its one place).
     pub fn render_hosting_page(&mut self, t: Theme, cx: &mut Context<Self>) -> AnyElement {
         let device = crate::app::device_word();
-        let switch = self.hosting_switch_row(t, cx);
-        let needs = self.hosting_needs_rows(t, cx);
+        let off = setting(
+            "Hosting is off",
+            Some("Settings → Hosting turns it on.".into()),
+            button("open-hosting-settings", "Hosting Settings…", t).on_click(cx.listener(
+                |this, _, _, cx| this.set_page(Page::Settings(crate::settings::Tab::Hosting), cx),
+            )),
+            t,
+        );
         let content = div()
             .flex()
             .flex_col()
@@ -106,8 +113,8 @@ impl PingApp {
                 t,
             ))
             .child(
-                section("Hosting", t)
-                    .child(rows([switch], t))
+                section("", t)
+                    .child(rows([off.into_any_element()], t))
                     .child(footnote(
                         format!(
                             "On, this {device} runs the host whenever you are signed in: \
@@ -117,19 +124,9 @@ impl PingApp {
                         ),
                         t,
                     )),
-            )
-            .when(!needs.is_empty(), |d| {
-                d.child(section("What it needs", t).child(rows(needs, t)))
-            });
+            );
         let scroll = self.page_scroll.clone();
-        pingpong_ui::page(
-            "hosting-page",
-            &scroll,
-            None,
-            Metrics::FORM + 60.0,
-            t,
-            content,
-        )
+        pingpong_ui::page("hosting-page", &scroll, None, Metrics::PAGE, t, content)
     }
 
     /// Hosting's switch, with what it is doing, or why it did not.
@@ -289,43 +286,22 @@ impl PingApp {
         }
     }
 
-    /// Settings → Hosting: the switch, what it needs, and This computer's
-    /// pages a click away.
+    /// Settings → Hosting: the switch and what it needs (the host's own
+    /// settings follow, while hosting is on: `HostPages::settings_for`).
     pub fn hosting_settings(&mut self, t: Theme, cx: &mut Context<Self>) -> AnyElement {
         let switch = self.hosting_switch_row(t, cx);
         let needs = self.hosting_needs_rows(t, cx);
-        let on = self.host.is_some();
-        let pages = setting(
-            "This computer",
-            Some(
-                "The host at a glance, the devices paired and asking to pair, what each may \
-                 do, the host's own settings and its log."
-                    .into(),
-            ),
-            button("open-this-computer", "Open", t).on_click(cx.listener(move |this, _, _, cx| {
-                this.set_page(
-                    if on {
-                        Page::Host(crate::host::Page::Overview)
-                    } else {
-                        Page::Hosting
-                    },
-                    cx,
-                )
-            })),
-            t,
-        );
         div()
             .flex()
             .flex_col()
             .gap(px(20.0))
-            .child(section("", t).child(rows([switch, pages.into_any_element()], t)))
+            .child(section("", t).child(rows([switch], t)).child(footnote(
+                "Quitting Ping never stops the host: only this switch turns it off.",
+                t,
+            )))
             .when(!needs.is_empty(), |d| {
                 d.child(section("What it needs", t).child(rows(needs, t)))
             })
-            .child(footnote(
-                "Quitting Ping never stops the host: only this switch turns it off.",
-                t,
-            ))
             .into_any_element()
     }
 }

@@ -15,8 +15,18 @@ use crate::app::{page_body, Page, PingApp};
 use crate::model::Item;
 use crate::settings::{mbps, Tab};
 
-const CARD_W: f32 = 200.0;
+/// A card at its narrowest: as many go across as fit, filling the page.
+const CARD_MIN: f32 = 200.0;
 const CARD_H: f32 = 176.0;
+const CARD_GAP: f32 = 14.0;
+
+/// How many cards go across the page, for a window this wide.
+fn columns(window: &Window) -> u16 {
+    // The page's column: what the sidebar and the page's margins leave.
+    let page =
+        (f32::from(window.viewport_size().width) - Metrics::SIDEBAR - 56.0).min(Metrics::PAGE);
+    (((page + CARD_GAP) / (CARD_MIN + CARD_GAP)).floor() as u16).max(1)
+}
 
 impl PingApp {
     pub fn render_hosts(
@@ -98,7 +108,7 @@ impl PingApp {
                 "hosts-page",
                 &self.page_scroll,
                 t,
-                1100.0,
+                Metrics::PAGE,
                 div()
                     .flex()
                     .flex_col()
@@ -109,7 +119,13 @@ impl PingApp {
                         beside,
                         t,
                     ))
-                    .child(div().flex().flex_wrap().gap(px(14.0)).children(cards))
+                    .child(
+                        div()
+                            .grid()
+                            .grid_cols(columns(window))
+                            .gap(px(CARD_GAP))
+                            .children(cards),
+                    )
                     .child(
                         div()
                             .flex()
@@ -160,7 +176,7 @@ impl PingApp {
             .id(ElementId::Name(group.clone()))
             .group(group.clone())
             .relative()
-            .w(px(CARD_W))
+            .w_full()
             .h(px(CARD_H))
             .flex()
             .flex_col()
@@ -329,7 +345,7 @@ impl PingApp {
             "hosts-page",
             &self.page_scroll,
             t,
-            1100.0,
+            Metrics::PAGE,
             div()
                 .flex()
                 .flex_col()
@@ -348,39 +364,37 @@ impl PingApp {
                     t,
                 ))
                 .child(
-                    section("Your first host", t)
-                        .max_w(px(Metrics::FORM))
-                        .child(rows(
-                            [
-                                setting(
-                                    "On this network",
-                                    Some(
-                                        "Install Pong on the PC or Mac you want to stream \
+                    section("Your first host", t).child(rows(
+                        [
+                            setting(
+                                "On this network",
+                                Some(
+                                    "Install Pong on the PC or Mac you want to stream \
                                             from: it shows up here by itself."
-                                            .into(),
-                                    ),
-                                    look,
-                                    t,
-                                )
-                                .into_any_element(),
-                                setting(
-                                    "Anywhere else",
-                                    Some(
-                                        "Add it by its address or name. It pairs with a \
+                                        .into(),
+                                ),
+                                look,
+                                t,
+                            )
+                            .into_any_element(),
+                            setting(
+                                "Anywhere else",
+                                Some(
+                                    "Add it by its address or name. It pairs with a \
                                             PIN, as a host found on the network does."
-                                            .into(),
-                                    ),
-                                    button("empty-add", "Add Host…", t).accent().on_click(
-                                        cx.listener(|this, _, window, cx| {
-                                            this.show_add_host(window, cx)
-                                        }),
-                                    ),
-                                    t,
-                                )
-                                .into_any_element(),
-                            ],
-                            t,
-                        )),
+                                        .into(),
+                                ),
+                                button("empty-add", "Add Host…", t)
+                                    .accent()
+                                    .on_click(cx.listener(|this, _, window, cx| {
+                                        this.show_add_host(window, cx)
+                                    })),
+                                t,
+                            )
+                            .into_any_element(),
+                        ],
+                        t,
+                    )),
                 ),
         )
     }
