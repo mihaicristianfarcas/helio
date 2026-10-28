@@ -43,8 +43,12 @@ and the host makes its data folder (`C:\ProgramData\Pong`) private when it
 starts: only SYSTEM, Administrators and the folder's owner can read or write
 it, except `config.toml` and `web-cert.pem`, which Pong's window needs and
 every user may read; the host's tokens are closed to everyone but SYSTEM and
-Administrators. Whoever can read a device's keys can act as that device:
-unpair a device you lost.
+Administrators. The host uses that folder only if SYSTEM or Administrators
+own it: any user may create it before the host first runs and put an
+account or a device of their own in it, so a folder someone else made is
+moved aside (`Pong.untrusted-…`) and the host starts afresh, in one it
+creates owned by Administrators and private from the start. Whoever can
+read a device's keys can act as that device: unpair a device you lost.
 
 **The host's privileges.** On Windows, Pong runs as SYSTEM so it can
 capture and control the secure desktop (UAC prompts, the lock screen), as

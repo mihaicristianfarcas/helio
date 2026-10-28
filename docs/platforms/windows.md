@@ -39,7 +39,11 @@ State lives in `C:\ProgramData\Pong\`: `config.toml`, the host's identity,
 paired clients, the web UI's certificate and accounts, and `logs\`. The host
 makes that folder private when it starts (`pong/src/private.rs`): only
 SYSTEM and Administrators can read it, apart from the two files Pong's
-window needs (`config.toml`, `web-cert.pem`).
+window needs (`config.toml`, `web-cert.pem`). It uses the folder only if
+SYSTEM or Administrators own it; one another user made first is moved
+aside as `C:\ProgramData\Pong.untrusted-…` (the service's log says so) and
+the host starts afresh, so devices pair again. A `pong` command run without
+an administrator neither creates nor moves it.
 
 `pong status` reports `failed` while PongService runs but its host does not
 (the host exited; the service starts it again 3 s later), as it does for a
