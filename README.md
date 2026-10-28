@@ -34,12 +34,13 @@ switch, off until you turn it on) it lets them play this one, through
 
 ## Getting started
 
-1. [Install](docs/install.md) Pong on the computer to stream, and Ping on the
-   one you sit at: download them for macOS, Windows or Linux from
+1. [Install](docs/install.md) Ping on both computers, the one to stream and
+   the one you sit at (the host, Pong, comes inside it): download it for
+   macOS, Windows or Linux from
    [pingpong.mihaicristian.dev](https://pingpong.mihaicristian.dev/#install),
    on a Mac with Homebrew
    (`brew tap mihaicristianfarcas/pingpong https://github.com/mihaicristianfarcas/pingpong`,
-   then `brew install --cask ping` or `pong`), or build them from source.
+   then `brew install --cask ping`), or build it from source.
 2. On the host, turn hosting on in Ping (setup asks, or **Settings →
    Hosting**). On the other computer open Ping, click the host, and type
    the PIN it shows into the host's Ping (**This computer → Devices**).
@@ -52,7 +53,7 @@ switch, off until you turn it on) it lets them play this one, through
 
 | | Client | Host |
 |---|---|---|
-| macOS 14+ | Ping.app: in daily use | Pong.app: works; stereo, or 5.1/7.1 with a surround output ([macOS](docs/platforms/macos.md#sound-in-surround)); no controllers yet |
+| macOS 14+ | Ping.app: in daily use | Pong Host, inside Ping.app: works; stereo, or 5.1/7.1 with a surround output ([macOS](docs/platforms/macos.md#sound-in-surround)); no controllers yet |
 | Windows 10/11 | Ping.exe: works; less tested than macOS | PongService: in daily use (best with an NVIDIA GPU and SudoVDA; without them, H.264 in software and the host's own display) |
 | Linux | works under X11 and Wayland; tested in a container | works under X11 and Wayland (portal); scaled, no virtual display |
 

@@ -94,32 +94,35 @@ and the web UI. The Mac-specific modules are in `pong/src/mac/`.
 
 ### Hosting from Ping, and its menu bar icon
 
-Ping is an ordinary app, in the Dock. Its hosting switch runs `pong enable`
-from Pong.app (inside Ping's bundle under `Contents/Helpers`, beside Ping,
-or in Applications), which writes the host's LaunchAgent and loads it. The
-agent runs the host from the app bundle `pong` is in, so that macOS's
-permissions apply to Pong, not to Ping; `pong enable` from a `pong` outside
-an app bundle refuses (`pong/src/hosting/mac.rs`).
+Ping is an ordinary app, in the Dock. The host is a helper app inside it,
+`Ping.app/Contents/Helpers/Pong Host.app`, with its own bundle identifier
+(`dev.pingpong.Pong`) and usage strings, signed before the app around it
+(`tools/build-ping-app`). Ping's hosting switch runs `pong enable` from the
+helper, which writes the host's LaunchAgent and loads it. The agent runs
+the host from the app bundle `pong` is in, so that macOS's permissions
+apply to Pong Host, not to Ping; `pong enable` from a `pong` outside an app
+bundle refuses (`pong/src/hosting/mac.rs`).
 
 While hosting is on, Ping shows the host's icon in the menu bar: what the
 host does, a device asking to pair (a notification says so too), the
 window, an update. Closing the window leaves the icon, and Ping leaves the
 Dock until its window opens again (the accessory activation policy);
 **Open at login** in General starts Ping at login as the icon only
-(`--background`). Quitting Ping leaves the host running: it is Pong.app,
+(`--background`). Quitting Ping leaves the host running: it is the helper,
 under a LaunchAgent that keeps it alive.
 
-Opening **Pong** itself (from the Finder, Launchpad or Spotlight) starts
-the host and Ping with it, in the background, so the icon is in the menu
-bar whenever you started Pong. Opened again while it runs, it changes
+Opening **Pong Host** itself (from the Finder, inside Ping.app, or with
+Spotlight) starts the host and Ping with it, in the background, so the
+icon is in the menu bar whenever you started the host. Opened again while it runs, it changes
 nothing. The host started at login by its LaunchAgent leaves the icon to
 Ping's own login item (Open at login).
 
 ### Permissions
 
 Pong needs **Screen Recording** (to capture) and **Accessibility** (to
-inject the keyboard and mouse). As an app (`tools/build-pong-app`) it asks
-for both in its own name at start. The host says on its API what macOS
+inject the keyboard and mouse). As the helper app it asks for both in its
+own name, **Pong Host**, at start, and System Settings lists it, not Ping,
+under both. The host says on its API what macOS
 allows it, and Ping's Hosting page and setup show it, with a button to
 each pane of System Settings; Ping itself needs neither. From a terminal, the terminal needs them.
 Without Accessibility, Pong tells the client, and Ping shows that the host

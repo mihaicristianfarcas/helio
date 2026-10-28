@@ -14,7 +14,7 @@ ping-core/            the client: stream, platforms, `ping`    │ the app
 ping-agent/           AI agents: MCP server, runners           ─┘
 pong/                 the host: sessions, pipelines, web UI      the host
 pingpong-*/           the libraries both share (see docs/architecture.md)
-Casks/                the Homebrew casks, written at each release (see below)
+Casks/                the Homebrew cask, written at each release (see below)
 docs/                 documentation; docs/design/ is the design history
 tools/                build, deploy and test scripts (below)
 spikes/               early experiments, not built with the workspace
@@ -115,10 +115,12 @@ tools/linux-dev tools/linux/loopback-test        # a Linux host streaming to a L
   runs `cargo build --release ARGS` there. Set `PINGPONG_SSH=user@host` and
   `PINGPONG_HOST_DIR` in the environment or in `tools/dev.env` (not
   committed).
-- `tools/host-deploy.ps1` (on the host; it asks for an administrator when
-  not run as one) installs the built `pong.exe` as `PongService` (with
-  `pong enable`, which copies it to `C:\Program Files\Pong`), and Pong's
-  window; `-Uninstall` removes them, `pong disable` first.
+- `target\release\pong.exe enable`, on the host in an administrator
+  terminal, installs the built engine as `PongService` (it copies itself to
+  `C:\Program Files\Pong` and runs the service from there); run it again
+  after a build, and `pong disable` removes it. A built Ping's switch does
+  the same with the `pong.exe` beside it (`tools/build-ping-win.ps1` puts
+  it in `target\Ping`).
 - `tools/host-run.ps1 -Command '…'` runs a command in the interactive
   console session and prints its output: SSH lands in session 0, where there
   is no desktop to capture and no display to configure.
@@ -132,9 +134,9 @@ tools/linux-dev tools/linux/loopback-test        # a Linux host streaming to a L
 macOS ties the permissions it grants (Screen Recording, Accessibility, local
 network) to an app's signature, and an ad hoc signature changes with every
 build. `tools/dev-signing-identity` creates one self-signed code-signing
-identity ("pingpong dev") in your login keychain; `tools/build-ping-app` and
-`tools/build-pong-app` sign with it when it exists, so the permissions
-survive rebuilds. The first signing asks to use the key: **Always Allow**.
+identity ("pingpong dev") in your login keychain; `tools/build-ping-app`
+signs the app and the host's helper inside it with it when it exists, so
+the permissions survive rebuilds. The first signing asks to use the key: **Always Allow**.
 `PINGPONG_SIGN_IDENTITY` names another identity to sign with, as a release
 is ([Releases](#releases)).
 
@@ -172,9 +174,10 @@ Per-second statistics: `RUST_LOG=info,ping_core::stats=debug` on the client
 ## Releases
 
 Every push to `main` that changes the programs is built and published:
-`.github/workflows/release.yml` builds Ping and Pong on an Apple silicon
-and an Intel Mac, on Windows and on Linux, and publishes the archives as
-the website's downloads. Pushes that change only `docs/`, `Casks/` or
+`.github/workflows/release.yml` builds the app, with the host's engine
+inside it, on an Apple silicon and an Intel Mac, on Windows and on Linux:
+one archive for each system and architecture, published as the website's
+downloads. Pushes that change only `docs/`, `Casks/` or
 Markdown files build nothing. The website,
 [pingpong.mihaicristian.dev](https://pingpong.mihaicristian.dev), is not on
 `main`: it lives on the `landing-page` branch, which is rebased on `main`
@@ -217,23 +220,24 @@ A **version** is released by merging the change that sets it: the
 workspace's version in `Cargo.toml` (`[workspace.package]`), which every
 program has. When a push to `main` has a version with no `vVERSION` tag
 yet, the same archives become the GitHub release `vVERSION`, and the
-workflow opens a pull request that brings the Homebrew casks in `Casks/`
-to it (`tools/update-casks`); `brew upgrade` sees the release once that is
+workflow opens a pull request that brings the Homebrew cask,
+`Casks/ping.rb`, to it (`tools/update-casks`); `brew upgrade` sees the release once that is
 merged. GitHub holds CI on a pull request a workflow opened until it is
 approved: the workflow approves it, or says on the pull request that it
 needs approving by hand.
 
 To build the archives of a branch without publishing them, run the
 workflow on it (`gh workflow run release.yml --ref BRANCH`): they are the
-run's artifacts. To try the casks before a release, write them against the
+run's artifacts. To try the cask before a release, write it against the
 local archives
 (`CASKS_DIR=DIR tools/update-casks VERSION target/dist file://$PWD/target/dist`),
-put them in a local tap (`brew tap-new`), and `brew install --cask
+put it in a local tap (`brew tap-new`), and `brew install --cask
 --appdir=DIR` from it.
 
-On the runners the macOS apps are signed with a Developer ID, with the
-hardened runtime and a secure timestamp, notarized by Apple and stapled,
-so macOS opens them from a download. The workflow takes the certificate
+On the runners the macOS app is signed with a Developer ID, the helper
+inside it first, with the hardened runtime and a secure timestamp,
+notarized by Apple in one submission and stapled, so macOS opens it from a
+download. The workflow takes the certificate
 and an App Store Connect API key from five secrets
 (`MACOS_CERTIFICATE_P12`, the certificate and its key in base64;
 `MACOS_CERTIFICATE_PASSWORD`; `APPLE_API_KEY_P8`, `APPLE_API_KEY_ID`,
@@ -246,8 +250,8 @@ APPLE_API_KEY_PATH=path/to/AuthKey_KEYID.p8 APPLE_API_KEY_ID=KEYID APPLE_API_ISS
 tools/package-macos
 ```
 
-Without the API key the apps are signed but not notarized; without
-`PINGPONG_SIGN_IDENTITY` they are signed as a development build is (below).
+Without the API key the app is signed but not notarized; without
+`PINGPONG_SIGN_IDENTITY` it is signed as a development build is (below).
 
 The Windows programs are not signed. Signing them takes a code-signing
 certificate whose key stays with its issuer (every new one's must, in a
@@ -281,7 +285,8 @@ cargo +nightly fuzz run depacketize   # also: control, input
   -- OUTDIR` writes Ping's and Pong's macOS iconsets, their Windows `.ico`
   and 256-pixel PNGs, and the host's menu bar mark (`tray.png`,
   `tray@2x.png`). Ping's `.ico`, PNG and the mark are committed in
-  `ping-app/assets/`; the bundle scripts rerun the drawing when it changes.
+  `ping-app/assets/`; `tools/build-ping-app` reruns the drawing when it
+  changes, for the app's icon and its host helper's (Pong's).
 - The UI's icons are SVG files in `pingpong-ui/assets/icons/`, 24×24 with
   1.75 pt round strokes in `currentColor`, embedded in the binary.
 - `pingpong-decode/tests/fixtures/testsrc.h264` is the known stream the

@@ -6,11 +6,14 @@
 #   tools/publish-downloads DIST_DIR
 #
 # DIST_DIR holds what tools/package-macos, tools/package-windows.ps1 and
-# tools/linux/package made (APP-VERSION-OS-ARCH.zip or .tar.gz). Each goes
-# to latest/APP-OS-ARCH.EXT, a name that stays the same from one release to
-# the next so the page can link it, and is downloaded under its own name.
-# Then latest/SHA256SUMS, and last latest.json, which says what is there
-# (version, commit, each file's size and SHA-256) for the page to show.
+# tools/linux/package made: one archive per system and architecture
+# (Ping-VERSION-OS-ARCH.zip or .tar.gz). Each goes to latest/Ping-OS-ARCH.EXT,
+# a name that stays the same from one release to the next so the page can
+# link it, and is downloaded under its own name. Then latest/SHA256SUMS, and
+# latest.json, which says what is there (version, commit, each file's size
+# and SHA-256) for the page to show. Last, the archives the previous
+# latest.json listed and this one does not (a system or a program no longer
+# built) are deleted, so latest/ never serves an old build as the newest.
 # Everything is stored with no-cache, so Cloudflare's edge asks R2 again at
 # each request. A browser may still keep an archive for hours (the zone's
 # Browser Cache TTL wins over no-cache for the file types the edge caches):
@@ -41,6 +44,10 @@ put() {
 
 WORK=$(mktemp -d)
 trap 'rm -rf "$WORK"' EXIT
+# What the previous publish listed, read before latest.json is replaced.
+# None (the first publish, or no answer): nothing is deleted.
+previous=$(curl -fsS "$BASE/latest.json?before=$(date +%s)" 2>/dev/null |
+    jq -r '.files[]?.url // empty' 2>/dev/null || true)
 files='{}'
 : > "$WORK/SHA256SUMS"
 shopt -s nullglob
@@ -68,3 +75,12 @@ jq -n --arg version "$VERSION" --arg commit "$COMMIT" \
     --arg published "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --argjson files "$files" \
     '{version: $version, commit: $commit, published: $published, files: $files}' > "$WORK/latest.json"
 put latest.json "$WORK/latest.json" application/json
+
+for url in $previous; do
+    key=${url#"$BASE/"}
+    [[ $key == latest/* ]] || continue
+    if ! jq -e --arg url "$url" 'any(.[]; .url == $url)' <<< "$files" >/dev/null; then
+        "${wrangler[@]}" r2 object delete "$BUCKET/$key" --remote >/dev/null
+        echo "deleted $url"
+    fi
+done

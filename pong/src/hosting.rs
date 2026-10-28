@@ -387,15 +387,13 @@ mod tests {
 
     #[test]
     fn a_mac_host_runs_only_as_an_apps_main_program() {
-        let exe = Path::new("/Applications/Pong.app/Contents/MacOS/pong");
-        assert_eq!(bundle_of(exe), Some(Path::new("/Applications/Pong.app")));
-        // A helper bundle inside the app.
+        // The helper inside the app (tools/build-ping-app).
         let helper =
-            Path::new("/Applications/Helio.app/Contents/Library/Pong.app/Contents/MacOS/pong");
+            Path::new("/Applications/Ping.app/Contents/Helpers/Pong Host.app/Contents/MacOS/pong");
         assert_eq!(
             bundle_of(helper),
             Some(Path::new(
-                "/Applications/Helio.app/Contents/Library/Pong.app"
+                "/Applications/Ping.app/Contents/Helpers/Pong Host.app"
             ))
         );
         // A build, and things that look like a bundle without being one.
@@ -439,7 +437,7 @@ mod tests {
         \ttype = LaunchAgent\n\
         \tstate = running\n\
         \n\
-        \tprogram = /Applications/Pong.app/Contents/MacOS/pong\n\
+        \tprogram = /Applications/Ping.app/Contents/Helpers/Pong Host.app/Contents/MacOS/pong\n\
         \truns = 1\n\
         \tpid = 64735\n\
         \tlast exit code = (never exited)\n\

@@ -1,63 +1,60 @@
 # Installing
 
-pingpong has two programs: **Ping**, the client, on the computer you sit at,
-and **Pong**, the host, on the computer you stream. Every system has them
-ready to [download](#from-the-website) from
+pingpong is one app, **Ping**: the client, on every computer you sit at,
+with the host, **Pong**, inside it, off until you turn hosting on. Install
+it on both computers: the one you stream and the one you stream to. Every
+system has it ready to [download](#from-the-website) from
 [pingpong.mihaicristian.dev](https://pingpong.mihaicristian.dev/#install);
-on a Mac they also install with [Homebrew](#with-homebrew-macos), and
-everywhere they build from this repository with Rust. Pick the sections for
-your systems:
+on a Mac it also installs with [Homebrew](#with-homebrew-macos), and
+everywhere it builds from this repository with Rust.
 
 | | macOS 14+ | Windows 10/11 | Linux |
 |---|---|---|---|
-| Ping (client) | [Download](#on-macos), [Homebrew](#with-homebrew-macos) or [Ping.app](#ping-on-macos) | [Download](#on-windows) or [Ping.exe](#ping-on-windows) | [Download](#on-linux) or [ping-app](#ping-on-linux) |
-| Pong (host) | [Download](#on-macos), [Homebrew](#with-homebrew-macos) or [Pong.app](#pong-on-macos) | [Download](#on-windows) or [PongService](#pong-on-windows) | [Download](#on-linux) or [a user service](#pong-on-linux) |
+| Ping | [Download](#on-macos), [Homebrew](#with-homebrew-macos) or [build](#ping-on-macos) | [Download](#on-windows) or [build](#ping-on-windows) | [Download](#on-linux) or [build](#ping-on-linux) |
+| To host | [Hosting on macOS](#hosting-on-macos) | [Hosting on Windows](#hosting-on-windows) | [Hosting on Linux](#hosting-on-linux) |
 
 Then [pair them](#pairing).
 
 ## From the website
 
 [pingpong.mihaicristian.dev](https://pingpong.mihaicristian.dev/#install)
-asks which computer you are installing on and what it runs, and gives you
-its download: the newest build of the `main` branch, made by the release
-workflow ([development.md](development.md#releases)). The files keep their
-addresses from one build to the next, for scripts, under
-`https://download.pingpong.mihaicristian.dev/latest/`:
+asks what your computer runs and gives you its download: the newest build
+of the `main` branch, made by the release workflow
+([development.md](development.md#releases)). Each is the whole app, the
+host included. The files keep their addresses from one build to the next,
+for scripts, under `https://download.pingpong.mihaicristian.dev/latest/`:
 
-| | macOS, Apple silicon | macOS, Intel | Windows, x86_64 | Linux, x86_64 |
-|---|---|---|---|---|
-| Ping | `Ping-macos-arm64.zip` | `Ping-macos-x86_64.zip` | `Ping-windows-x86_64.zip` | `Ping-linux-x86_64.tar.gz` |
-| Pong | `Pong-macos-arm64.zip` | `Pong-macos-x86_64.zip` | `Pong-windows-x86_64.zip` | `Pong-linux-x86_64.tar.gz` |
+| macOS, Apple silicon | macOS, Intel | Windows, x86_64 | Linux, x86_64 |
+|---|---|---|---|
+| `Ping-macos-arm64.zip` | `Ping-macos-x86_64.zip` | `Ping-windows-x86_64.zip` | `Ping-linux-x86_64.tar.gz` |
 
 `latest/SHA256SUMS` has their checksums, and `latest.json` says which
 version and commit they are.
 
 ### On macOS
 
-Open the zip and move the apps to Applications: Ping, and for hosting
-Pong (the host Ping runs). They are signed with a Developer ID and
-notarized by Apple, so macOS opens them as any app from the internet,
-asking once whether you want to. Then, to host, turn hosting on in Ping
-(setup asks, or **Settings → Hosting**), as in [Pong on macOS](#pong-on-macos).
+Open the zip and move Ping to Applications. It is signed with a Developer
+ID and notarized by Apple, so macOS opens it as any app from the internet,
+asking once whether you want to. To host, turn hosting on in Ping (setup
+asks, or **Settings → Hosting**), as in [Hosting on macOS](#hosting-on-macos).
 
 ### On Windows
 
 The programs are not code-signed yet, so Windows asks before it first runs
-each one, and names its publisher as unknown.
+them, and names their publisher as unknown.
 
-- **Ping**: extract the zip and double-click **Install Ping.cmd**. Windows
-  asks whether to run it. It installs Ping for you, with no administrator
-  needed: in `%LOCALAPPDATA%\Programs\Ping`, in the Start menu as
-  **Ping**, and in **Settings > Apps > Installed apps**, which uninstalls
-  it. Then it opens Ping. Ping also runs from the extracted folder as it
-  is: open **Ping.exe** there (it needs FFmpeg's DLLs beside it).
-- **Pong**: the host needs what [Pong on Windows](#pong-on-windows) lists
-  first (an NVIDIA GPU, SudoVDA). Extract the zip and double-click
-  **Install Pong.cmd**. Windows asks whether to run it, then whether
-  Windows PowerShell may make changes as an administrator. It does what
-  `host-deploy.ps1` does there (PongService, the entry in **Settings >
-  Apps**). Hosting is then on; Ping's **Settings → Hosting** turns it off
-  and on. Running **Install Pong.cmd** from a newer download updates it.
+Extract the zip and double-click **Install Ping.cmd**. Windows asks whether
+to run it. It installs Ping for you, with no administrator needed: Ping and
+the host's engine (`pong.exe`) in `%LOCALAPPDATA%\Programs\Ping`, Ping in
+the Start menu and in **Settings > Apps > Installed apps**, which
+uninstalls it. Then it opens Ping. Ping also runs from the extracted folder
+as it is: open **Ping.exe** there (it needs FFmpeg's DLLs and `pong.exe`
+beside it).
+
+To host, see what [Hosting on Windows](#hosting-on-windows) lists first
+(an NVIDIA GPU, SudoVDA), then turn hosting on in Ping: Windows asks
+whether Ping may make changes as an administrator, once to turn it on and
+once to turn it off.
 
 SmartScreen judges an unsigned program by the file itself, so it may ask
 again after an update: each build is a new file. On a PC where **Smart
@@ -78,32 +75,35 @@ tar xzf Ping-VERSION-linux-x86_64.tar.gz
 Ping-VERSION-linux-x86_64/install.sh
 ```
 
-`install.sh` puts the programs in `~/.local/bin`, each with a launcher
-entry; Pong's also installs the host as a user service and starts it (see
-[Pong on Linux](#pong-on-linux)). It names any library the system is
-missing. `install.sh --uninstall` removes what it installed.
+`install.sh` puts Ping (`ping-app`) and the host's engine (`pong`) in
+`~/.local/bin`, Ping's launcher entry with its icon, and the host's user
+service, installed but not turned on (see
+[Hosting on Linux](#hosting-on-linux)). It names any library the system is
+missing. Run from a newer download, it updates them, and restarts the
+host if hosting is on. `install.sh --uninstall` turns hosting off and
+removes what it installed.
 
 ## With Homebrew (macOS)
 
-This repository is a Homebrew tap: its casks install the apps from the
+This repository is a Homebrew tap: its cask installs the app from the
 latest release (Apple silicon and Intel).
 
 ```sh
 brew tap mihaicristianfarcas/pingpong https://github.com/mihaicristianfarcas/pingpong
-brew install --cask ping          # the client
-brew install --cask pong          # the host: Pong.app
+brew install --cask ping
 ```
 
 To host, turn hosting on in Ping (setup asks, or **Settings → Hosting**):
 the host then runs whenever you are logged in, and Ping's icon is in the
-menu bar.
-macOS asks for Screen Recording and Accessibility the first time (see
-[Pong on macOS](#pong-on-macos)).
+menu bar. macOS asks for Screen Recording and Accessibility for **Pong
+Host**, the host inside Ping, the first time (see
+[Hosting on macOS](#hosting-on-macos)).
 
-`brew upgrade --cask ping pong` updates them, and so does **Install and
-Restart** in the apps when they say there is an update (they run that
-command; [usage.md](usage.md#updates)). The apps are signed with a
-Developer ID and notarized by Apple.
+**Install and Restart** in Ping, when it says there is an update, runs
+`brew upgrade --cask ping` for you and keeps hosting as it was
+([usage.md](usage.md#updates)). Run by hand, `brew upgrade` turns hosting
+off (the cask's uninstall step stops the host): turn it on again in Ping.
+The app is signed with a Developer ID and notarized by Apple.
 
 ## Building from source
 
@@ -145,7 +145,7 @@ What else each system needs:
 ## Ping on macOS
 
 ```sh
-tools/build-ping-app              # builds target/Ping.app
+tools/build-ping-app              # builds target/Ping.app, the host inside it
 tools/build-ping-app --install    # and copies it to /Applications
 ```
 
@@ -156,27 +156,49 @@ The build is signed ad hoc, or with a local development identity if you
 created one (`tools/dev-signing-identity`, see
 [development.md](development.md#macos-signing)).
 
-## Pong on macOS
+## Hosting on macOS
 
-```sh
-tools/build-pong-app --install
+The host is inside the app: `Ping.app/Contents/Helpers/Pong Host.app`, a
+helper app of its own. Turn hosting on in Ping (setup asks, or **Settings →
+Hosting**): Ping runs the helper's `pong enable`, which writes a
+LaunchAgent that starts the host at login and keeps it running
+(`~/Library/LaunchAgents/dev.pingpong.Pong.plist`; see
+[usage.md](usage.md#hosting-on-and-off)). On first start the host asks for
+**Screen Recording** (to capture) and **Accessibility** (to use the
+keyboard and mouse); grant both to **Pong Host** in System Settings >
+Privacy & Security. Ping itself never needs them. Without Accessibility,
+clients can watch but not control.
+
+A Ping run from `target/debug` or `target/release` uses the helper in the
+`target/Ping.app` that `tools/build-ping-app` made. To run the host from a
+terminal instead: `cargo run --release -p pong -- host` (the terminal then
+needs those permissions). Details and limits:
+[platforms/macos.md](platforms/macos.md).
+
+## Ping on Windows
+
+Ping's Windows build decodes with FFmpeg, so it needs:
+
+- an **FFmpeg 8 shared build** with `include\`, `lib\` and `bin\` — for
+  example BtbN's `ffmpeg-n8.1-latest-win64-lgpl-shared` from
+  [github.com/BtbN/FFmpeg-Builds](https://github.com/BtbN/FFmpeg-Builds/releases);
+- **LLVM** (for `libclang`, which generates the FFmpeg bindings), in
+  `C:\Program Files\LLVM` or wherever `LIBCLANG_PATH` points.
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools\build-ping-win.ps1 -FFmpeg C:\path\to\ffmpeg
+powershell -ExecutionPolicy Bypass -File tools\build-ping-win.ps1 -FFmpeg C:\path\to\ffmpeg -Install
 ```
 
-This installs **Pong.app** (the host) in `/Applications` and turns hosting
-on: a LaunchAgent starts the host at login and keeps it running
-(`~/Library/LaunchAgents/dev.pingpong.Pong.plist`, which `pong enable`
-writes; see [usage.md](usage.md#hosting-on-and-off)). Ping's hosting switch
-does the same, and finds Pong.app there. On first start Pong
-asks for **Screen Recording** (to capture) and **Accessibility** (to use
-the keyboard and mouse); grant both in System Settings > Privacy &
-Security. Without Accessibility, clients can watch but not control.
+(`-FFmpeg` can be left out when `FFMPEG_DIR` is set.) The first leaves
+`target\Ping\Ping.exe` beside FFmpeg's DLLs and the host's engine,
+`pong.exe`; `-Install` then installs them as a download's **Install
+Ping.cmd** does (`tools\install-ping.ps1`): in
+`%LOCALAPPDATA%\Programs\Ping`, the Start menu and Settings > Apps.
+Windows Firewall may ask to let Ping on the network the first time: allow
+private networks.
 
-Without `--install`, Pong.app is left in `target/`, where a Ping run from
-`target/debug` or `target/release` finds it. To run the host from a
-terminal instead: `cargo run --release -p pong -- host` (the terminal then
-needs those permissions). Details and limits: [platforms/macos.md](platforms/macos.md).
-
-## Pong on Windows
+## Hosting on Windows
 
 First, on the host PC:
 
@@ -195,82 +217,56 @@ First, on the host PC:
    controllers; **Steam** (its *Steam Streaming Speakers* device keeps the
    sound on the client only, as Sunshine does).
 
-Then, from the repository, in an **administrator** PowerShell:
+Then turn hosting on in Ping, or run `pong enable` from Ping's folder in an
+**administrator** PowerShell:
 
 ```powershell
-cargo build --release -p pong
-powershell -ExecutionPolicy Bypass -File tools\host-deploy.ps1
+& "$env:LOCALAPPDATA\Programs\Ping\pong.exe" enable    # or target\Ping\pong.exe from a build
 ```
 
-`host-deploy.ps1` turns hosting on with `pong enable`, which copies the host
-to `C:\Program Files\Pong`, installs and starts **PongService** from there
-(it starts at boot, before anyone signs in, and adds Windows Firewall rules
-for Pong), and lists Pong in **Settings > Apps > Installed apps**. Run
-it again after each build to update. `host-deploy.ps1 -Uninstall`, or
-**Uninstall** in Settings, removes all of that again; `pong disable` (as
-administrator) removes only the service, its firewall rules and the host's
-copy in `C:\Program Files\Pong`.
+`pong enable` copies the host to `C:\Program Files\Pong`, and installs and
+starts **PongService** from there (it starts at boot, before anyone signs
+in, and adds Windows Firewall rules for Pong). Ping's own updates run it
+again while hosting is on; after a build of your own, turn hosting off and
+on (or run `pong enable` again) to put the new engine in place. `pong
+disable` (as administrator) removes the service, its firewall rules and the
+host's copy in `C:\Program Files\Pong`.
 
 Pong's settings and state are in `C:\ProgramData\Pong`. Details:
 [platforms/windows.md](platforms/windows.md).
-
-## Ping on Windows
-
-Ping's Windows build decodes with FFmpeg, so it needs:
-
-- an **FFmpeg 8 shared build** with `include\`, `lib\` and `bin\` — for
-  example BtbN's `ffmpeg-n8.1-latest-win64-lgpl-shared` from
-  [github.com/BtbN/FFmpeg-Builds](https://github.com/BtbN/FFmpeg-Builds/releases);
-- **LLVM** (for `libclang`, which generates the FFmpeg bindings), in
-  `C:\Program Files\LLVM` or wherever `LIBCLANG_PATH` points.
-
-```powershell
-powershell -ExecutionPolicy Bypass -File tools\build-ping-win.ps1 -FFmpeg C:\path\to\ffmpeg
-powershell -ExecutionPolicy Bypass -File tools\build-ping-win.ps1 -FFmpeg C:\path\to\ffmpeg -Install
-```
-
-(`-FFmpeg` can be left out when `FFMPEG_DIR` is set.) The first leaves
-`target\Ping\Ping.exe` beside FFmpeg's DLLs; `-Install` then installs them
-as a download's **Install Ping.cmd** does (`tools\install-ping.ps1`): in
-`%LOCALAPPDATA%\Programs\Ping`, the Start menu and Settings > Apps. Windows
-Firewall may ask to let Ping on the network the first time: allow private
-networks.
 
 ## Ping on Linux
 
 ```sh
 cargo build --release -p ping-app          # the app: target/release/ping-app
+cargo build --release -p pong              # the host's engine, on its own
 cargo build --release -p ping-core --bin ping   # the CLI, if you want it
 ```
 
-Run `target/release/ping-app`, or install it as a desktop app for your
-user, with a launcher entry and its icon:
+Build the host's engine **on its own**, not in one `cargo` invocation with
+the app: GPUI and Pong's desktop-portal code ask one dependency for
+different async runtimes, and one build cannot have both.
+
+Run `target/release/ping-app`, or install the app for your user as a
+download's `install.sh` does: Ping with its launcher entry and icon, the
+host's engine beside it, and the host's user service (not turned on):
 
 ```sh
-tools/linux/install-apps          # ping-app, with a launcher entry
+tools/linux/install-apps
 ```
 
 Details: [platforms/linux.md](platforms/linux.md).
 
-## Pong on Linux
+## Hosting on Linux
 
-Build the host **on its own** — not in one `cargo` invocation with the GPUI
-apps: GPUI and Pong's desktop-portal code ask one dependency for different
-async runtimes, and one build cannot have both.
-
-```sh
-cargo build --release -p pong
-install -Dm755 target/release/pong ~/.local/bin/pong
-install -Dm644 tools/linux/pong.service ~/.config/systemd/user/pong.service
-~/.local/bin/pong enable     # systemctl --user enable --now pong
-```
-
-Pong runs in your desktop session, as you. Under Wayland, the desktop asks
-once whether Pong may share the screen (on GNOME, switch on **Allow Remote
-Interaction** for the keyboard and mouse). Ping's This computer pages show
-the host, and its hosting switch runs `pong enable` and `pong disable` for
-you, finding `pong` beside Ping or on the `PATH`. Data and logs are in
-`~/.config/pong`. Details: [platforms/linux.md](platforms/linux.md).
+Turn hosting on in Ping (or run `~/.local/bin/pong enable`: `systemctl
+--user enable --now pong`). Pong runs in your desktop session, as you,
+started at each login. Under Wayland, the desktop asks once whether Pong
+may share the screen (on GNOME, switch on **Allow Remote Interaction** for
+the keyboard and mouse). Ping's This computer pages show the host, and its
+hosting switch runs `pong enable` and `pong disable` for you, finding
+`pong` beside Ping or on the `PATH`. Data and logs are in `~/.config/pong`.
+Details: [platforms/linux.md](platforms/linux.md).
 
 ## Pairing
 
@@ -289,13 +285,10 @@ anywhere ([networking.md](networking.md)). Next: [usage.md](usage.md).
 
 | | |
 |---|---|
-| Homebrew | `brew uninstall --cask ping pong` (the host's LaunchAgents go too); `--zap` also deletes the data folders |
-| Ping, macOS | Delete `/Applications/Ping.app` and `~/Library/Application Support/Ping` |
-| Pong, macOS | Turn hosting off in Ping (or `/Applications/Pong.app/Contents/MacOS/pong disable`: the host's LaunchAgent), then delete Pong.app and `~/Library/Application Support/Pong` |
-| Ping, Windows | **Settings > Apps > Installed apps**, **Ping**, **Uninstall** (or `install.ps1 -Uninstall` in `%LOCALAPPDATA%\Programs\Ping`). It leaves your hosts and settings: delete `%APPDATA%\Ping` too to remove them. A copy run from its extracted folder: delete the folder |
-| Pong, Windows | **Settings > Apps > Installed apps**, **Pong**, **Uninstall** (or `install.ps1 -Uninstall` in `C:\Program Files\Pong`); Windows asks for an administrator. It turns hosting off (`pong disable`: PongService, its firewall rules and the host's copy), then removes the programs, the Start menu entry and the icon at sign-in, and leaves the host's identity, pairings and settings: delete `C:\ProgramData\Pong` and `%APPDATA%\Pong` too to remove them |
-| Ping, Linux | `install.sh --uninstall` from the download, or `tools/linux/install-apps --uninstall` (or delete the binary); and `~/.config/ping` |
-| Pong, Linux | `install.sh --uninstall` from the download (it runs `pong disable` first); or `pong disable`, then delete the unit and the binary. Then `~/.config/pong` |
+| Homebrew | `brew uninstall --cask ping`: it stops the host (its LaunchAgent) and Ping's start at login, and quits Ping; `--zap` also deletes the data folders, Ping's and the host's |
+| macOS | Turn hosting off in Ping (or run `pong disable` from inside it: `"/Applications/Ping.app/Contents/Helpers/Pong Host.app/Contents/MacOS/pong" disable`), quit Ping, then delete Ping.app. Your data is in `~/Library/Application Support/Ping` and `~/Library/Application Support/Pong` (the host's identity and pairings) |
+| Windows | **Settings > Apps > Installed apps**, **Ping**, **Uninstall** (or `install.ps1 -Uninstall` in `%LOCALAPPDATA%\Programs\Ping`). While hosting is on, it turns it off first (`pong disable`: PongService, its firewall rules and the host's copy), and Windows asks for an administrator. It leaves your hosts and settings, and the host's identity and pairings: delete `%APPDATA%\Ping` and `C:\ProgramData\Pong` too to remove them. A copy run from its extracted folder: turn hosting off in it, then delete the folder |
+| Linux | `install.sh --uninstall` from the download, or `tools/linux/install-apps --uninstall`: it turns hosting off first (`pong disable`), then removes the programs, the host's unit and the launcher entry. Then `~/.config/ping` and `~/.config/pong` |
 
-Unpair a device on the other side too (Ping: the host's menu > Unpair; Pong:
-**Devices**).
+Unpair a device on the other side too (Ping: the host's menu > Unpair; the host:
+**This computer → Devices**).

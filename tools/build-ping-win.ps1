@@ -1,5 +1,7 @@
-# Build Ping for Windows: Ping.exe (the app) beside FFmpeg's DLLs, in
-# target\Ping; and ping.exe and ping-agent.exe, the CLIs, in target\release.
+# Build Ping for Windows: Ping.exe (the app) beside FFmpeg's DLLs and the
+# host's engine (pong.exe, which the app's hosting switch runs), in
+# target\Ping, as the release archive holds them; and ping.exe and
+# ping-agent.exe, the CLIs, in target\release.
 #
 #   powershell -NoProfile -ExecutionPolicy Bypass -File tools\build-ping-win.ps1 [-FFmpeg DIR] [-Install]
 #
@@ -23,7 +25,7 @@ if (-not $env:LIBCLANG_PATH) { $env:LIBCLANG_PATH = 'C:\Program Files\LLVM\bin' 
 Push-Location $repo
 try {
     $ErrorActionPreference = 'Continue'
-    cargo build --release -p ping-app -p ping-core -p ping-agent --bins 2>&1 | ForEach-Object { "$_" } | Select-Object -Last 30
+    cargo build --release -p ping-app -p pong -p ping-core -p ping-agent --bins 2>&1 | ForEach-Object { "$_" } | Select-Object -Last 30
     $ErrorActionPreference = 'Stop'
     if ($LASTEXITCODE -ne 0) { throw "cargo build failed ($LASTEXITCODE)" }
 
@@ -31,6 +33,7 @@ try {
     if (Test-Path $dist) { Remove-Item -Recurse -Force $dist }
     New-Item -ItemType Directory -Force $dist | Out-Null
     Copy-Item (Join-Path $repo 'target\release\ping-app.exe') (Join-Path $dist 'Ping.exe')
+    Copy-Item (Join-Path $repo 'target\release\pong.exe') $dist
     # What avcodec needs: itself, avutil, and swresample (some decoders).
     foreach ($dll in Get-ChildItem (Join-Path $FFmpeg 'bin') -Filter '*.dll' | Where-Object { $_.Name -match '^(avcodec|avutil|swresample)-\d+\.dll$' }) {
         Copy-Item $dll.FullName $dist

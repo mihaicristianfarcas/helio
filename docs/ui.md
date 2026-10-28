@@ -145,10 +145,11 @@ administrator.
 ### Hosting, and the app's icon
 
 The switch runs the host's own commands: `pong enable`, `pong disable` and
-`pong status --json` ([cli.md](cli.md)). The host is `Pong.app` on a Mac
-(inside this app's bundle under `Contents/Helpers`, beside it, or in
-Applications), `pong.exe` beside the app or in `C:\Program Files\Pong` on
-Windows, and `pong` beside the app or on the `PATH` on Linux. On Windows,
+`pong status --json` ([cli.md](cli.md)). The host is `Pong Host.app` on a
+Mac, inside this app's bundle under `Contents/Helpers` (for a build run
+from `target/`, inside `target/Ping.app`), `pong.exe` beside the app or in
+`C:\Program Files\Pong` on Windows, and `pong` beside the app or on the
+`PATH` on Linux. On Windows,
 when `pong` says it needs an administrator (exit code 740), the app runs it
 again through UAC and says it waits for Windows meanwhile. The state is
 asked again when something says it may have changed (the app starting, a

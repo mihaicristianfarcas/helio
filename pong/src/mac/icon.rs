@@ -1,16 +1,16 @@
 //! The host's icon in the menu bar, for a host opened by hand on a Mac.
 //!
-//! Pong.app is the host alone: a background app (LSUIElement) with no
+//! Pong Host.app is the host alone: a background app (LSUIElement) with no
 //! window or icon of its own. Its icon and window are Ping's, the app that
-//! holds Pong.app (in `Contents/Helpers`) or is installed beside it, which
-//! starts at login by a login item of its own (General > Open at login).
-//! Opened from the Finder, Launchpad or Spotlight, Pong.app starts Ping too,
-//! in the background, so the icon is there whenever someone started Pong;
-//! without it, the host ran with nothing on screen to say so. The host
-//! started at login by its LaunchAgent (`pong host`) leaves the icon to that
-//! login item, which the user may have turned off.
+//! holds it (`Ping.app/Contents/Helpers/Pong Host.app`), which starts at
+//! login by a login item of its own (General > Open at login). Opened by
+//! hand (from the Finder, inside Ping.app, or by Spotlight), the helper
+//! starts Ping too, in the background, so the icon is there whenever someone
+//! started the host; without it, the host ran with nothing on screen to say
+//! so. The host started at login by its LaunchAgent (`pong host`) leaves the
+//! icon to that login item, which the user may have turned off.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 /// Started by Launch Services (the Finder, `open`), not by a command line
 /// or the LaunchAgent, which both name a command: no arguments, or only the
@@ -23,31 +23,26 @@ pub fn opened_by_hand(args: &[String]) -> bool {
     }
 }
 
-/// Ping.app: the app the Pong.app this runs in is inside of
-/// (`Ping.app/Contents/Helpers/Pong.app`), or beside it.
+/// Ping.app: the app the helper this runs in is inside of
+/// (`Ping.app/Contents/Helpers/Pong Host.app`).
 fn ping_app() -> Option<PathBuf> {
     let exe = std::env::current_exe().ok()?;
-    // Pong.app/Contents/MacOS/pong
-    let bundle = exe.parent()?.parent()?.parent()?;
-    if bundle.extension()? != "app" {
-        return None;
-    }
-    let helpers = bundle.parent()?;
-    let holder = helpers
-        .parent()
-        .and_then(|contents| contents.parent())
-        .filter(|_| helpers.file_name().is_some_and(|n| n == "Helpers"))
-        .filter(|app| app.extension().is_some_and(|e| e == "app"))
-        .map(PathBuf::from);
-    holder
-        .or_else(|| Some(helpers.join("Ping.app")))
-        .filter(|app| app.is_dir())
+    holder(&exe).filter(|app| app.is_dir())
+}
+
+/// The app that holds the helper whose program is `exe`.
+fn holder(exe: &Path) -> Option<PathBuf> {
+    // Pong Host.app/Contents/MacOS/pong
+    let helper = crate::hosting::bundle_of(exe)?;
+    let helpers = helper.parent()?;
+    let app = helpers.parent()?.parent()?;
+    (helpers.file_name()? == "Helpers" && app.extension()? == "app").then(|| app.to_path_buf())
 }
 
 /// Start Ping in the background: its icon, without its window.
 pub fn show() {
     let Some(app) = ping_app() else {
-        tracing::info!("no Ping.app holding or beside Pong.app: no icon in the menu bar");
+        tracing::info!("no Ping.app holding this host: no icon in the menu bar");
         return;
     };
     // `-n`, a new copy every time: a copy that runs already would otherwise
@@ -76,7 +71,8 @@ pub fn show() {
 
 #[cfg(test)]
 mod tests {
-    use super::opened_by_hand;
+    use super::{holder, opened_by_hand};
+    use std::path::Path;
 
     #[test]
     fn the_finder_names_no_command_and_the_login_agent_does() {
@@ -84,5 +80,22 @@ mod tests {
         assert!(opened_by_hand(&["-psn_0_1234567".into()]));
         assert!(!opened_by_hand(&["host".into()]));
         assert!(!opened_by_hand(&["identity".into()]));
+    }
+
+    #[test]
+    fn the_icon_is_the_app_that_holds_the_host() {
+        assert_eq!(
+            holder(Path::new(
+                "/Applications/Ping.app/Contents/Helpers/Pong Host.app/Contents/MacOS/pong"
+            ))
+            .as_deref(),
+            Some(Path::new("/Applications/Ping.app"))
+        );
+        // A helper on its own, and a build: no app to start.
+        assert_eq!(
+            holder(Path::new("/tmp/Pong Host.app/Contents/MacOS/pong")),
+            None
+        );
+        assert_eq!(holder(Path::new("/src/target/debug/pong")), None);
     }
 }

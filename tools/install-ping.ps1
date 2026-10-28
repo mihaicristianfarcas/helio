@@ -1,8 +1,11 @@
-# Install Ping for whoever runs this: Ping.exe and FFmpeg's DLLs in
-# %LOCALAPPDATA%\Programs\Ping, Ping in the Start menu, and Ping in Windows'
-# list of installed apps (Settings > Apps), whose Uninstall runs this script,
-# copied there as install.ps1, with -Uninstall. Ping is per user, as its data
-# is: no administrator is needed.
+# Install Ping for whoever runs this: Ping.exe, the host's engine (pong.exe)
+# and FFmpeg's DLLs in %LOCALAPPDATA%\Programs\Ping, Ping in the Start menu,
+# and Ping in Windows' list of installed apps (Settings > Apps), whose
+# Uninstall runs this script, copied there as install.ps1, with -Uninstall.
+# Ping is per user, as its data is: no administrator is needed. Hosting
+# stays off: Ping's switch turns it on, which copies pong.exe to
+# C:\Program Files\Pong and runs it as PongService (Windows asks for an
+# administrator then).
 #
 #   powershell -NoProfile -ExecutionPolicy Bypass -File install-ping.ps1 [-Source DIR] [-NoStart]
 #   powershell -NoProfile -ExecutionPolicy Bypass -File install-ping.ps1 -Uninstall
@@ -18,10 +21,13 @@
 # entry missing or naming another version (an update by an older release,
 # which runs no installer).
 #
-# Uninstalling leaves Ping's hosts and settings (%APPDATA%\Ping), and the
-# Windows Firewall rules Windows made when it asked about Ping.exe: only an
-# administrator can remove those, and they let nothing in once the program
-# is gone.
+# Uninstalling turns hosting off first, if it is on (`pong disable`: the
+# service, its firewall rules and the engine's copy in Program Files go;
+# Windows asks for an administrator). It leaves Ping's hosts and settings
+# (%APPDATA%\Ping), the host's identity and pairings (C:\ProgramData\Pong),
+# and the Windows Firewall rules Windows made when it asked about Ping.exe:
+# only an administrator can remove those, and they let nothing in once the
+# program is gone.
 param(
     [string]$Source = $(if (Test-Path (Join-Path $PSScriptRoot 'Ping.exe')) { $PSScriptRoot }
         else { Join-Path $PSScriptRoot '..\target\Ping' }),
@@ -40,7 +46,7 @@ $entry = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\dev.pingpong
 # Ping's own files, as pingpong-update names them (`ours`): only these are
 # copied, replaced or removed.
 function Test-Ours([string]$Name) {
-    $Name -match '^(ping\.exe|ffmpeg license\.txt|(avcodec|avutil|swresample)-\d+\.dll)$'
+    $Name -match '^(ping\.exe|pong\.exe|ffmpeg license\.txt|(avcodec|avutil|swresample)-\d+\.dll)$'
 }
 
 function Test-SameFolder([string]$A, [string]$B) {
@@ -55,6 +61,24 @@ function Stop-Ping {
     if ($running.Count -eq 0) { return }
     $running | Stop-Process -Force -ErrorAction SilentlyContinue
     $running | Wait-Process -Timeout 15 -ErrorAction SilentlyContinue
+}
+
+# Hosting off, while it is on (PongService is there): with the installed
+# engine, else the service's own copy. Only an administrator can, so Windows
+# asks; a refusal or a failure stops the uninstall here, with Ping in place
+# to turn hosting off from.
+function Disable-Hosting {
+    if (-not (Get-Service PongService -ErrorAction SilentlyContinue)) { return }
+    $pong = Join-Path $dest 'pong.exe'
+    if (-not (Test-Path $pong)) { $pong = Join-Path $env:ProgramFiles 'Pong\pong.exe' }
+    try {
+        $disable = Start-Process -FilePath $pong -ArgumentList 'disable' -Verb RunAs -WindowStyle Hidden -Wait -PassThru
+    } catch {
+        throw "Hosting is on, and turning it off needs an administrator ($($_.Exception.Message)). Uninstall again and choose Yes, or turn hosting off in Ping first."
+    }
+    if ($disable.ExitCode -ne 0) {
+        throw "pong disable failed (exit code $($disable.ExitCode)): turn hosting off in Ping, then uninstall again."
+    }
 }
 
 # Windows holds a program's files for a moment after it quits, and a copy or
@@ -90,7 +114,7 @@ function Write-Entry {
         InstallLocation = $dest
         InstallDate     = Get-Date -Format 'yyyyMMdd'
         URLInfoAbout    = 'https://pingpong.mihaicristian.dev'
-        # Its window stays open to show how it went, as Pong's installer's.
+        # Its window stays open to show how it went.
         UninstallString = '"{0}" -NoProfile -ExecutionPolicy Bypass -NoExit -File "{1}" -Uninstall' -f
             $powershell, (Join-Path $dest 'install.ps1')
     }
@@ -104,13 +128,14 @@ function Write-Entry {
 }
 
 if ($Uninstall) {
+    Disable-Hosting
     Stop-Ping
     Remove-Item $link -Force -ErrorAction SilentlyContinue
     Remove-Item $entry -Recurse -Force -ErrorAction SilentlyContinue
     # Not from inside the folder that goes.
     Set-Location $env:TEMP
     if (Test-Path $dest) { Invoke-Retrying { Remove-Item $dest -Recurse -Force } }
-    "Ping is uninstalled. Your hosts and settings stay in $env:APPDATA\Ping: delete that folder to remove them too."
+    "Ping is uninstalled. Your hosts and settings stay in $env:APPDATA\Ping, and the host's identity and pairings in $env:ProgramData\Pong: delete those folders to remove them too."
     return
 }
 

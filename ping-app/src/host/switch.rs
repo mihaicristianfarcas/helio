@@ -8,8 +8,9 @@
 //!   (`ERROR_ELEVATION_REQUIRED`); the same command then runs again
 //!   through UAC (`ShellExecuteEx` with `runas`), and the app says it waits
 //!   for Windows meanwhile.
-//! - macOS: `pong` is the one in `Pong.app`, the host helper macOS grants
-//!   Screen Recording and Accessibility to (`host_program`).
+//! - macOS: `pong` is the one in `Pong Host.app`, the helper inside this
+//!   app that macOS grants Screen Recording and Accessibility to
+//!   (`host_program`).
 //! - Linux: the systemd user unit, no administrator.
 //!
 //! The state is asked again only when something says it may have changed:
@@ -348,7 +349,9 @@ fn said(stderr: &[u8], stdout: &[u8]) -> String {
 
 fn no_program() -> String {
     if cfg!(target_os = "macos") {
-        "Pong.app, the host, is not beside this app or in Applications.".into()
+        "Pong Host, the host, is not inside this app (Contents/Helpers): download Ping \
+         again."
+            .into()
     } else if cfg!(windows) {
         "pong.exe, the host, is not beside this app or in C:\\Program Files\\Pong.".into()
     } else {
@@ -374,10 +377,11 @@ fn command(program: &Path) -> std::process::Command {
 /// The host's program, where an install or a build puts it:
 /// `PING_HOST_PROGRAM` (checks), then
 ///
-/// - macOS: `Pong.app` inside this app's bundle (`Contents/Helpers`),
-///   beside it, in /Applications, or beside the folder the program runs
-///   from (`target/Pong.app` from `tools/build-pong-app`, for a build run
-///   from `target/debug`).
+/// - macOS: `Pong Host.app` inside this app's bundle (`Contents/Helpers`);
+///   for a build run from `target/debug`, inside the `target/Ping.app`
+///   that `tools/build-ping-app` makes, whose helper macOS has granted the
+///   permissions to. Never a bare `pong`: the host runs only from a bundle
+///   (`pong/src/hosting/mac.rs`).
 /// - Windows: `pong.exe` beside this app, or the engine's own copy in
 ///   `C:\Program Files\Pong`.
 /// - Linux: `pong` beside this app, or on the PATH.
@@ -395,19 +399,17 @@ fn candidates(exe: &Path) -> Vec<PathBuf> {
     let dir = exe.parent().map(Path::to_path_buf).unwrap_or_default();
     let mut out = Vec::new();
     if cfg!(target_os = "macos") {
-        let helper = Path::new("Pong.app/Contents/MacOS/pong");
+        let helper = Path::new("Contents/Helpers/Pong Host.app/Contents/MacOS/pong");
         // X.app/Contents/MacOS/X: the bundle is three folders up.
-        if let Some(bundle) = dir.parent().and_then(Path::parent) {
-            if bundle.extension().is_some_and(|e| e == "app") {
-                out.push(bundle.join("Contents/Helpers").join(helper));
-                if let Some(beside) = bundle.parent() {
-                    out.push(beside.join(helper));
+        match dir.parent().and_then(Path::parent) {
+            Some(bundle) if bundle.extension().is_some_and(|e| e == "app") => {
+                out.push(bundle.join(helper));
+            }
+            _ => {
+                if let Some(target) = dir.parent() {
+                    out.push(target.join("Ping.app").join(helper));
                 }
             }
-        }
-        out.push(Path::new("/Applications").join(helper));
-        if let Some(up) = dir.parent() {
-            out.push(up.join(helper));
         }
     } else if cfg!(windows) {
         out.push(dir.join("pong.exe"));
@@ -512,19 +514,23 @@ mod tests {
     }
 
     #[test]
-    fn the_host_is_looked_for_beside_this_app_first() {
+    fn the_host_is_the_one_that_came_with_this_app() {
         if cfg!(target_os = "macos") {
+            // Only the helper inside this app: never another copy's.
             let found = candidates(Path::new("/Applications/Ping.app/Contents/MacOS/Ping"));
             assert_eq!(
-                found[0],
-                Path::new("/Applications/Ping.app/Contents/Helpers/Pong.app/Contents/MacOS/pong")
-            );
-            assert_eq!(
-                found[1],
-                Path::new("/Applications/Pong.app/Contents/MacOS/pong")
+                found,
+                [Path::new(
+                    "/Applications/Ping.app/Contents/Helpers/Pong Host.app/Contents/MacOS/pong"
+                )]
             );
             let dev = candidates(Path::new("/src/target/debug/ping-app"));
-            assert!(dev.contains(&PathBuf::from("/src/target/Pong.app/Contents/MacOS/pong")));
+            assert_eq!(
+                dev,
+                [Path::new(
+                    "/src/target/Ping.app/Contents/Helpers/Pong Host.app/Contents/MacOS/pong"
+                )]
+            );
         } else if cfg!(windows) {
             let found = candidates(Path::new(r"C:\Apps\Ping\Ping.exe"));
             assert_eq!(found[0], Path::new(r"C:\Apps\Ping\pong.exe"));

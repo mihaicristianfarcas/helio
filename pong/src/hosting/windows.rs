@@ -66,7 +66,7 @@ const FILE: PCWSTR = w!("O:BAD:P(A;;FA;;;SY)(A;;FA;;;BA)(A;;0x1200a9;;;BU)");
 /// Windows keeps a program's file busy for a moment after its process has
 /// ended, and says nothing when it lets go: a copy over it, or its
 /// deletion, is tried again this many times, this far apart: 5 s in all,
-/// the same as `tools/host-deploy.ps1` gives Pong's window.
+/// the same as `tools/install-ping.ps1` gives the app's files.
 const TRIES: u32 = 20;
 const BETWEEN_TRIES: Duration = Duration::from_millis(250);
 

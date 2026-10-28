@@ -1,48 +1,34 @@
 #!/usr/bin/env bash
-# Install Ping's and Pong's windows for this user, as desktop apps: the
-# programs in ~/.local/bin, a launcher entry each with its icon. The entries
-# are named after the windows' app ids, so the desktop groups each window
-# under its entry (Wayland's app_id, X11's WM_CLASS).
+# Install Ping from a checkout's build for this user, as the release does:
+# the build laid out as tools/linux/package lays out the archive, then that
+# layout's install.sh (tools/linux/install-release) run on it. So the app
+# and the host's engine go to ~/.local/bin, the launcher entry and its icon
+# to ~/.local/share, and the host's user unit to ~/.config/systemd/user,
+# installed but not enabled.
 #
-#   cargo build --release -p ping-app
+#   cargo build --release -p ping-app && cargo build --release -p pong
 #   tools/linux/install-apps                   # installs what was built
-#   tools/linux/install-apps --uninstall
-#
-# The host itself is a user service: see tools/linux/pong.service.
+#   tools/linux/install-apps --uninstall       # hosting off first
 set -euo pipefail
 REPO=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
-BIN=${XDG_BIN_HOME:-$HOME/.local/bin}
-DATA=${XDG_DATA_HOME:-$HOME/.local/share}
 TARGET=${CARGO_TARGET_DIR:-$REPO/target}/release
 
-# app PROGRAM ID ICON
-apps=(
-    "ping-app dev.pingpong.Ping $REPO/ping-app/assets/icon-256.png"
-)
-
-for app in "${apps[@]}"; do
-    read -r program id icon <<< "$app"
-    if [[ ${1:-} == --uninstall ]]; then
-        rm -f "$BIN/$program" "$DATA/applications/$id.desktop" \
-            "$DATA/icons/hicolor/256x256/apps/$id.png"
-        echo "removed $program"
-        continue
-    fi
-    if [[ ! -x $TARGET/$program ]]; then
-        echo "skipping $program: build it first (cargo build --release -p $program)"
-        continue
-    fi
-    install -Dm755 "$TARGET/$program" "$BIN/$program"
-    install -Dm644 "$REPO/tools/linux/$id.desktop" "$DATA/applications/$id.desktop"
-    install -Dm644 "$icon" "$DATA/icons/hicolor/256x256/apps/$id.png"
-    echo "installed $program ($DATA/applications/$id.desktop)"
-done
-# Menus and docks pick the entries up without logging out.
-command -v update-desktop-database >/dev/null && update-desktop-database -q "$DATA/applications" || true
-command -v gtk-update-icon-cache >/dev/null && gtk-update-icon-cache -q -t "$DATA/icons/hicolor" 2>/dev/null || true
-if [[ ${1:-} != --uninstall ]]; then
-    case ":$PATH:" in
-        *":$BIN:"*) ;;
-        *) echo "note: $BIN is not in PATH: add it, or the launcher entries cannot start the programs" ;;
-    esac
+if [[ ${1:-} == --uninstall ]]; then
+    exec "$REPO/tools/linux/install-release" --uninstall
 fi
+for program in ping-app pong; do
+    if [[ ! -x $TARGET/$program ]]; then
+        # Two builds: the host and the GPUI app ask one dependency for
+        # different async runtimes (docs/development.md).
+        echo "build it first: cargo build --release -p $program" >&2
+        exit 1
+    fi
+done
+
+STAGE=$(mktemp -d)
+trap 'rm -rf "$STAGE"' EXIT
+cp "$TARGET/ping-app" "$TARGET/pong" "$STAGE/"
+cp "$REPO/tools/linux/pong.service" "$REPO/tools/linux/dev.pingpong.Ping.desktop" "$STAGE/"
+cp "$REPO/ping-app/assets/icon-256.png" "$STAGE/dev.pingpong.Ping.png"
+cp "$REPO/tools/linux/install-release" "$STAGE/install.sh"
+"$STAGE/install.sh"

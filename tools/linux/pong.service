@@ -1,8 +1,9 @@
-# Pong as a systemd user service, in the desktop session it streams:
-#
-#   install -Dm755 target/release/pong ~/.local/bin/pong
-#   install -Dm644 tools/linux/pong.service ~/.config/systemd/user/pong.service
-#   pong enable        # systemctl --user enable --now pong; off: pong disable
+# The host, as a systemd user service in the desktop session it streams.
+# Ping's install.sh (tools/linux/install-release) puts it in
+# ~/.config/systemd/user with ExecStart naming the pong it installed beside
+# the app, and does not enable it: hosting is off until the app's switch
+# turns it on (`pong enable`: systemctl --user enable --now pong; off: pong
+# disable).
 #
 # The desktop hands DISPLAY to user services (GNOME and KDE do). Logs:
 # ~/.config/pong/logs, or `journalctl --user -u pong`.
