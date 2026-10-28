@@ -127,7 +127,8 @@ What else each system needs:
   `rustup` installs by default. The client also needs FFmpeg and LLVM (see
   [Ping on Windows](#ping-on-windows)).
 - **Linux** (Ubuntu 24.04 package names; other distributions have
-  equivalents):
+  equivalents; the host builds with FFmpeg 6, as on 24.04, and with 26.04's
+  FFmpeg 8):
 
   ```sh
   sudo apt install build-essential pkg-config clang libclang-dev \
