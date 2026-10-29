@@ -3388,6 +3388,7 @@ dependencies = [
  "gpui",
  "gpui_platform",
  "helio-agent",
+ "helio-cli",
  "helio-client",
  "helio-display",
  "helio-pairing",
@@ -3470,6 +3471,7 @@ dependencies = [
  "objc2 0.6.4",
  "objc2-app-kit 0.3.2",
  "tracing-subscriber",
+ "windows 0.61.3",
 ]
 
 [[package]]

@@ -19,6 +19,7 @@ runtime-shaders = ["helio-ui/runtime-shaders"]
 
 [dependencies]
 helio-client = { path = "../helio-client" }
+helio-cli = { path = "../helio-cli" }
 helio-agent = { path = "../helio-agent" }
 serde_json = "1"
 helio-pairing = { path = "../helio-pairing" }
@@ -47,9 +48,6 @@ helio-display = { path = "../helio-display" }
 windows = { version = "0.61", features = [
     "Win32_Foundation",
     "Win32_System_Registry",
-    "Win32_System_Threading",
-    "Win32_UI_Shell",
-    "Win32_UI_WindowsAndMessaging",
 ] }
 
 [dev-dependencies]
