@@ -240,6 +240,9 @@ pub fn enable() -> Result<String, Error> {
     if let Err(e) = check(&files) {
         if !in_place {
             unstage(&files);
+            // The folder `stage` made, when hosting was not on: a refused
+            // engine leaves nothing in Program Files.
+            let _ = std::fs::remove_dir(&dir);
         }
         return Err(Error::Failed(e));
     }
