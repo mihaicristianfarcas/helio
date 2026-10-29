@@ -241,7 +241,7 @@ Helio Host's settings and state are in `C:\ProgramData\Helio Host`. Details:
 ```sh
 cargo build --release -p helio-app         # the app: target/release/helio-app
 cargo build --release -p helio-host        # the host's engine, on its own
-cargo build --release -p helio-client --bin helio  # the CLI, if you want it
+cargo build --release -p helio-cli          # the CLI, if you want it
 ```
 
 Build the host's engine **on its own**, not in one `cargo` invocation with

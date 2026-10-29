@@ -10,7 +10,7 @@ set -euo pipefail
 REPO=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 docker build -q -t helio-linux "$REPO/tools/linux" >/dev/null
 args=("$@")
-[[ ${#args[@]} -eq 0 ]] && args=(cargo build -p helio-app -p helio-client)
+[[ ${#args[@]} -eq 0 ]] && args=(cargo build -p helio-app -p helio-cli)
 exec docker run --rm ${HELIO_DOCKER_ARGS:-} \
     -v "$REPO":/src -w /src \
     -v helio-linux-target:/target -e CARGO_TARGET_DIR=/target \

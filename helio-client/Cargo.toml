@@ -25,7 +25,6 @@ toml = "0.8"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
-ctrlc = { version = "3", features = ["termination"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 helio-decode = { path = "../helio-decode" }
@@ -80,7 +79,3 @@ png = "0.18"
 pollster = "1"
 wgpu = "30"
 winit = "0.30"
-
-[[bin]]
-name = "helio"
-path = "src/bin/helio/main.rs"

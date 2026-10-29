@@ -54,7 +54,8 @@ it is, and what was measured on the way, is in the
 | `helio-clipboard` | Sharing the clipboard both ways during a session |
 | `helio-ui` | The app's design system (GPUI), asides' look: theme, glass, motion, keyboard focus, icons, controls, Markdown; and what it needs of the desktop: menus, the tray icon, one running copy, starting at login |
 | `helio-update` | Whether a newer release, or newer commits on `main`, exist (GitHub's public API, once a day), and installing a release from the app: the archive checked against GitHub's SHA-256, then each system's way of putting it in place |
-| `helio-client` | The client: session, stream, input, statistics, the host store; per-platform window, decoder and renderer; the `helio` CLI |
+| `helio-client` | The client: session, stream, input, statistics, the host store; per-platform window, decoder and renderer |
+| `helio-cli` | `helio`, the command line: streaming and pairing from a terminal, with the client's own code |
 | `helio-app` | The app's window (GPUI): hosts, agents, settings, setup, and This computer (the host's pages, a client of its web API on localhost; the hosting switch, which runs `helio-host enable`, `disable` and `status`; the host's tray icon); and `Helio mcp` |
 | `helio-agent` | Computer use: a headless session, the actions, the MCP server, the agent runners; the `helio-agent` CLI |
 | `helio-host` | The host: sessions, the video and audio pipelines, pairing, presence, the web UI, the Windows service |

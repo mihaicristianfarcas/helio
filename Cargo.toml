@@ -14,6 +14,7 @@ members = [
     "helio-host",
     "helio-host-data",
     "helio-client",
+    "helio-cli",
     "helio-agent",
     "helio-app",
     "helio-transport",

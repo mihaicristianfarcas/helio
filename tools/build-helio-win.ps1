@@ -25,7 +25,7 @@ if (-not $env:LIBCLANG_PATH) { $env:LIBCLANG_PATH = 'C:\Program Files\LLVM\bin' 
 Push-Location $repo
 try {
     $ErrorActionPreference = 'Continue'
-    cargo build --release -p helio-app -p helio-host -p helio-client -p helio-agent --bins 2>&1 | ForEach-Object { "$_" } | Select-Object -Last 30
+    cargo build --release -p helio-app -p helio-host -p helio-cli -p helio-agent --bins 2>&1 | ForEach-Object { "$_" } | Select-Object -Last 30
     $ErrorActionPreference = 'Stop'
     if ($LASTEXITCODE -ne 0) { throw "cargo build failed ($LASTEXITCODE)" }
 

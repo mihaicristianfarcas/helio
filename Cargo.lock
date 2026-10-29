@@ -3456,6 +3456,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "helio-cli"
+version = "0.9.7"
+dependencies = [
+ "arboard",
+ "crossbeam-channel",
+ "ctrlc",
+ "dispatch2",
+ "helio-client",
+ "helio-pairing",
+ "helio-proto",
+ "helio-transport",
+ "objc2 0.6.4",
+ "objc2-app-kit 0.3.2",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "helio-client"
 version = "0.9.7"
 dependencies = [
@@ -3463,7 +3480,6 @@ dependencies = [
  "arboard",
  "block2 0.6.2",
  "crossbeam-channel",
- "ctrlc",
  "dispatch2",
  "epaint_default_fonts",
  "gilrs",

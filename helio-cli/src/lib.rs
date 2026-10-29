@@ -39,7 +39,8 @@ fn usage() -> ExitCode {
     ExitCode::FAILURE
 }
 
-fn main() -> ExitCode {
+/// Run the command `args` (without the program's name) and say how it went.
+pub fn main(args: &[String]) -> ExitCode {
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| {
@@ -48,7 +49,6 @@ fn main() -> ExitCode {
             }),
         )
         .init();
-    let args: Vec<String> = std::env::args().skip(1).collect();
     let dir = helio_client::store::data_dir();
     match args.first().map(String::as_str) {
         Some("identity") => identity(&dir),
@@ -67,7 +67,7 @@ fn main() -> ExitCode {
             }
             ExitCode::SUCCESS
         }
-        Some("add-host") => add_host(&dir, &args),
+        Some("add-host") => add_host(&dir, args),
         Some("wake") => match args.get(1) {
             Some(name) => wake(&dir, name),
             None => usage(),
