@@ -29,7 +29,6 @@ mod audio;
 #[path = "unix/audio.rs"]
 mod audio;
 mod bitrate;
-mod clients;
 #[cfg(windows)]
 mod clipagent;
 mod config;
@@ -70,7 +69,6 @@ mod power;
 mod power;
 mod presence;
 mod priority;
-mod private;
 mod sender;
 #[cfg(windows)]
 mod service;
@@ -89,6 +87,8 @@ mod web;
 
 use std::process::ExitCode;
 
+// The host's data, shared with `helio host` (helio-host-data).
+use helio_host_data::{clients, private};
 use helio_proto::permission::Permissions;
 use helio_transport::PublicIdentity;
 

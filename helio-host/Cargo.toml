@@ -17,6 +17,7 @@ require-signature = []
 
 [dependencies]
 helio-proto = { path = "../helio-proto" }
+helio-host-data = { path = "../helio-host-data" }
 helio-transport = { path = "../helio-transport" }
 helio-display = { path = "../helio-display" }
 helio-input = { path = "../helio-input" }

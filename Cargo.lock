@@ -3583,6 +3583,7 @@ dependencies = [
  "helio-clipboard",
  "helio-display",
  "helio-encode",
+ "helio-host-data",
  "helio-input",
  "helio-nat",
  "helio-pairing",
@@ -3607,6 +3608,19 @@ dependencies = [
  "windows 0.61.3",
  "windows-service",
  "x11rb",
+]
+
+[[package]]
+name = "helio-host-data"
+version = "0.1.0"
+dependencies = [
+ "helio-proto",
+ "helio-transport",
+ "serde",
+ "tempfile",
+ "toml 0.8.23",
+ "tracing",
+ "windows 0.61.3",
 ]
 
 [[package]]

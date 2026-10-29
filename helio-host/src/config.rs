@@ -4,49 +4,15 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
+// Where the host keeps its state: shared with `helio host`.
+pub use helio_host_data::data_dir;
+
 /// The tunnel port. One UDP port carries every paired client.
 pub const DEFAULT_PORT: u16 = 47800;
 /// Pairing and host info (TCP).
 pub const DEFAULT_PAIRING_PORT: u16 = 47801;
 /// Web UI (HTTPS).
 pub const DEFAULT_WEB_PORT: u16 = 47802;
-
-/// `%ProgramData%\Helio Host` on Windows (shared by the service and the host it
-/// launches), `~/Library/Application Support/Helio Host` on a Mac,
-/// `$XDG_CONFIG_HOME/helio-host` (`~/.config/helio-host`) on Linux. `HELIO_HOST_DATA_DIR`
-/// overrides them.
-pub fn data_dir() -> PathBuf {
-    if let Some(dir) = std::env::var_os("HELIO_HOST_DATA_DIR") {
-        return PathBuf::from(dir);
-    }
-    #[cfg(windows)]
-    {
-        let base = std::env::var_os("ProgramData")
-            .map(PathBuf::from)
-            .unwrap_or_else(|| PathBuf::from(r"C:\ProgramData"));
-        base.join("Helio Host")
-    }
-    #[cfg(target_os = "macos")]
-    {
-        let home = std::env::var_os("HOME")
-            .map(PathBuf::from)
-            .unwrap_or_else(std::env::temp_dir);
-        home.join("Library/Application Support/Helio Host")
-    }
-    // Beside Helio's: $XDG_CONFIG_HOME/helio-host.
-    #[cfg(not(any(windows, target_os = "macos")))]
-    {
-        let env = |k: &str| {
-            std::env::var_os(k)
-                .filter(|v| !v.is_empty())
-                .map(PathBuf::from)
-        };
-        let home = env("HOME").unwrap_or_else(std::env::temp_dir);
-        env("XDG_CONFIG_HOME")
-            .unwrap_or_else(|| home.join(".config"))
-            .join("helio-host")
-    }
-}
 
 fn default_name() -> String {
     std::env::var("COMPUTERNAME")
