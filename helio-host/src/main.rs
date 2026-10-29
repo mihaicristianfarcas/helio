@@ -72,6 +72,9 @@ mod power;
 mod power;
 mod presence;
 mod priority;
+#[cfg(target_os = "linux")]
+#[path = "linux/remote_input.rs"]
+mod remote_input;
 mod sender;
 #[cfg(windows)]
 mod service;
