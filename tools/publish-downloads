@@ -7,9 +7,11 @@
 #
 # DIST_DIR holds what tools/package-macos, tools/package-windows.ps1 and
 # tools/linux/package made: one archive per system and architecture
-# (Helio-VERSION-OS-ARCH.zip or .tar.gz). Each goes to latest/Helio-OS-ARCH.EXT,
-# a name that stays the same from one release to the next so the page can
-# link it, and is downloaded under its own name. Then latest/SHA256SUMS, and
+# (Helio-VERSION-OS-ARCH.zip or .tar.gz), and Windows' installer
+# (Helio-VERSION-windows-x86_64-setup.exe). Each goes to
+# latest/Helio-OS-ARCH.EXT (latest/Helio-windows-x86_64-setup.exe), a name
+# that stays the same from one release to the next so the page can link it,
+# and is downloaded under its own name. Then latest/SHA256SUMS, and
 # latest.json, which says what is there (version, commit, each file's size
 # and SHA-256) for the page to show. Last, the archives the previous
 # latest.json listed and this one does not (a system or a program no longer
@@ -51,12 +53,13 @@ previous=$(curl -fsS "$BASE/latest.json?before=$(date +%s)" 2>/dev/null |
 files='{}'
 : > "$WORK/SHA256SUMS"
 shopt -s nullglob
-for path in "$DIST"/*-"$VERSION"-*.zip "$DIST"/*-"$VERSION"-*.tar.gz; do
+for path in "$DIST"/*-"$VERSION"-*.zip "$DIST"/*-"$VERSION"-*.tar.gz "$DIST"/*-"$VERSION"-*.exe; do
     name=$(basename "$path")
     # Helio-0.7.0-macos-arm64.zip -> Helio-macos-arm64.zip
     key=${name/-$VERSION-/-}
     case $name in
         *.zip) type=application/zip ext=.zip ;;
+        *.exe) type=application/vnd.microsoft.portable-executable ext=.exe ;;
         *) type=application/gzip ext=.tar.gz ;;
     esac
     put "latest/$key" "$path" "$type" "attachment; filename=\"$name\""

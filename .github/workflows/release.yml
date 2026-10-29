@@ -1,7 +1,8 @@
 # A release, from every push to main that changes the programs: the app, with
 # the host's engine inside it, built on macOS (Apple silicon and Intel),
 # Windows and Linux, one archive per system and architecture (Helio-VERSION-
-# OS-ARCH), each the artifact of its job, and published as the website's
+# OS-ARCH), and on Windows its installer too (Helio-VERSION-windows-x86_64-
+# setup.exe), each the artifact of its job (dist-*), and published as the website's
 # downloads (tools/publish-downloads: Cloudflare R2, served at
 # download.helio.mihaicristian.dev; the website is on the landing-page
 # branch). When the workspace's version (Cargo.toml's [workspace.package])
@@ -22,6 +23,16 @@
 # and an App Store Connect API key: APPLE_API_KEY_P8 (the .p8 file),
 # APPLE_API_KEY_ID, APPLE_API_ISSUER. On main the release fails without them,
 # rather than publish an app macOS will not open.
+#
+# The Windows programs and DLLs, the installer and its uninstaller are
+# signed on main only, never on a pull request or another branch, with
+# Certum's open-source certificate in its cloud (SimplySign), through ssign:
+# the secrets CERTUM_EMAIL and CERTUM_OTP (the account's TOTP seed) of the
+# protected environment `release`, and the repository variable
+# HELIO_HOST_WINDOWS_PUBLISHER, the certificate's whole subject, which the
+# engine is then built to require (helio-host/src/hosting/signature.rs). With
+# neither, the Windows release is unsigned and says so; with only one of
+# them, it fails.
 name: Release
 
 on:
@@ -124,10 +135,13 @@ jobs:
           rm -f "$RUNNER_TEMP/AuthKey.p8"
       - uses: actions/upload-artifact@v4
         with:
-          name: macos-${{ matrix.arch }}
+          name: dist-macos-${{ matrix.arch }}
           path: target/dist/*.zip
           if-no-files-found: error
 
+  # The Windows programs, built and laid out as they ship
+  # (tools/package-windows.ps1 -StageOnly), unsigned: the next job signs and
+  # packages them on a runner of its own, where no build has run.
   windows:
     name: Windows
     runs-on: windows-latest
@@ -154,13 +168,123 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: release
-      - name: Build and package
+      # On main, with the publisher set, the engine refuses to turn hosting
+      # on with a copy not signed by it (the next job signs it so).
+      - name: Build
         shell: pwsh
-        run: ./tools/package-windows.ps1
+        env:
+          PUBLISHER: ${{ github.ref == 'refs/heads/main' && vars.HELIO_HOST_WINDOWS_PUBLISHER || '' }}
+        run: |
+          if ($env:PUBLISHER) {
+            $env:HELIO_HOST_WINDOWS_PUBLISHER = $env:PUBLISHER
+            ./tools/package-windows.ps1 -StageOnly -RequireSignature
+          } else {
+            ./tools/package-windows.ps1 -StageOnly
+          }
       - uses: actions/upload-artifact@v4
         with:
-          name: windows-x86_64
-          path: target/dist/*.zip
+          name: windows-unsigned
+          path: target/stage/Helio/
+          if-no-files-found: error
+          retention-days: 1
+
+  # Sign every program and DLL, then make the zip and the installer from the
+  # signed files and sign the installer and its uninstaller, so that the
+  # website and the GitHub release get the same signed files (and
+  # SHA256SUMS names them); then install, host and uninstall on this runner.
+  windows-package:
+    name: Windows (sign and package)
+    needs: windows
+    runs-on: windows-latest
+    # The signing secrets, on main only; a branch's run has none to read.
+    environment: ${{ github.ref == 'refs/heads/main' && 'release' || '' }}
+    steps:
+      - uses: actions/checkout@v5
+      - name: Signing or not
+        id: signing
+        shell: pwsh
+        env:
+          CERTUM_EMAIL: ${{ secrets.CERTUM_EMAIL }}
+          CERTUM_OTP: ${{ secrets.CERTUM_OTP }}
+          PUBLISHER: ${{ vars.HELIO_HOST_WINDOWS_PUBLISHER }}
+          MAIN: ${{ github.ref == 'refs/heads/main' }}
+        run: |
+          $credentials = [bool]($env:CERTUM_EMAIL -and $env:CERTUM_OTP)
+          if ($env:MAIN -ne 'true') {
+            'not main: the Windows programs are not signed'
+          } elseif (-not $credentials -and -not $env:PUBLISHER) {
+            '::warning::the Windows programs are not signed: set the release environment''s CERTUM_EMAIL and CERTUM_OTP, and the variable HELIO_HOST_WINDOWS_PUBLISHER'
+          } elseif (-not $credentials) {
+            '::error::HELIO_HOST_WINDOWS_PUBLISHER is set, so the engine refuses to run unsigned, but the release environment has no CERTUM_EMAIL and CERTUM_OTP to sign it with'
+            exit 1
+          } else {
+            "sign=true" >> $env:GITHUB_OUTPUT
+          }
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows-unsigned
+          path: target/stage/Helio
+      # ssign at one version, from crates.io with its own lock file: the
+      # only code besides Helio's scripts that sees the signing secrets.
+      - name: ssign
+        if: steps.signing.outputs.sign
+        run: |
+          rustup toolchain install stable --profile minimal && rustup default stable
+          cargo install ssign --version 0.1.8 --locked
+      # The engine as built is kept aside first, for the check below that an
+      # unsigned one is refused.
+      - name: Sign and package
+        shell: pwsh
+        env:
+          SIGN: ${{ steps.signing.outputs.sign }}
+          CERTUM_EMAIL: ${{ steps.signing.outputs.sign && secrets.CERTUM_EMAIL || '' }}
+          CERTUM_OTP: ${{ steps.signing.outputs.sign && secrets.CERTUM_OTP || '' }}
+        run: |
+          if ($env:SIGN) {
+            $unsigned = Join-Path $env:RUNNER_TEMP 'unsigned'
+            New-Item -ItemType Directory $unsigned | Out-Null
+            Copy-Item target/stage/Helio/helio-host.exe $unsigned
+            ./tools/package-windows.ps1 -From target/stage/Helio -Sign
+          } else {
+            ./tools/package-windows.ps1 -From target/stage/Helio
+          }
+      # The engine was built to require the publisher it is signed by: the
+      # same subject, written as Windows writes it, or hosting never turns on.
+      - name: The publisher
+        if: steps.signing.outputs.sign
+        shell: pwsh
+        env:
+          PUBLISHER: ${{ vars.HELIO_HOST_WINDOWS_PUBLISHER }}
+        run: |
+          $signer = (Get-AuthenticodeSignature target/stage/Helio/helio-host.exe).SignerCertificate.Subject
+          "signed by: $signer"
+          if (-not $env:PUBLISHER) {
+            "::error::the Windows programs are signed by $signer, and release builds must require it: set the repository variable HELIO_HOST_WINDOWS_PUBLISHER to that, exactly"
+            exit 1
+          }
+          if ($signer -cne $env:PUBLISHER) {
+            "::error::the Windows programs are signed by $signer, but HELIO_HOST_WINDOWS_PUBLISHER is $($env:PUBLISHER), and the engine would refuse itself"
+            exit 1
+          }
+      # Signed, the engine must also refuse an unsigned copy of itself and a
+      # signed one changed after signing.
+      - name: Install, host, uninstall
+        shell: pwsh
+        env:
+          SIGN: ${{ steps.signing.outputs.sign }}
+        run: |
+          $setup = (Get-ChildItem target/dist -Filter '*-windows-x86_64-setup.exe').FullName
+          if ($env:SIGN) {
+            ./tools/windows/test-install.ps1 -Setup $setup -Signed -UnsignedEngine (Join-Path $env:RUNNER_TEMP 'unsigned\helio-host.exe')
+          } else {
+            ./tools/windows/test-install.ps1 -Setup $setup
+          }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-windows-x86_64
+          path: |
+            target/dist/*-windows-x86_64.zip
+            target/dist/*-windows-x86_64-setup.exe
           if-no-files-found: error
 
   linux:
@@ -187,19 +311,21 @@ jobs:
         run: tools/linux/package
       - uses: actions/upload-artifact@v4
         with:
-          name: linux-x86_64
+          name: dist-linux-x86_64
           path: target/dist/*.tar.gz
           if-no-files-found: error
 
   downloads:
     name: Website downloads
-    needs: [macos, windows, linux]
+    needs: [macos, windows-package, linux]
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+      # The packages, not the unsigned Windows files they were made from.
       - uses: actions/download-artifact@v4
         with:
+          pattern: dist-*
           path: dist
           merge-multiple: true
       - name: Publish
@@ -210,7 +336,7 @@ jobs:
 
   release:
     name: GitHub release
-    needs: [macos, windows, linux]
+    needs: [macos, windows-package, linux]
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
@@ -228,6 +354,7 @@ jobs:
       - uses: actions/download-artifact@v4
         if: steps.version.outputs.new
         with:
+          pattern: dist-*
           path: dist
           merge-multiple: true
       - name: The release, with the apps

@@ -31,10 +31,12 @@ for scripts, under `https://download.helio.mihaicristian.dev/latest/`:
 
 | macOS, Apple silicon | macOS, Intel | Windows, x86_64 | Linux, x86_64 |
 |---|---|---|---|
-| `Helio-macos-arm64.zip` | `Helio-macos-x86_64.zip` | `Helio-windows-x86_64.zip` | `Helio-linux-x86_64.tar.gz` |
+| `Helio-macos-arm64.zip` | `Helio-macos-x86_64.zip` | `Helio-windows-x86_64-setup.exe` | `Helio-linux-x86_64.tar.gz` |
 
 `latest/SHA256SUMS` has their checksums, and `latest.json` says which
-version and commit they are.
+version and commit they are. On Windows, `Helio-windows-x86_64.zip` holds
+the same programs as the installer, unpacked: it is what Helio's own
+update downloads.
 
 ### On macOS
 
@@ -45,30 +47,47 @@ asks, or **Settings → Hosting**), as in [Hosting on macOS](#hosting-on-macos).
 
 ### On Windows
 
-The programs are not code-signed yet, so Windows asks before it first runs
-them, and names their publisher as unknown.
+Download `Helio-windows-x86_64-setup.exe` and open it. It installs Helio
+for you, with no administrator needed: Helio and the host's engine
+(`helio-host.exe`) in `%LOCALAPPDATA%\Programs\Helio`, with `helio`, the
+command line, in its `bin` folder; Helio in the Start menu and in
+**Settings > Apps > Installed apps**, which uninstalls it. Hosting stays
+off until you turn it on. Installed again over Helio, the installer
+updates it in place.
 
-Extract the zip and double-click **Install Helio.cmd**. Windows asks whether
-to run it. It installs Helio for you, with no administrator needed: Helio and
-the host's engine (`helio-host.exe`) in `%LOCALAPPDATA%\Programs\Helio`,
-with `helio`, the command line, in its `bin` folder; Helio in the Start
-menu and in **Settings > Apps > Installed apps**, which uninstalls it.
-Then it opens Helio. Helio also runs from the extracted folder
-as it is: open **Helio.exe** there (it needs FFmpeg's DLLs and `helio-host.exe`
-beside it).
+The installer, its uninstaller and every program and DLL it installs are
+signed with Helio's code-signing certificate (a Certum open-source
+certificate), and each signature is timestamped, so it stays valid after
+the certificate expires. **SmartScreen** may still say that it "prevented
+an unrecognized app from starting" for a while: it trusts a publisher by
+its reputation, which a certificate gathers as people download and run
+what it signed. Choose **More info**: it names the publisher, and then
+**Run anyway** runs the installer. If it says **Unknown publisher**, the
+file is not one Helio released: delete it. **Smart App Control**, on a PC
+where it is on, lets Helio run: it allows programs with a valid signature.
+
+The first time Helio looks for hosts or connects, **Windows Firewall** asks
+whether to let Helio on the network. Allow private networks. Windows asks
+this once, for any program, since a program installed without an
+administrator cannot add a firewall rule. The host's own rules come with
+turning hosting on.
 
 To host, see what [Hosting on Windows](#hosting-on-windows) lists first
 (an NVIDIA GPU, SudoVDA), then turn hosting on in Helio: Windows asks
 whether Helio may make changes as an administrator, once to turn it on and
 once to turn it off.
 
-SmartScreen judges an unsigned program by the file itself, so it may ask
-again after an update: each build is a new file. On a PC where **Smart
-App Control** is on (some new installations of Windows 11), the programs
-do not run at all: it blocks unsigned programs it does not know, with no
-way to allow one. They run there only with Smart App Control turned off
-(Windows Security > App & browser control > Smart App Control settings),
-which is for whoever owns the PC to decide.
+To check the download before you run it, compare its SHA-256 with the one
+the site publishes (`latest/SHA256SUMS`) or GitHub shows beside the file on
+the release page:
+
+```powershell
+Get-FileHash $HOME\Downloads\Helio-*-windows-x86_64-setup.exe -Algorithm SHA256
+(Get-AuthenticodeSignature $HOME\Downloads\Helio-*-windows-x86_64-setup.exe).SignerCertificate.Subject
+```
+
+The second line names who signed it; `Status` (without the
+`.SignerCertificate…`) is `Valid` for a signature Windows trusts.
 
 ### On Linux
 
@@ -200,11 +219,12 @@ powershell -ExecutionPolicy Bypass -File tools\build-helio-win.ps1 -FFmpeg C:\pa
 
 (`-FFmpeg` can be left out when `FFMPEG_DIR` is set.) The first leaves
 `target\Helio\Helio.exe` beside FFmpeg's DLLs and the host's engine,
-`helio-host.exe`; `-Install` then installs them as a download's **Install
-Helio.cmd** does (`tools\install-helio.ps1`): in
-`%LOCALAPPDATA%\Programs\Helio`, the Start menu and Settings > Apps.
-Windows Firewall may ask to let Helio on the network the first time: allow
-private networks.
+`helio-host.exe`; `-Install` then makes the release's installer from them
+(`tools\windows\helio.iss`, which needs
+[Inno Setup](https://jrsoftware.org/isinfo.php) 6.6 or newer) and runs it:
+`%LOCALAPPDATA%\Programs\Helio`, the Start menu and Settings > Apps, as a
+download installs them, unsigned. Windows Firewall may ask to let Helio on
+the network the first time: allow private networks.
 
 ## Hosting on Windows
 
@@ -295,7 +315,7 @@ anywhere ([networking.md](networking.md)). Next: [usage.md](usage.md).
 |---|---|
 | Homebrew | `brew uninstall --cask helio`: it quits Helio, `helio` goes with the app, and the host, finding the app gone, turns hosting off itself 15 s later (its LaunchAgent and copy removed); `--zap` stops it at once and also deletes the data folders, Helio's and the host's, Helio's start at login and `/etc/paths.d/helio` (the line that put `helio` on the `PATH`) |
 | macOS | Turn hosting off in Helio (or run `helio host disable`), quit Helio, then delete Helio.app: `helio` goes with it. Deleted with hosting on, the host notices and, 15 s later, turns hosting off itself. Your data is in `~/Library/Application Support/Helio` and `~/Library/Application Support/Helio Host` (the host's identity and pairings), and `/etc/paths.d/helio` names the folder `helio` was in, if you installed it (`sudo rm /etc/paths.d/helio`) |
-| Windows | **Settings > Apps > Installed apps**, **Helio**, **Uninstall** (or `install.ps1 -Uninstall` in `%LOCALAPPDATA%\Programs\Helio`). While hosting is on, it turns it off first (HelioHost, its firewall rules and the host's copy go), and Windows asks for an administrator. It takes `helio` off your `PATH`, if you put it there. It leaves your hosts and settings, and the host's identity and pairings: delete `%APPDATA%\Helio` and `C:\ProgramData\Helio Host` too to remove them. A copy run from its extracted folder: turn hosting off in it, then delete the folder |
+| Windows | **Settings > Apps > Installed apps**, **Helio**, **Uninstall** (or `unins000.exe` in `%LOCALAPPDATA%\Programs\Helio`). While hosting is on, it turns it off first (HelioHost, its firewall rules and the host's copy go), and Windows asks for an administrator; if you say no, Helio stays installed. It takes `helio` off your `PATH`, if you put it there, and Helio's start at login. It leaves your hosts and settings, the host's identity and pairings, and the firewall rule Windows made when it asked about Helio (only an administrator can remove it, and it lets nothing in once Helio is gone): delete `%APPDATA%\Helio` and `C:\ProgramData\Helio Host` too to remove them. A copy run from the extracted zip: turn hosting off in it, then delete the folder |
 | Linux | `install.sh --uninstall` from the download, or `tools/linux/install-apps --uninstall`: it turns hosting off first, then removes the programs, the `helio` link (if you installed it), the host's unit and the launcher entry. Then `~/.config/helio` and `~/.config/helio-host` |
 
 Unpair a device on the other side too (Helio: the host's menu > Unpair; the host:

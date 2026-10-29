@@ -178,8 +178,8 @@ Per-second statistics: `RUST_LOG=info,helio_client::stats=debug` on the client
 Every push to `main` that changes the programs is built and published:
 `.github/workflows/release.yml` builds the app, with the host's engine
 inside it, on an Apple silicon and an Intel Mac, on Windows and on Linux:
-one archive for each system and architecture, published as the website's
-downloads. Pushes that change only `docs/`, `Casks/` or
+one archive for each system and architecture, and Windows' installer,
+published as the website's downloads. Pushes that change only `docs/`, `Casks/` or
 Markdown files build nothing. The website,
 [helio.mihaicristian.dev](https://helio.mihaicristian.dev), is not on
 `main`: it lives on the `landing-page` branch, which is rebased on `main`
@@ -188,7 +188,8 @@ when it needs to be and never merged into it.
 | Script | Makes |
 |---|---|
 | `tools/package-macos` | `Helio-VERSION-macos-ARCH.zip`: Helio.app, with the host inside it as a helper app, `Contents/Helpers/Helio Host.app` (`tools/build-helio-app`, which signs the helper, then the app), and `helio`, the command line: `Contents/Resources/bin/helio`, a link to the app's program, the folder Settings > General names in `/etc/paths.d/helio` |
-| `tools/package-windows.ps1` | `Helio-VERSION-windows-x86_64.zip`: Helio.exe beside FFmpeg's DLLs and the host's engine, `helio-host.exe`; `bin\helio.exe`, the `helio` command (helio-app's `helio-console`, which runs `Helio.exe cli`); `install.ps1`, which is `tools/install-helio.ps1`; and `Install Helio.cmd`. `install.ps1` copies itself beside the programs and lists Helio in Settings > Apps, whose **Uninstall** runs it with `-Uninstall` (hosting off first, and `bin` off the user's `PATH` if Settings > General put it there) |
+| `tools/package-windows.ps1` | `Helio-VERSION-windows-x86_64-setup.exe`, the installer (`tools/windows/helio.iss`, Inno Setup 6.6 or newer): per user, no administrator, Helio in the Start menu and Settings > Apps, whose **Uninstall** turns hosting off first and takes `bin` off the user's `PATH` if Settings > General put it there. And `Helio-VERSION-windows-x86_64.zip`, the same files, which Helio's own update unpacks: Helio.exe beside FFmpeg's DLLs and license and the host's engine, `helio-host.exe`; `bin\helio.exe`, the `helio` command (helio-app's `helio-console`, which runs `Helio.exe cli`). `-Sign` signs them all (below) |
+| `tools/windows/test-install.ps1 -Setup FILE` | Not a package: installs the installer silently, turns hosting on, installs again, uninstalls, and checks each step and that nothing is left; `-Signed` also verifies every signature, and `-UnsignedEngine` that the engine refuses an unsigned and a changed copy. As an administrator, for a user without Helio. CI runs it on each pull request, the release workflow on each package |
 | `tools/linux/package` | `Helio-VERSION-linux-ARCH.tar.gz`: a folder with `helio-app`, `helio-host`, the host's unit `helio-host.service`, the launcher entry, its icon and `install.sh` (`tools/linux/install-release`; its `--uninstall` also removes the `~/.local/bin/helio` link Settings > General makes) |
 | `tools/publish-downloads DIST` | The downloads: each archive at `https://download.helio.mihaicristian.dev/latest/Helio-OS-ARCH.EXT`, then `latest/SHA256SUMS` and `latest.json` (version, commit, sizes, checksums), in the Cloudflare R2 bucket `helio-downloads`, with wrangler; last, the archives the previous `latest.json` listed and this one does not are deleted |
 
@@ -204,15 +205,15 @@ enough.
 
 On Windows, `helio-host enable` checks the Authenticode signature of the engine
 it copies to `C:\Program Files\Helio Host` before HelioHost runs it as SYSTEM.
-Windows releases are not signed yet, so a failed check only prints a
-warning. Once they are, the release build turns the check on:
-`cargo build --release -p helio-host --features require-signature` with
+A build with `--features require-signature` (`tools/package-windows.ps1
+-RequireSignature`, the release workflow's whenever it signs) and
 `HELIO_HOST_WINDOWS_PUBLISHER` set to the signing certificate's whole subject,
 as `(Get-AuthenticodeSignature helio-host.exe).SignerCertificate.Subject` prints
-it (`CN=…, O=…, L=…, S=…, C=…`), and `helio-host enable` then refuses an unsigned,
-changed or otherwise-signed engine, including one whose certificate shares
-only the common name. The feature does not build without the publisher; a
-debug build never requires the signature.
+it (`CN=…, O=…, L=…, S=…, C=…`), refuses an unsigned, changed or
+otherwise-signed engine, including one whose certificate shares only the
+common name; any other build only prints a warning. The feature does not
+build without the publisher; a debug build never requires the
+signature.
 
 An MSVC build of `helio-host.exe` is linked with `/DEPENDENTLOADFLAG:0x800`
 (`helio-host/build.rs`): the DLLs it imports load from System32 only, never from
@@ -257,17 +258,61 @@ tools/package-macos
 Without the API key the app is signed but not notarized; without
 `HELIO_SIGN_IDENTITY` it is signed as a development build is (below).
 
-The Windows programs are not signed. Signing them takes a code-signing
-certificate whose key stays with its issuer (every new one's must, in a
-hardware module or the issuer's cloud): for a person rather than a
-company, Certum's open-source certificate in its cloud is one, while
-Microsoft's Artifact Signing issues to individuals only in the US and
-Canada. The signing goes in `tools/package-windows.ps1`, on Helio.exe,
-and helio-host.exe before they are zipped, with the issuer's
-credentials as repository secrets, as the Developer ID's are.
-
 `main` takes changes only through pull requests: work on a branch, push it,
 and open one (`gh pr create`).
+
+### Windows signing
+
+The Windows programs are signed with a Certum open-source code-signing
+certificate, whose key stays in Certum's cloud (SimplySign; every new
+certificate's key must stay with its issuer, in a hardware module or the
+issuer's cloud, and Microsoft's Artifact Signing issues to individuals only
+in the US and Canada). [ssign](https://docs.rs/ssign), an unofficial client
+for SimplySign's API pinned at 0.1.8, signs them on the runner:
+`tools/package-windows.ps1 -Sign` signs every `.exe` and `.dll` it ships,
+FFmpeg's included (Smart App Control may block an unsigned DLL), then
+builds the zip and the installer from the signed files and has Inno
+Setup sign the installer, its uninstaller and the uninstaller's copies of
+itself (helio.iss's `SignTool=ssign`). Every signature is timestamped
+(Certum's timestamp authority, ssign's default).
+
+The release workflow builds on one runner and signs and packages on
+another, where no build script of any dependency has run: the job
+`windows-package`, in the environment `release`, on `main` only. It needs,
+once:
+
+1. **Settings → Environments → `release`**: deployment branches `main`
+   only, and required reviewers if every signing run should wait for one.
+2. Its secrets `CERTUM_EMAIL` (the SimplySign account) and `CERTUM_OTP`
+   (the TOTP seed behind its authenticator: base32, or the whole
+   `otpauth://` URI). The seed signs as you for as long as it is valid:
+   keep it nowhere else, and issue a new one in SimplySign if it leaks.
+3. The repository variable `HELIO_HOST_WINDOWS_PUBLISHER`: the
+   certificate's subject, exactly. A signing run without it fails and
+   prints the subject to copy; a run with it but without the secrets fails
+   too, since its engine would refuse itself.
+
+With neither the secrets nor the variable, the Windows release is unsigned
+and its run says so. Signed, the run checks with `signtool verify /pa /v`
+every signature and its timestamp, and that the engine refuses an
+unsigned copy of itself and a signed copy changed after signing
+(`tools/windows/test-install.ps1`). By hand, with a code from the
+authenticator rather than the seed:
+
+```powershell
+$env:CERTUM_EMAIL = 'you@example.com'; $env:CERTUM_TOKEN = '123456'
+powershell -ExecutionPolicy Bypass -File tools\package-windows.ps1 -Sign
+```
+
+To try the signature check without Certum, in a VM: a self-signed
+certificate (`New-SelfSignedCertificate -Type CodeSigningCert -Subject 'CN=Helio
+Test Signing' -CertStoreLocation Cert:\LocalMachine\My`), trusted in the
+VM's `Root` and `TrustedPublisher` stores, a build with
+`HELIO_HOST_WINDOWS_PUBLISHER='CN=Helio Test Signing'` and
+`-RequireSignature`, and `SSIGN` naming a script that takes ssign's
+command line (`-n NAME -u URL FILES`) and signs with `signtool sign /sm
+/sha1 THUMBPRINT /fd sha256 /tr TIMESTAMP_URL /td sha256`. Then
+`test-install.ps1 -Signed -UnsignedEngine` with the engine as built.
 
 ## Benchmarks and fuzzing
 

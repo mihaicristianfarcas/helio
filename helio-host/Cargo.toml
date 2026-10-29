@@ -11,8 +11,9 @@ description = "Helio Host: the Helio streaming host (Windows, macOS, Linux)"
 [features]
 # Windows: `helio-host enable` refuses an engine without a valid Authenticode
 # signature by HELIO_HOST_WINDOWS_PUBLISHER (set at build time) instead of only
-# warning. For release builds once Windows releases are signed; a debug build
-# never requires it (helio-host/src/hosting/signature.rs).
+# warning. The release workflow builds with it once the Windows programs are
+# signed (tools/package-windows.ps1 -RequireSignature); a debug build never
+# requires it (helio-host/src/hosting/signature.rs).
 require-signature = []
 
 [dependencies]

@@ -223,9 +223,16 @@ at the median, 69 ms p95. Motion at a full 30 fps was not measured.
   Windows 3.8 s, later ones 25 ms (Windows 11 25H2, RTX 3070 Ti): a client
   that changes between HDR and SDR sessions starts 3.8 s later unless the
   previous session's display is still kept (for a minute after it ends).
-- **Not code-signed.** Helio Host and Helio for Windows are not signed:
-  SmartScreen asks before each first start, and Smart App Control, where
-  it is on, blocks them ([../install.md](../install.md#on-windows)).
+- **SmartScreen and a new certificate.** The installer and every program
+  and DLL in it are signed (Authenticode, timestamped), so Smart App
+  Control lets them run, but SmartScreen judges a publisher by its
+  reputation, which a code-signing certificate gathers only as people
+  download and run what it signed: until then it may ask before the
+  installer runs ([../install.md](../install.md#on-windows)).
+- **The client's firewall prompt.** Helio installs per user, without an
+  administrator, so it cannot add a firewall rule for itself: Windows
+  asks once, the first time Helio listens. The host's rules are added by
+  `helio-host enable`, which runs as an administrator.
 
 ## Helio, the client
 
@@ -254,24 +261,29 @@ As Moonlight does it on Windows:
   changes.
 - **Timers.** 1 ms timer resolution while streaming.
 
-**Install Helio.cmd** (`tools/install-helio.ps1`, the download's
-`install.ps1`) installs Helio for the user who runs it, with no
-administrator: Helio and the host's engine in
-`%LOCALAPPDATA%\Programs\Helio` with the script beside it, `helio` (the
-command line: `bin\helio.exe`, a console program that runs `Helio.exe cli`
-and waits for it, since Helio.exe is a window program a terminal neither
-waits for nor shares its console with), in the Start menu, and in
-Settings > Apps (the key
-`HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\dev.mihaicristian.helio`),
-whose **Uninstall** runs the script with `-Uninstall`. When Helio starts
-from that folder and its entry is missing or names another version, as
-after an update installed by 0.9.4 or older, the script beside it writes
-the entry again. Uninstalling turns hosting off first, while it is on
-(`helio-host disable`, as an administrator: Windows asks), and takes `bin`
-off the user's `PATH`. Helio's **Settings → General → Command line** puts
-it there (`HKCU\Environment`, written as the `REG_EXPAND_SZ` Windows keeps
-it as, then `WM_SETTINGCHANGE` so that what Explorer starts has it); no
-installer does.
+The installer (`tools/windows/helio.iss`, Inno Setup, built by
+`tools/package-windows.ps1`) installs Helio for the user who runs it, with
+no administrator (`PrivilegesRequired=lowest`): Helio and the host's engine
+in `%LOCALAPPDATA%\Programs\Helio`, `helio` (the command line:
+`bin\helio.exe`, a console program that runs `Helio.exe cli` and waits for
+it, since Helio.exe is a window program a terminal neither waits for nor
+shares its console with), in the Start menu, and in Settings > Apps (the
+key
+`HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\dev.mihaicristian.helio_is1`),
+whose **Uninstall** runs `unins000.exe`. A Helio that runs is closed
+first (Restart Manager). Installed over a Helio whose hosting is on, it
+runs `helio-host enable` again from the new files (Windows asks), so the
+service runs the new engine. Helio's own update replaces the files
+without the installer, and the new Helio, when it starts, brings the
+entry's version up to date. Uninstalling turns hosting off first, while
+it is on (`helio-host disable`, as an administrator: Windows asks, and a
+refusal leaves Helio installed), then takes `bin` off the user's `PATH`,
+removes Helio's start at login (the `Helio` value under `HKCU\...\Run`)
+and the files an update renamed aside or brought. Helio's **Settings →
+General → Command line** puts `bin` on the `PATH` (`HKCU\Environment`,
+written as the `REG_EXPAND_SZ` Windows keeps it as, then
+`WM_SETTINGCHANGE` so that what Explorer starts has it); no installer
+does.
 
 Building it needs an FFmpeg 8 shared build and LLVM (for the FFmpeg
 bindings): see [../install.md](../install.md#helio-on-windows).
