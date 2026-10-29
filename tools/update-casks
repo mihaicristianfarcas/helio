@@ -103,10 +103,10 @@ $LIMIT
   zap launchctl: "dev.mihaicristian.helio.host",
       delete:    "/etc/paths.d/helio",
       trash:     [
-        "~/Library/Application Support/Helio",
         "~/Library/Application Support/Helio Host",
-        "~/Library/LaunchAgents/dev.mihaicristian.helio.plist",
+        "~/Library/Application Support/Helio",
         "~/Library/LaunchAgents/dev.mihaicristian.helio.host.plist",
+        "~/Library/LaunchAgents/dev.mihaicristian.helio.plist",
         "~/Library/Logs/Helio",
         "~/Library/Preferences/dev.mihaicristian.helio.plist",
       ]
