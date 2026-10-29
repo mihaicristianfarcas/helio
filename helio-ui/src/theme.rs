@@ -49,8 +49,6 @@ impl Ink {
     pub const FRESH: Rgba = hex(0x34c759, 1.0);
     pub const ATTENTION: Rgba = hex(0xf5a623, 1.0);
     pub const DANGER: Rgba = hex(0xf5453a, 1.0);
-    /// The ball in the logo (`#4d88ff`, the icons' ball and trail).
-    pub const BALL: Rgba = rgba(0.302, 0.533, 1.0, 1.0);
     pub const IDLE: Rgba = rgba(0.557, 0.557, 0.576, 1.0);
 }
 
@@ -311,7 +309,6 @@ mod tests {
         assert_eq!(Theme::dark().ink(Ink::FRESH), Ink::FRESH);
         assert_eq!(Theme::light().ink(Ink::FRESH), hex(0x248a3d, 1.0));
         assert_eq!(Theme::light().ink(Ink::DANGER.alpha(0.5)).a, 0.5);
-        assert!(Theme::light().ink(Ink::BALL).b < Ink::BALL.b);
     }
 
     #[test]

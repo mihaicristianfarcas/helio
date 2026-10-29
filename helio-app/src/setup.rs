@@ -358,7 +358,7 @@ impl HelioApp {
             .justify_center()
             .gap(px(12.0))
             .px(px(40.0))
-            .child(crate::app::brand_mark(56.0))
+            .child(crate::app::brand_mark(56.0, t.primary))
             .child(
                 div()
                     .pt(px(16.0))

@@ -283,12 +283,17 @@ cargo +nightly fuzz run depacketize   # also: control, input
 
 ## Assets
 
-- The icons are drawn by code: `cargo run -p helio-app --example make-icon
-  -- OUTDIR` writes Helio's and Helio Host's macOS iconsets, their Windows `.ico`
-  and 256-pixel PNGs, and the host's menu bar mark (`tray.png`,
-  `tray@2x.png`). Helio's `.ico`, PNG and the mark are committed in
-  `helio-app/assets/`; `tools/build-helio-app` reruns the drawing when it
-  changes, for the app's icon and its host helper's (Helio Host's).
+- The app's icon has one source, `helio-app/assets/icon.svg`: a lowercase h
+  on Apple's icon grid. `cargo run -p helio-app --example make-icon --
+  OUTDIR` draws every other icon from it: the macOS iconset (`AppIcon`, for
+  the app and Helio Host's helper alike), the Windows `.ico`, the Linux
+  icon theme's sizes (`hicolor/`), the host's menu bar mark (`tray.png`,
+  `tray@2x.png`), the h alone for the welcome page (`mark.svg`, tinted with
+  the text's colour) and the site's `helio.svg` (favicon and logo, for the
+  `landing-page` branch). Everything but the iconset and the site's file is
+  committed in `helio-app/assets/`; after changing the source, refresh it
+  with `cp -R OUTDIR/assets/. helio-app/assets/`. `tools/build-helio-app`
+  draws the iconset again when the source or the example changes.
 - The UI's icons are SVG files in `helio-ui/assets/icons/`, 24×24 with
   1.75 pt round strokes in `currentColor`, embedded in the binary.
 - `helio-decode/tests/fixtures/testsrc.h264` is the known stream the

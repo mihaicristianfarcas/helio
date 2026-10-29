@@ -25,7 +25,7 @@ interactive-run.log
 !helio-decode/tests/fixtures/*.hevc
 !helio-decode/tests/fixtures/*.obu
 # ...and so are the apps' icons (drawn by helio-app/examples/make-icon.rs).
-!helio-app/assets/*.png
+!helio-app/assets/**/*.png
 # ...and the documentation's screenshots.
 !docs/images/*.png
 

@@ -29,6 +29,6 @@ STAGE=$(mktemp -d)
 trap 'rm -rf "$STAGE"' EXIT
 cp "$TARGET/helio-app" "$TARGET/helio-host" "$STAGE/"
 cp "$REPO/tools/linux/helio-host.service" "$REPO/tools/linux/dev.mihaicristian.helio.desktop" "$STAGE/"
-cp "$REPO/helio-app/assets/icon-256.png" "$STAGE/dev.mihaicristian.helio.png"
+cp -R "$REPO/helio-app/assets/hicolor" "$STAGE/"
 cp "$REPO/tools/linux/install-release" "$STAGE/install.sh"
 "$STAGE/install.sh"

@@ -134,5 +134,5 @@ jobs:
           ls target/dist
           [ "$(ls target/dist | wc -l)" -eq 1 ]
           tar -tzf target/dist/Helio-*-linux-x86_64.tar.gz | sort | tee /dev/stderr |
-            grep -c '/\(helio-app\|helio-host\|helio-host.service\|install.sh\|dev.mihaicristian.helio.desktop\)$' |
-            grep -qx 5
+            grep -c '/\(helio-app\|helio-host\|helio-host.service\|install.sh\|dev.mihaicristian.helio.desktop\|hicolor/48x48/apps/dev.mihaicristian.helio.png\|hicolor/scalable/apps/dev.mihaicristian.helio.svg\)$' |
+            grep -qx 7

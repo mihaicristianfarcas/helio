@@ -19,7 +19,7 @@ mod desktop;
 mod sheets;
 mod sidebar;
 
-pub use sidebar::brand_mark;
+pub use sidebar::{brand_mark, Assets};
 
 use std::path::PathBuf;
 use std::rc::Rc;

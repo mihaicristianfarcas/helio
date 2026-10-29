@@ -110,7 +110,7 @@ fn main() {
     helio_client::wan::warm_up();
     helio_client::wan::presence(helio_client::store::data_dir());
 
-    let application = gpui_platform::application().with_assets(helio_ui::Assets);
+    let application = gpui_platform::application().with_assets(app::Assets);
     // The Dock icon brings the window back (it hides while a stream has
     // the screen).
     application.on_reopen(|cx| app::open(app::Show::Window, cx));

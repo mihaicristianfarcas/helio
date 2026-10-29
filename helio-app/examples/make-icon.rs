@@ -1,325 +1,118 @@
-//! Draws the apps' icons, the same as the landing page's
-//! (`site/src/assets/icons/*.svg`, on the `landing-page` branch): a dark
-//! rounded square, a ball in flight and its
-//! trail. Helio's ball leaves to the right (the serve); Helio Host's comes back on
-//! the left (the return).
+//! Draws every icon Helio uses from one source, `helio-app/assets/icon.svg`
+//! (a lowercase h on Apple's icon grid), with resvg.
 //!
 //!   cargo run -p helio-app --example make-icon -- OUT_DIR
 //!
-//! writes, for Helio, OUT_DIR/AppIcon.iconset (for macOS's `iconutil`),
-//! OUT_DIR/Helio.ico (Windows) and OUT_DIR/icon-256.png (the window icon and
-//! the Linux desktop entry's); for Helio Host, OUT_DIR/HelioHost.iconset,
-//! OUT_DIR/HelioHost.ico and OUT_DIR/helio-host-256.png; and Helio Host's mark for the Mac
-//! menu bar, OUT_DIR/tray.png and OUT_DIR/tray@2x.png: the ball and its
-//! trail alone, black on nothing, which macOS tints as a template image.
+//! writes:
+//!
+//! - OUT_DIR/AppIcon.iconset, for macOS's `iconutil`: the whole 1024-pixel
+//!   canvas with its margin and shadow, as macOS draws an app's icon. The
+//!   app's bundle and Helio Host's both use it (`tools/build-helio-app`).
+//! - OUT_DIR/assets, what `helio-app/assets` holds (refresh it with
+//!   `cp -R OUT_DIR/assets/. helio-app/assets/`):
+//!   - `Helio.ico` (Windows) and `hicolor/` (the Linux icon theme's sizes
+//!     and its scalable SVG): the rounded square alone, without the margin
+//!     and the shadow, which neither system expects: with them the icon
+//!     looks small beside the others on a taskbar or in a launcher;
+//!   - `tray.png` and `tray@2x.png`, the host's menu bar mark: the h alone,
+//!     black on nothing, which macOS tints as a template image;
+//!   - `mark.svg`, the same h as an SVG, the mark on the app's welcome page,
+//!     which GPUI tints with the text's colour.
+//! - OUT_DIR/site/helio.svg: the rounded square as an SVG, the site's
+//!   favicon and the mark on its pages and share image (the site is on the
+//!   `landing-page` branch).
 
 use std::path::Path;
 
-use tiny_skia::{
-    Color, FillRule, GradientStop, LineCap, LinearGradient, Mask, Paint, Path as SkPath,
-    PathBuilder, Pixmap, PixmapPaint, Point, RadialGradient, Shader, SpreadMode, Stroke,
-    StrokeDash, Transform,
-};
+use resvg::tiny_skia::{Pixmap, Transform};
+use resvg::usvg;
 
-const SIZE: u32 = 1024;
+/// The one source, on Apple's 1024-pixel grid.
+const SOURCE: &str = include_str!("../assets/icon.svg");
 
-/// Whose icon: the same table and ball, mirrored.
-#[derive(Clone, Copy, PartialEq)]
-enum Mark {
-    Helio,
-    Host,
-}
+/// The rounded square alone: the 824-pixel body with 16 pixels around it,
+/// room for the light edge drawn on its border.
+const SQUARE: &str = "84 84 856 856";
 
-fn rgba(r: f32, g: f32, b: f32, a: f32) -> Color {
-    Color::from_rgba(r, g, b, a).unwrap()
-}
+/// The h alone. The letter is 500 pixels tall (262 to 762) and centred, so
+/// in this frame it fills a little under nine tenths of the height, as
+/// macOS's own menu bar marks do.
+const MARK: &str = "224 224 576 576";
 
-fn rounded_rect(x: f32, y: f32, w: f32, h: f32, r: f32) -> SkPath {
-    // A circle's quarter as a cubic.
-    let k = r * 0.552_284_7;
-    let mut pb = PathBuilder::new();
-    pb.move_to(x + r, y);
-    pb.line_to(x + w - r, y);
-    pb.cubic_to(x + w - r + k, y, x + w, y + r - k, x + w, y + r);
-    pb.line_to(x + w, y + h - r);
-    pb.cubic_to(x + w, y + h - r + k, x + w - r + k, y + h, x + w - r, y + h);
-    pb.line_to(x + r, y + h);
-    pb.cubic_to(x + r - k, y + h, x, y + h - r + k, x, y + h - r);
-    pb.line_to(x, y + r);
-    pb.cubic_to(x, y + r - k, x + r - k, y, x + r, y);
-    pb.close();
-    pb.finish().unwrap()
-}
+/// The launcher entry's name, the window's app id on Linux.
+const LINUX_ID: &str = "dev.mihaicristian.helio";
 
-/// A separable box blur, three passes (close to a Gaussian of `sigma`), on
-/// premultiplied pixels.
-fn blur(p: &mut Pixmap, sigma: f32) {
-    let radius = ((sigma * 3.0_f32.sqrt()).round() as usize).max(1);
-    let (w, h) = (p.width() as usize, p.height() as usize);
-    let data = p.data_mut();
-    let mut tmp = vec![0f32; w * h * 4];
-    let mut buf: Vec<f32> = data.iter().map(|&v| v as f32).collect();
-    for _ in 0..3 {
-        for pass in 0..2 {
-            let (len, lines, step, stride) = if pass == 0 {
-                (w, h, 4, w * 4)
-            } else {
-                (h, w, w * 4, 4)
-            };
-            for line in 0..lines {
-                let base = line * stride;
-                for c in 0..4 {
-                    let mut acc = 0f32;
-                    let at = |i: isize| -> f32 {
-                        let i = i.clamp(0, len as isize - 1) as usize;
-                        buf[base + i * step + c]
-                    };
-                    for i in -(radius as isize)..=(radius as isize) {
-                        acc += at(i);
-                    }
-                    for i in 0..len {
-                        tmp[base + i * step + c] = acc / (2 * radius + 1) as f32;
-                        acc +=
-                            at(i as isize + radius as isize + 1) - at(i as isize - radius as isize);
-                    }
-                }
-            }
-            std::mem::swap(&mut buf, &mut tmp);
-        }
-    }
-    for (d, v) in data.iter_mut().zip(buf) {
-        *d = v.round().clamp(0.0, 255.0) as u8;
-    }
-}
+/// Windows picks among these: 16 for lists, 20 to 40 for the taskbar at
+/// 100 to 200% scale, 48 and 64 for Explorer, 256 for its large views.
+const ICO_SIZES: [u32; 8] = [16, 20, 24, 32, 40, 48, 64, 256];
 
-/// `path` filled with `color`, blurred: a shadow or a glow.
-fn soft(path: &SkPath, color: Color, sigma: f32, dx: f32, dy: f32) -> Pixmap {
-    let mut layer = Pixmap::new(SIZE, SIZE).unwrap();
-    let mut paint = Paint::default();
-    paint.set_color(color);
-    paint.anti_alias = true;
-    layer.fill_path(
-        path,
-        &paint,
-        FillRule::Winding,
-        Transform::from_translate(dx, dy),
-        None,
+/// The hicolor theme's usual sizes; 48 is the one the specification
+/// requires.
+const LINUX_SIZES: [u32; 8] = [16, 24, 32, 48, 64, 128, 256, 512];
+
+/// The menu bar mark: 18 points, as macOS's own status items are.
+const TRAY_POINTS: u32 = 18;
+
+/// `text` with `from`, which must occur exactly once, replaced by `to`.
+fn replace_once(text: &str, from: &str, to: &str) -> String {
+    assert_eq!(
+        text.matches(from).count(),
+        1,
+        "icon.svg should hold {from:?} once"
     );
-    blur(&mut layer, sigma);
-    layer
+    text.replacen(from, to, 1)
 }
 
-fn draw(mark: Mark) -> Pixmap {
-    // Helio Host's is Helio's seen from the other side of the table.
-    let x = |v: f32| {
-        if mark == Mark::Host {
-            SIZE as f32 - v
-        } else {
-            v
-        }
-    };
-    let mut canvas = Pixmap::new(SIZE, SIZE).unwrap();
-    // macOS icon grid: an 824 px body, 100 px margins.
-    let body = rounded_rect(100.0, 100.0, 824.0, 824.0, 185.0);
-    let mut clip = Mask::new(SIZE, SIZE).unwrap();
-    clip.fill_path(&body, FillRule::Winding, true, Transform::identity());
+/// The source as macOS shows it.
+fn mac() -> String {
+    SOURCE.to_owned()
+}
 
-    canvas.draw_pixmap(
-        0,
-        0,
-        soft(&body, rgba(0.0, 0.0, 0.0, 0.35), 12.0, 0.0, 10.0).as_ref(),
-        &PixmapPaint::default(),
-        Transform::identity(),
-        None,
+/// The rounded square, cropped, without the shadow.
+fn square() -> String {
+    let svg = replace_once(
+        SOURCE,
+        r#"viewBox="0 0 1024 1024""#,
+        &format!(r#"viewBox="{SQUARE}""#),
     );
+    replace_once(&svg, r#" filter="url(#shadow)""#, "")
+}
 
-    let mut paint = Paint {
-        anti_alias: true,
-        ..Paint::default()
-    };
-    paint.shader = LinearGradient::new(
-        Point::from_xy(512.0, 100.0),
-        Point::from_xy(512.0, 924.0),
-        vec![
-            GradientStop::new(0.0, rgba(0.10, 0.12, 0.22, 1.0)),
-            GradientStop::new(1.0, rgba(0.04, 0.05, 0.10, 1.0)),
-        ],
-        SpreadMode::Pad,
-        Transform::identity(),
+/// The h alone, black.
+fn template() -> String {
+    let start = SOURCE
+        .find(r#"<g id="mark""#)
+        .expect("icon.svg has a group with the id mark");
+    let end = start + SOURCE[start..].find("</g>").expect("the mark group closes") + 4;
+    let mark = &SOURCE[start..end];
+    let colour = mark
+        .find(r#"color=""#)
+        .expect("the mark group has a colour")
+        + 7;
+    let colour_end = colour + mark[colour..].find('"').expect("the colour closes");
+    let mark = format!("{}#000000{}", &mark[..colour], &mark[colour_end..]);
+    format!(
+        r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="{MARK}">{mark}</svg>
+"#
     )
-    .unwrap();
-    canvas.fill_path(
-        &body,
-        &paint,
-        FillRule::Winding,
-        Transform::identity(),
-        None,
-    );
-
-    // The table's centre line.
-    let mut line = PathBuilder::new();
-    line.move_to(512.0, 150.0);
-    line.line_to(512.0, 874.0);
-    let line = line.finish().unwrap();
-    let mut paint = Paint {
-        anti_alias: true,
-        ..Paint::default()
-    };
-    paint.set_color(rgba(1.0, 1.0, 1.0, 0.10));
-    let stroke = Stroke {
-        width: 10.0,
-        dash: StrokeDash::new(vec![34.0, 26.0], 0.0),
-        ..Stroke::default()
-    };
-    canvas.stroke_path(&line, &paint, &stroke, Transform::identity(), Some(&clip));
-
-    // The trail: an arc from lower left to the ball, fading in.
-    let mut trail = PathBuilder::new();
-    trail.move_to(x(210.0), 724.0);
-    trail.quad_to(x(380.0), 324.0, x(640.0), 414.0);
-    let trail = trail.finish().unwrap();
-    let mut paint = Paint {
-        anti_alias: true,
-        ..Paint::default()
-    };
-    paint.shader = LinearGradient::new(
-        Point::from_xy(x(210.0), 724.0),
-        Point::from_xy(x(640.0), 414.0),
-        vec![
-            GradientStop::new(0.0, rgba(0.302, 0.533, 1.0, 0.0)),
-            GradientStop::new(1.0, rgba(0.302, 0.533, 1.0, 0.85)),
-        ],
-        SpreadMode::Pad,
-        Transform::identity(),
-    )
-    .unwrap();
-    let stroke = Stroke {
-        width: 44.0,
-        line_cap: LineCap::Round,
-        ..Stroke::default()
-    };
-    canvas.stroke_path(&trail, &paint, &stroke, Transform::identity(), Some(&clip));
-
-    // The ball, with a soft glow and a shine.
-    // The light comes from the upper left in both: the shine is not
-    // mirrored.
-    let (cx, cy, r) = (x(690.0), 404.0, 92.0);
-    let ball = PathBuilder::from_circle(cx, cy, r).unwrap();
-    let glow = soft(&ball, rgba(0.239, 0.482, 1.0, 0.9), 61.0, 0.0, 0.0);
-    canvas.draw_pixmap(
-        0,
-        0,
-        glow.as_ref(),
-        &PixmapPaint::default(),
-        Transform::identity(),
-        Some(&clip),
-    );
-    let mut paint = Paint {
-        anti_alias: true,
-        ..Paint::default()
-    };
-    paint.set_color(rgba(0.302, 0.533, 1.0, 1.0));
-    canvas.fill_path(
-        &ball,
-        &paint,
-        FillRule::Winding,
-        Transform::identity(),
-        Some(&clip),
-    );
-    let shine: Shader = RadialGradient::new(
-        Point::from_xy(cx - 34.0, cy - 36.0),
-        0.0,
-        Point::from_xy(cx - 34.0, cy - 36.0),
-        80.0,
-        vec![
-            GradientStop::new(0.0, rgba(1.0, 1.0, 1.0, 0.9)),
-            GradientStop::new(1.0, rgba(1.0, 1.0, 1.0, 0.0)),
-        ],
-        SpreadMode::Pad,
-        Transform::identity(),
-    )
-    .unwrap();
-    let paint = Paint {
-        shader: shine,
-        anti_alias: true,
-        ..Paint::default()
-    };
-    canvas.fill_path(
-        &ball,
-        &paint,
-        FillRule::Winding,
-        Transform::identity(),
-        Some(&clip),
-    );
-    canvas
 }
 
-/// Half the size, each pixel the mean of four.
-fn halve(p: &Pixmap) -> Pixmap {
-    let (w, h) = (p.width() / 2, p.height() / 2);
-    let mut out = Pixmap::new(w, h).unwrap();
-    let src = p.data();
-    let sw = p.width() as usize;
-    let dst = out.data_mut();
-    for y in 0..h as usize {
-        for x in 0..w as usize {
-            for c in 0..4 {
-                let at =
-                    |dx: usize, dy: usize| src[((2 * y + dy) * sw + 2 * x + dx) * 4 + c] as u32;
-                dst[(y * w as usize + x) * 4 + c] =
-                    ((at(0, 0) + at(1, 0) + at(0, 1) + at(1, 1) + 2) / 4) as u8;
-            }
-        }
-    }
-    out
+/// `svg` drawn `size` pixels square, as a PNG.
+fn png(svg: &str, size: u32) -> Vec<u8> {
+    let tree = usvg::Tree::from_str(svg, &usvg::Options::default()).expect("the icon parses");
+    let mut pixmap = Pixmap::new(size, size).expect("a nonzero size");
+    let scale = size as f32 / tree.size().width();
+    resvg::render(
+        &tree,
+        Transform::from_scale(scale, scale),
+        &mut pixmap.as_mut(),
+    );
+    pixmap.encode_png().expect("a PNG encodes")
 }
 
-/// The ball and its trail alone, for the Mac menu bar: black with the
-/// trail's fade in the alpha channel, on an 18-point grid drawn `scale`
-/// pixels to the point. The ball is larger against its trail than in the
-/// app icon, so it still reads at 18 points.
-fn draw_tray(scale: f32) -> Pixmap {
-    let size = (18.0 * scale).round() as u32;
-    let mut canvas = Pixmap::new(size, size).unwrap();
-    let to_pixels = Transform::from_scale(scale, scale);
-    let mut trail = PathBuilder::new();
-    trail.move_to(16.2, 14.6);
-    trail.quad_to(11.6, 3.4, 6.8, 6.4);
-    let trail = trail.finish().unwrap();
-    let mut paint = Paint {
-        anti_alias: true,
-        ..Paint::default()
-    };
-    paint.shader = LinearGradient::new(
-        Point::from_xy(16.2, 14.6),
-        Point::from_xy(6.8, 6.4),
-        vec![
-            GradientStop::new(0.0, rgba(0.0, 0.0, 0.0, 0.0)),
-            GradientStop::new(1.0, rgba(0.0, 0.0, 0.0, 0.85)),
-        ],
-        SpreadMode::Pad,
-        Transform::identity(),
-    )
-    .unwrap();
-    let stroke = Stroke {
-        width: 1.8,
-        line_cap: LineCap::Round,
-        ..Stroke::default()
-    };
-    canvas.stroke_path(&trail, &paint, &stroke, to_pixels, None);
-    let ball = PathBuilder::from_circle(5.2, 6.6, 3.3).unwrap();
-    let mut paint = Paint {
-        anti_alias: true,
-        ..Paint::default()
-    };
-    paint.set_color(rgba(0.0, 0.0, 0.0, 1.0));
-    canvas.fill_path(&ball, &paint, FillRule::Winding, to_pixels, None);
-    canvas
-}
-
-/// An .ico of PNG images: 16, 32, 64 and 256 pixels.
-fn ico(png: &dyn Fn(u32) -> Vec<u8>) -> Vec<u8> {
-    let images: Vec<(u32, Vec<u8>)> = [16, 32, 64, 256].iter().map(|&s| (s, png(s))).collect();
+/// An .ico of PNG images, one for each of [`ICO_SIZES`].
+fn ico(svg: &str) -> Vec<u8> {
+    let images: Vec<(u32, Vec<u8>)> = ICO_SIZES.iter().map(|&s| (s, png(svg, s))).collect();
     let mut ico = vec![0u8, 0, 1, 0];
     ico.extend((images.len() as u16).to_le_bytes());
     let mut offset = 6 + 16 * images.len() as u32;
@@ -338,61 +131,46 @@ fn ico(png: &dyn Fn(u32) -> Vec<u8>) -> Vec<u8> {
     ico
 }
 
-/// One app's icon in every form: the macOS iconset, the Windows .ico and
-/// the 256-pixel PNG.
-fn write_icon(mark: Mark, out: &Path, iconset: &str, ico_name: &str, png_name: &str) {
-    let iconset = out.join(iconset);
-    std::fs::create_dir_all(&iconset).unwrap();
-    let mut sizes = vec![(SIZE, draw(mark))];
-    while sizes.last().unwrap().0 > 16 {
-        let next = halve(&sizes.last().unwrap().1);
-        sizes.push((next.width(), next));
-    }
-    let png = |size: u32| {
-        sizes
-            .iter()
-            .find(|s| s.0 == size)
-            .unwrap()
-            .1
-            .encode_png()
-            .unwrap()
-    };
-    for size in [16, 32, 128, 256, 512] {
-        std::fs::write(iconset.join(format!("icon_{size}x{size}.png")), png(size)).unwrap();
-        std::fs::write(
-            iconset.join(format!("icon_{size}x{size}@2x.png")),
-            png(size * 2),
-        )
-        .unwrap();
-    }
-    std::fs::write(out.join(png_name), png(256)).unwrap();
-    std::fs::write(out.join(ico_name), ico(&png)).unwrap();
+fn write(path: &Path, data: impl AsRef<[u8]>) {
+    std::fs::create_dir_all(path.parent().expect("a file in a folder")).unwrap();
+    std::fs::write(path, data).unwrap();
 }
 
 fn main() {
     let out = std::env::args().nth(1).expect("usage: make-icon OUT_DIR");
     let out = Path::new(&out);
-    write_icon(
-        Mark::Helio,
-        out,
-        "AppIcon.iconset",
-        "Helio.ico",
-        "icon-256.png",
-    );
-    write_icon(
-        Mark::Host,
-        out,
-        "HelioHost.iconset",
-        "HelioHost.ico",
-        "helio-host-256.png",
-    );
-    // Drawn eight times as large and averaged down, as the icons are.
-    for (name, scale) in [("tray.png", 1.0), ("tray@2x.png", 2.0)] {
-        let mut glyph = draw_tray(scale * 8.0);
-        for _ in 0..3 {
-            glyph = halve(&glyph);
-        }
-        std::fs::write(out.join(name), glyph.encode_png().unwrap()).unwrap();
+
+    let mac = mac();
+    let iconset = out.join("AppIcon.iconset");
+    for size in [16, 32, 128, 256, 512] {
+        write(
+            &iconset.join(format!("icon_{size}x{size}.png")),
+            png(&mac, size),
+        );
+        write(
+            &iconset.join(format!("icon_{size}x{size}@2x.png")),
+            png(&mac, size * 2),
+        );
     }
-    println!("wrote {}", out.display());
+
+    let assets = out.join("assets");
+    let square = square();
+    write(&assets.join("Helio.ico"), ico(&square));
+    let hicolor = assets.join("hicolor");
+    for size in LINUX_SIZES {
+        write(
+            &hicolor.join(format!("{size}x{size}/apps/{LINUX_ID}.png")),
+            png(&square, size),
+        );
+    }
+    write(
+        &hicolor.join(format!("scalable/apps/{LINUX_ID}.svg")),
+        &square,
+    );
+    let template = template();
+    write(&assets.join("tray.png"), png(&template, TRAY_POINTS));
+    write(&assets.join("tray@2x.png"), png(&template, TRAY_POINTS * 2));
+    write(&assets.join("mark.svg"), &template);
+
+    write(&out.join("site/helio.svg"), &square);
 }
