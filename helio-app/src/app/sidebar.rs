@@ -5,8 +5,11 @@
 //! and down them, each shown as the keyboard comes to it; the glass pill
 //! slides to the page shown.
 
+use std::borrow::Cow;
+
 use gpui::{
-    div, prelude::*, px, AnyElement, Context, ElementId, FocusHandle, FontWeight, KeyDownEvent,
+    div, prelude::*, px, svg, AnyElement, AssetSource, Context, ElementId, FocusHandle, FontWeight,
+    KeyDownEvent, Rgba, SharedString,
 };
 use helio_ui::{dot, icon, spinner, IconName, Ink, Radius, Theme, Type};
 
@@ -15,20 +18,35 @@ use crate::settings::Tab;
 
 use super::{HelioApp, Page};
 
-/// Helio's ball, as in its icon.
-pub fn brand_mark(size: f32) -> impl IntoElement {
-    div()
+/// Where [`Assets`] serves Helio's mark.
+const MARK: &str = "brand/mark.svg";
+
+/// The app's asset source: helio-ui's icons, and Helio's mark.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Assets;
+
+impl AssetSource for Assets {
+    fn load(&self, path: &str) -> gpui::Result<Option<Cow<'static, [u8]>>> {
+        if path == MARK {
+            return Ok(Some(Cow::Borrowed(include_bytes!("../../assets/mark.svg"))));
+        }
+        helio_ui::Assets.load(path)
+    }
+
+    fn list(&self, path: &str) -> gpui::Result<Vec<SharedString>> {
+        helio_ui::Assets.list(path)
+    }
+}
+
+/// Helio's mark, `size` points square: the h of its icon alone, which
+/// make-icon draws from `assets/icon.svg`. GPUI draws an SVG as a mask and
+/// tints it like text, so the mark takes `color`, the text's.
+pub fn brand_mark(size: f32, color: Rgba) -> impl IntoElement {
+    svg()
+        .path(MARK)
         .flex_none()
         .size(px(size))
-        .rounded(px(size / 2.0))
-        .bg(Ink::BALL)
-        .shadow(vec![gpui::BoxShadow {
-            color: Ink::BALL.alpha(0.45).into(),
-            offset: gpui::point(px(0.0), px(0.0)),
-            blur_radius: px(size * 0.6),
-            spread_radius: px(0.0),
-            inset: false,
-        }])
+        .text_color(color)
 }
 
 /// What a sidebar row shows: the page it goes to, its id, name and icon.

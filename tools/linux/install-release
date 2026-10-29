@@ -38,7 +38,7 @@ if [[ ${1:-} == --uninstall ]]; then
         "$BIN/helio-host" disable
     fi
     rm -f "$UNITS/helio-host.service" "$BIN/helio-host" "$BIN/helio-app" \
-        "$DATA/applications/$ID.desktop" "$DATA/icons/hicolor/256x256/apps/$ID.png"
+        "$DATA/applications/$ID.desktop" "$DATA"/icons/hicolor/*/apps/"$ID".{png,svg}
     systemctl --user daemon-reload 2>/dev/null || true
     refresh_launcher
     echo "uninstalled; your hosts, pairings and settings stay in $CONFIG/helio and $CONFIG/helio-host"
@@ -87,7 +87,9 @@ while IFS= read -r line; do
         *) printf '%s\n' "$line" ;;
     esac
 done < "$HERE/$ID.desktop" > "$DATA/applications/$ID.desktop"
-install -Dm644 "$HERE/$ID.png" "$DATA/icons/hicolor/256x256/apps/$ID.png"
+for icon in "$HERE"/hicolor/*/apps/"$ID".*; do
+    install -Dm644 "$icon" "$DATA/icons/${icon#"$HERE"/}"
+done
 refresh_launcher
 while IFS= read -r line; do
     case $line in

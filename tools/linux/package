@@ -46,12 +46,14 @@ for file in \
     "$OUT/helio-host" \
     "$REPO/tools/linux/helio-host.service" \
     "$REPO/tools/linux/dev.mihaicristian.helio.desktop" \
-    "$REPO/helio-app/assets/icon-256.png:dev.mihaicristian.helio.png" \
     "$REPO/tools/linux/install-release:install.sh"; do
     from=${file%%:*} to=${file#*:}
     [[ $file == *:* ]] || to=$(basename "$from")
     install -m "$([[ -x $from ]] && echo 755 || echo 644)" "$from" "$STAGE/$NAME/$to"
 done
+# The launcher entry's icon at the icon theme's sizes (helio-app/assets/hicolor,
+# drawn by helio-app/examples/make-icon.rs).
+cp -R "$REPO/helio-app/assets/hicolor" "$STAGE/$NAME/"
 # Unpacked as whoever unpacks it, not as the build's user.
 rm -f "$DIST"/*-linux-"$ARCH".tar.gz
 tar -C "$STAGE" --owner=0 --group=0 --numeric-owner -czf "$DIST/$NAME.tar.gz" "$NAME"

@@ -25,7 +25,7 @@
 	<string>0.0.0</string>
 	<!-- The Privacy & Security lists and Login Items show it. -->
 	<key>CFBundleIconFile</key>
-	<string>Helio Host</string>
+	<string>AppIcon</string>
 	<key>NSHumanReadableCopyright</key>
 	<string>© 2026 Mihai-Cristian Farcaș. GPL-3.0 License.</string>
 	<key>LSMinimumSystemVersion</key>
