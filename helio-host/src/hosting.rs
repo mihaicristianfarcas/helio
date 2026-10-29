@@ -130,10 +130,10 @@ mod system;
 #[path = "hosting/linux.rs"]
 mod system;
 
-#[cfg(windows)]
-pub use system::trusted_engine;
 #[cfg(target_os = "macos")]
 pub use system::watch_app;
+#[cfg(windows)]
+pub use system::{trusted_engine, update_engine};
 
 /// `helio-host enable` (`on`) or `helio-host disable`: do it, say what happened, and
 /// exit with [`exit_code`].

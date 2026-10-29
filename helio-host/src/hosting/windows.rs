@@ -19,6 +19,11 @@
 //! copy. Without an administrator both change nothing and exit with
 //! [`NEEDS_ELEVATION`](super::NEEDS_ELEVATION).
 //!
+//! Helio's own update brings a new engine beside the app; while hosting is
+//! on, `helio-host update-engine`, run as an administrator from the copy
+//! here, has that new engine's `enable` put it in place once the update's
+//! installer is done ([`update_engine`]).
+//!
 //! The folder is found by its known-folder ID, not `%ProgramFiles%`: an
 //! elevated process keeps the environment of whoever started it, and a
 //! `ProgramFiles` pointing into a user's folder would put the service there.
@@ -323,4 +328,169 @@ pub fn disable() -> Result<String, Error> {
 
 pub fn state() -> State {
     service::state()
+}
+
+/// How long `update-engine` waits for the update's installer. It takes
+/// seconds (it unpacks some 50 MB); one that runs this long has hung, and
+/// the host keeps the engine it has.
+const INSTALLER_WAIT: Duration = Duration::from_secs(15 * 60);
+
+/// `helio-host update-engine PID ENGINE`: the host's part of Helio's own
+/// update (`helio-update/src/install/windows.rs`). Helio has Windows run it
+/// as an administrator, from the service's engine here in Program Files,
+/// while its window is in front: so the prompt opens at once, and names
+/// the engine as it was checked. It waits for process PID, the update's run
+/// of the installer as the user, and once that has ended well, runs
+/// `ENGINE enable`: the new engine beside the updated app, which checks its
+/// copy, puts it in place of this one and restarts the service on it
+/// ([`enable`]). It does not wait for that: the program it replaces is the
+/// one this runs. What happened, and what `enable` said, go to the host's
+/// `logs\update-engine.log`, not to a file the command line names: an
+/// administrator writes it.
+///
+/// Only an engine runs: ENGINE must be named `helio-host.exe` and, in a
+/// build that requires signatures, be signed by its publisher, as this copy
+/// is; it is held open, so that it cannot change between the check and its
+/// start. Elevated by a prompt that names this program, it must not start
+/// anything else.
+pub fn update_engine(args: &[String]) -> i32 {
+    if !crate::private::elevated() {
+        eprintln!("helio-host update-engine runs as an administrator (Helio's update starts it)");
+        return super::NEEDS_ELEVATION;
+    }
+    let (Some(pid), Some(engine), None) = (
+        args.get(1).and_then(|p| p.parse::<u32>().ok()),
+        args.get(2).map(PathBuf::from),
+        args.get(3),
+    ) else {
+        eprintln!("usage: helio-host update-engine PID ENGINE");
+        return 2;
+    };
+    let log = update_log();
+    let say = |line: &str| {
+        use std::io::Write;
+        if let Some(mut file) = log.as_ref() {
+            let _ = writeln!(file, "{line}");
+        }
+    };
+    match wait_for_installer(pid) {
+        Ok(0) => {}
+        // The installer's waiter said why, in the app's update log.
+        Ok(code) => {
+            say(&format!(
+                "the update's installer ended with {code}: the host keeps its engine"
+            ));
+            return 1;
+        }
+        Err(e) => {
+            say(&format!("the host keeps its engine: {e}"));
+            return 1;
+        }
+    }
+    let started = pinned_engine(&engine).and_then(|pin| {
+        // Said first: what `enable` says comes after it, in the same file.
+        say(&format!(
+            "{} enable: the host moves onto it",
+            engine.display()
+        ));
+        let mut enable = std::process::Command::new(&engine);
+        enable.arg("enable").stdin(std::process::Stdio::null());
+        if let Some(file) = log.as_ref().and_then(|f| f.try_clone().ok()) {
+            let err = file.try_clone().ok();
+            enable.stdout(file);
+            if let Some(err) = err {
+                enable.stderr(err);
+            }
+        }
+        use std::os::windows::process::CommandExt;
+        /// `CREATE_NO_WINDOW`: a console program, started by one without a
+        /// console.
+        const NO_WINDOW: u32 = 0x0800_0000;
+        let spawned = enable.creation_flags(NO_WINDOW).spawn();
+        drop(pin);
+        spawned.map_err(|e| format!("{}: {e}", engine.display()))
+    });
+    match started {
+        Ok(_) => 0,
+        Err(e) => {
+            say(&format!("the host keeps its engine: {e}"));
+            1
+        }
+    }
+}
+
+/// `logs\update-engine.log` in the host's data folder, started anew; none
+/// when the folder is not there (it is, while hosting is on), rather than
+/// make it here.
+fn update_log() -> Option<std::fs::File> {
+    let logs = crate::config::data_dir().join("logs");
+    logs.is_dir()
+        .then(|| std::fs::File::create(logs.join("update-engine.log")).ok())
+        .flatten()
+}
+
+/// Wait for process `pid` to end, at most [`INSTALLER_WAIT`]; its exit
+/// code.
+fn wait_for_installer(pid: u32) -> Result<u32, String> {
+    use windows::Win32::Foundation::{CloseHandle, WAIT_OBJECT_0};
+    use windows::Win32::System::Threading::{
+        GetExitCodeProcess, OpenProcess, WaitForSingleObject, PROCESS_QUERY_LIMITED_INFORMATION,
+        PROCESS_SYNCHRONIZE,
+    };
+    // SAFETY: the handle is opened for waiting and reading the exit code,
+    // and closed once, whatever happens.
+    unsafe {
+        let process = OpenProcess(
+            PROCESS_SYNCHRONIZE | PROCESS_QUERY_LIMITED_INFORMATION,
+            false,
+            pid,
+        )
+        .map_err(|e| {
+            format!(
+                "the update's installer (process {pid}) is gone already: {}",
+                e.message()
+            )
+        })?;
+        let ms = INSTALLER_WAIT.as_millis().min(u32::MAX as u128) as u32;
+        let waited = WaitForSingleObject(process, ms);
+        let mut code = 1u32;
+        let got = GetExitCodeProcess(process, &mut code);
+        let _ = CloseHandle(process);
+        if waited != WAIT_OBJECT_0 {
+            return Err(format!(
+                "the update's installer did not end within {} minutes",
+                INSTALLER_WAIT.as_secs() / 60
+            ));
+        }
+        got.map_err(|e| e.message())?;
+        Ok(code)
+    }
+}
+
+/// `engine` opened so that nothing can change, rename or delete it while
+/// the handle lives (others may only read it, as starting it does), once it
+/// is known to be an engine: `helio-host.exe`, and in a build that requires
+/// it, signed by the publisher (`signature`).
+fn pinned_engine(engine: &Path) -> Result<std::fs::File, String> {
+    use std::os::windows::fs::OpenOptionsExt;
+    /// `FILE_SHARE_READ`, and no other sharing.
+    const SHARE_READ: u32 = 0x1;
+    let named = engine
+        .file_name()
+        .is_some_and(|n| n.eq_ignore_ascii_case(ENGINE_FILES[0]));
+    if !named {
+        return Err(format!("{} is not an engine", engine.display()));
+    }
+    let pin = std::fs::OpenOptions::new()
+        .read(true)
+        .share_mode(SHARE_READ)
+        .open(engine)
+        .map_err(|e| format!("{}: {e}", engine.display()))?;
+    if let Err(problem) = signature::check(engine) {
+        if signature::REQUIRED {
+            return Err(format!("{} is refused: {problem}", engine.display()));
+        }
+        eprintln!("warning: {problem} (this build does not require a signature)");
+    }
+    Ok(pin)
 }

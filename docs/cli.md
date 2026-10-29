@@ -209,6 +209,7 @@ system and Helio run, not a command for you. Its hosting commands are
 | `helio-host status [--json]` | The switch (`--json`) and `helio host status` |
 | `helio-host service` | Windows: the service itself (`HelioHost`, started by Windows) |
 | `helio-host clipboard-agent` | Windows: clipboard sharing as the signed-in user, started by the host for a session |
+| `helio-host update-engine PID ENGINE` | Windows: Helio's update while hosting is on, as an administrator, from the engine in `C:\Program Files\Helio Host`: once the update's installer (process PID) has ended well, ENGINE's `enable` ([platforms/windows.md](platforms/windows.md)) |
 
 ## Environment variables
 
