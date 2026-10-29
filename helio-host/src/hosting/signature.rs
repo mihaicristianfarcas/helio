@@ -15,10 +15,11 @@
 //! Azure Trusted Signing), and its subject stays while its thumbprint does
 //! not.
 //!
-//! Windows releases are not signed yet. Until they are, a failed check only
-//! warns: the release workflow builds with `--features require-signature`
-//! (and `HELIO_HOST_WINDOWS_PUBLISHER` set) once they are, and from then on a
-//! failed check refuses. A debug build never requires it.
+//! A failed check refuses in a build with `--features require-signature`
+//! (and `HELIO_HOST_WINDOWS_PUBLISHER` set): the release workflow's, whenever
+//! it signs the Windows programs (`.github/workflows/release.yml`, which
+//! checks that it does refuse an unsigned engine and a changed one). Any
+//! other build only warns, and a debug build never requires it.
 
 use std::path::Path;
 

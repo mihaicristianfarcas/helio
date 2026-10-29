@@ -5,11 +5,11 @@
 //! (per user, so no administrator is needed). A
 //! running program or loaded DLL cannot be written over or deleted, but it
 //! can be renamed: the old files are renamed `*.old` and the new ones
-//! copied beside them; the next start deletes the old ones. Then the
-//! archive's `install.ps1 -Register FOLDER` brings the app's entry in
-//! Settings > Apps up to date, if the folder is the one it installs the app
-//! into. An update by an older release runs no installer: the new app lists
-//! itself when it starts ([`keep_listed`]).
+//! copied beside them; the next start deletes the old ones. The archive is
+//! the release's zip, the installer's files and nothing else
+//! (`tools/package-windows.ps1`), and no installer runs: the new app, when
+//! it starts, brings the installer's entry in Settings > Apps to its
+//! version ([`keep_listed`]).
 //!
 //! The host itself runs from the engine's own copy in Program Files, which
 //! only `helio-host enable`, as an administrator, replaces
@@ -108,7 +108,6 @@ pub(crate) fn place(
 ) -> Result<(), String> {
     let folder = &method.dir;
     replace_files(unpacked, folder)?;
-    register(unpacked, folder);
     update_host(folder);
     let new = folder.join("Helio.exe");
     Command::new(&new)
@@ -208,9 +207,8 @@ fn aside(path: &Path) -> PathBuf {
 
 /// The archive's program files over Helio's in `dir`, all or none: those
 /// beside Helio.exe, and the command in its folder ([`COMMAND`]). FFmpeg's
-/// DLLs of an older version (another number) are renamed aside too. The
-/// archive's installer is not copied: [`register`] puts it where Helio is
-/// installed, and a copy elsewhere (Downloads) needs none.
+/// DLLs of an older version (another number) are renamed aside too: the
+/// uninstaller deletes what an update leaves (`tools/windows/helio.iss`).
 fn replace_files(unpacked: &Path, dir: &Path) -> Result<(), String> {
     let mut new: Vec<(PathBuf, PathBuf)> = std::fs::read_dir(unpacked)
         .map_err(|e| e.to_string())?
@@ -281,48 +279,15 @@ fn replace_files(unpacked: &Path, dir: &Path) -> Result<(), String> {
     result
 }
 
-/// Bring Helio's entry in Windows' list of installed apps (Settings > Apps)
-/// up to date with the `install.ps1` in `scripts` (the archive's, or the
-/// installed one), run with `-Register FOLDER`: it does so only when
-/// `folder` is where it installs Helio. The files are in place already: an
-/// entry that stays behind is no reason to undo them.
-fn register(scripts: &Path, folder: &Path) {
-    let script = scripts.join("install.ps1");
-    if !script.is_file() {
-        return;
-    }
-    let out = Command::new(powershell())
-        .args([
-            "-NoProfile",
-            "-NonInteractive",
-            "-ExecutionPolicy",
-            "Bypass",
-            "-File",
-        ])
-        .arg(&script)
-        .arg("-Register")
-        .arg(folder)
-        .creation_flags(CREATE_NO_WINDOW)
-        .output();
-    match out {
-        Ok(out) if out.status.success() => {}
-        Ok(out) => tracing::warn!(
-            error = %String::from_utf8_lossy(&out.stderr).trim(),
-            "Helio's entry in Settings > Apps was not updated"
-        ),
-        Err(e) => tracing::warn!(error = %e, "Helio's entry in Settings > Apps was not updated"),
-    }
-}
-
-/// Where `install.ps1` (tools/install-helio.ps1) installs Helio.
+/// Where the installer (`tools/windows/helio.iss`) installs Helio.
 fn helio_install_folder() -> Option<PathBuf> {
     std::env::var_os("LOCALAPPDATA").map(|dir| PathBuf::from(dir).join(r"Programs\Helio"))
 }
 
-/// Helio's entry in Settings > Apps, under HKEY_CURRENT_USER, as
-/// `install.ps1` names it.
+/// Helio's entry in Settings > Apps, under HKEY_CURRENT_USER, as the
+/// installer names it: its `AppId`, to which Inno Setup adds `_is1`.
 const HELIO_ENTRY: &str =
-    r"Software\Microsoft\Windows\CurrentVersion\Uninstall\dev.mihaicristian.helio";
+    r"Software\Microsoft\Windows\CurrentVersion\Uninstall\dev.mihaicristian.helio_is1";
 
 /// Whether two paths name the same folder, as Windows compares them:
 /// without regard to case or a trailing separator.
@@ -357,37 +322,52 @@ fn listed_version() -> Option<String> {
     Some(String::from_utf16_lossy(&text[..len]))
 }
 
-/// At each start: a Helio that runs from the folder `install.ps1` installs
-/// it into, with that script beside it, keeps its entry in Settings > Apps
-/// naming its `version`. An update by a release older than the entry (0.9.4
-/// and before) copies the new files and runs no installer, and someone may
-/// have copied the files by hand: the script beside Helio writes the entry
-/// then. Run on the update check's thread, not the window's.
+/// At each start: a Helio that runs from the folder the installer put it
+/// in keeps the installer's entry in Settings > Apps naming its `version`.
+/// Helio's own update replaces the files and runs no installer, so the
+/// entry would go on naming the release that was installed. A folder with
+/// no entry (files copied there by hand) is given none: the entry is the
+/// uninstaller's, and only the installer puts one there. Run on the update
+/// check's thread, not the window's.
 pub(crate) fn keep_listed(version: &str) {
+    use windows::core::{w, HSTRING};
+    use windows::Win32::System::Registry::{RegSetKeyValueW, HKEY_CURRENT_USER, REG_SZ};
     let Some(dir) = std::env::current_exe()
         .ok()
         .and_then(|e| e.parent().map(Path::to_path_buf))
     else {
         return;
     };
-    let installed = helio_install_folder().is_some_and(|f| same_folder(&dir, &f));
-    if !installed || !dir.join("install.ps1").is_file() {
+    if !helio_install_folder().is_some_and(|f| same_folder(&dir, &f)) {
         return;
     }
-    if listed_version().as_deref() == Some(version) {
-        return;
+    match listed_version() {
+        Some(listed) if listed != version => {}
+        _ => return,
     }
-    tracing::info!(version, "listing Helio in Settings > Apps");
-    register(&dir, &dir);
+    tracing::info!(version, "Settings > Apps: Helio's entry names this version");
+    let wide: Vec<u16> = version.encode_utf16().chain([0]).collect();
+    // SAFETY: `wide` is NUL-ended, lives across the call, and is `cbdata`
+    // bytes long, its NUL included, as REG_SZ wants.
+    let status = unsafe {
+        RegSetKeyValueW(
+            HKEY_CURRENT_USER,
+            &HSTRING::from(HELIO_ENTRY),
+            w!("DisplayVersion"),
+            REG_SZ.0,
+            Some(wide.as_ptr().cast()),
+            (wide.len() * 2) as u32,
+        )
+    };
+    if let Err(e) = status.ok() {
+        tracing::warn!(error = %e, "Helio's entry in Settings > Apps was not updated");
+    }
 }
 
 /// `install::rehearse`: the app's files replaced in `folder` as in its
-/// own, and its entry in Settings > Apps written if `folder` is where the
-/// app is installed. The host is left alone.
+/// own. The host and the entry in Settings > Apps are left alone.
 pub(crate) fn rehearse(unpacked: &Path, folder: &Path) -> Result<(), String> {
-    replace_files(unpacked, folder)?;
-    register(unpacked, folder);
-    Ok(())
+    replace_files(unpacked, folder)
 }
 
 /// Delete what an update renamed aside in Helio's folder and the command's
@@ -449,34 +429,6 @@ pub(crate) fn wait_for_exit(pid: u32, timeout: Duration) {
 mod tests {
     use super::*;
 
-    /// PowerShell's own parser's complaints about the script at `path`.
-    fn parse(path: &Path) -> Result<(), String> {
-        let check = format!(
-            "$errors = $null; [void][System.Management.Automation.Language.Parser]::ParseFile({}, [ref]$null, [ref]$errors); \
-                if ($errors.Count) {{ $errors | ForEach-Object {{ $_.Message }}; exit 1 }}",
-            ps_quote(&path.to_string_lossy())
-        );
-        let out = Command::new(powershell())
-            .args(["-NoProfile", "-NonInteractive", "-Command", &check])
-            .output()
-            .map_err(|e| e.to_string())?;
-        if out.status.success() {
-            Ok(())
-        } else {
-            Err(String::from_utf8_lossy(&out.stdout).into_owned())
-        }
-    }
-
-    #[test]
-    fn the_release_installer_is_powershell_that_parses() {
-        // What the archive carries as install.ps1 (tools/package-windows.ps1),
-        // and an update runs.
-        let script = Path::new(env!("CARGO_MANIFEST_DIR")).join("../tools/install-helio.ps1");
-        if let Err(errors) = parse(&script) {
-            panic!("{errors}");
-        }
-    }
-
     #[test]
     fn the_host_is_updated_only_while_hosting_is_on() {
         assert!(!hosting_on(br#"{"state":"off"}"#));
@@ -488,26 +440,6 @@ mod tests {
         // An engine that could not say: nothing is asked of the user.
         assert!(!hosting_on(b""));
         assert!(!hosting_on(b"not json"));
-    }
-
-    #[test]
-    fn the_archives_installer_hears_which_folder_was_updated() {
-        let dir = tempfile::tempdir().unwrap();
-        let unpacked = dir.path().join("unpacked");
-        // A space and an apostrophe, as a user's name can have.
-        let folder = dir.path().join(r"Programs\o'brien's Helio");
-        std::fs::create_dir_all(&unpacked).unwrap();
-        std::fs::create_dir_all(&folder).unwrap();
-        // A stand-in for install.ps1 that writes down what it was asked.
-        std::fs::write(
-            unpacked.join("install.ps1"),
-            "param([string]$Register)\r\n\
-             Set-Content -LiteralPath (Join-Path $PSScriptRoot 'asked.txt') -Value $Register\r\n",
-        )
-        .unwrap();
-        register(&unpacked, &folder);
-        let asked = std::fs::read_to_string(unpacked.join("asked.txt")).unwrap();
-        assert_eq!(asked.trim(), folder.to_string_lossy());
     }
 
     #[test]

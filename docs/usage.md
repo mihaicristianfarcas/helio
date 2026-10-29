@@ -160,9 +160,9 @@ its own copy in Program Files, never from a folder you (or a program you
 run) can write to, and why turning hosting on or off asks for an
 administrator. Without one, the host's program changes nothing and exits
 with code 740, and Helio (the switch, or `helio host`) asks Windows to run
-it again elevated (the UAC prompt). The signature check only warns until
-Windows releases are signed; after that, turning hosting on refuses an
-engine that is unsigned or was changed after signing.
+it again elevated (the UAC prompt). In a release, turning hosting on
+refuses an engine that is unsigned, was changed after signing, or is
+signed by anyone else; a build of your own only warns.
 
 On a Mac the host asks for Screen Recording and Accessibility with macOS's
 own prompts as it first starts, as **Helio Host**: System Settings lists it,

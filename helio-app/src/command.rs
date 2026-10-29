@@ -22,7 +22,7 @@
 //!   `helio-console`) on the user's PATH: `HKCU\Environment`, written as
 //!   the `REG_EXPAND_SZ` Windows keeps it as, and the change announced, so
 //!   that what Explorer starts from then on has it. No administrator.
-//!   Helio's uninstall takes it off (tools/install-helio.ps1), and the
+//!   Helio's uninstaller takes it off (tools/windows/helio.iss), and the
 //!   folder goes with Helio's.
 //! - Linux: a link, `~/.local/bin/helio`, to the app's program, in the
 //!   user's own folder for programs, which most distributions put on a

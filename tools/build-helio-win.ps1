@@ -10,9 +10,10 @@
 # ffmpeg-n8.1-latest-win64-lgpl-shared; default: the FFMPEG_DIR environment
 # variable. The bindings need LLVM's libclang (C:\Program Files\LLVM, or
 # LIBCLANG_PATH).
-# -Install: install target\Helio as the release's installer does
-# (tools\install-helio.ps1): in %LOCALAPPDATA%\Programs\Helio, the Start menu
-# and Settings > Apps.
+# -Install: install target\Helio with the release's installer
+# (tools\windows\helio.iss, made by tools\package-windows.ps1 -From, which
+# needs Inno Setup 6.6 or newer): in %LOCALAPPDATA%\Programs\Helio, the
+# Start menu and Settings > Apps.
 param(
     [string]$FFmpeg = $env:FFMPEG_DIR,
     [switch]$Install
@@ -41,12 +42,20 @@ try {
     foreach ($dll in Get-ChildItem (Join-Path $FFmpeg 'bin') -Filter '*.dll' | Where-Object { $_.Name -match '^(avcodec|avutil|swresample)-\d+\.dll$' }) {
         Copy-Item $dll.FullName $dist
     }
+    # FFmpeg is LGPL: its license goes with its DLLs, as in the release.
+    $license = Join-Path $FFmpeg 'LICENSE.txt'
+    if (Test-Path $license) { Copy-Item $license (Join-Path $dist 'FFmpeg LICENSE.txt') }
     # The CLI finds the DLLs beside itself too.
     foreach ($dll in Get-ChildItem $dist -Filter '*.dll') { Copy-Item $dll.FullName (Join-Path $repo 'target\release') }
     Write-Output "built $dist"
 
     if ($Install) {
-        & (Join-Path $PSScriptRoot 'install-helio.ps1') -Source $dist -NoStart
+        & (Join-Path $PSScriptRoot 'package-windows.ps1') -From $dist
+        $setup = Get-ChildItem (Join-Path $repo 'target\dist') -Filter '*-windows-x86_64-setup.exe' |
+            Sort-Object LastWriteTime -Descending | Select-Object -First 1
+        $run = Start-Process $setup.FullName -ArgumentList '/SILENT', '/SUPPRESSMSGBOXES' -Wait -PassThru
+        if ($run.ExitCode -ne 0) { throw "$($setup.Name) failed ($($run.ExitCode))" }
+        Write-Output "installed $dist with $($setup.Name)"
     }
 } finally {
     Pop-Location

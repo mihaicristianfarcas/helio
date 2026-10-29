@@ -89,17 +89,24 @@ jobs:
         run: ./tools/package-windows.ps1
         env:
           HELIO_PROFILE: dev
-      - name: One archive, the host inside it
+      - name: One archive and one installer, the host inside them
         shell: pwsh
         run: |
           $zips = @(Get-ChildItem target\dist -Filter *.zip)
-          $zips.Name
-          if ($zips.Count -ne 1) { throw "$($zips.Count) archives, not one" }
+          $setups = @(Get-ChildItem target\dist -Filter *-setup.exe)
+          $zips.Name; $setups.Name
+          if ($zips.Count -ne 1 -or $setups.Count -ne 1) { throw "$($zips.Count) archives and $($setups.Count) installers, not one of each" }
           Add-Type -AssemblyName System.IO.Compression.FileSystem
           $names = [IO.Compression.ZipFile]::OpenRead($zips[0].FullName).Entries.FullName -replace '\\', '/'
-          foreach ($file in 'Helio.exe', 'helio-host.exe', 'bin/helio.exe', 'install.ps1') {
+          foreach ($file in 'Helio.exe', 'helio-host.exe', 'bin/helio.exe', 'FFmpeg LICENSE.txt') {
             if ($names -notcontains $file) { throw "no $file in $($zips[0].Name)" }
           }
+          if ($names -match '\.(ps1|cmd)$') { throw "an installer script in $($zips[0].Name): $($names -match '\.(ps1|cmd)$')" }
+      # The installer as a release's is checked (tools/windows/test-install.ps1),
+      # unsigned: installed, hosting on, installed again, uninstalled.
+      - name: Install, host, uninstall
+        shell: pwsh
+        run: ./tools/windows/test-install.ps1 -Setup (Get-ChildItem target\dist -Filter *-setup.exe).FullName
 
   linux:
     name: Linux
