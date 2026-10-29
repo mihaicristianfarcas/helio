@@ -24,6 +24,7 @@ use helio_transport::PublicIdentity;
 
 use crate::args::HostCommand;
 use crate::engine::{self, Switched};
+use crate::style::{self, Look, To};
 
 pub fn run(command: HostCommand) -> ExitCode {
     match command {
@@ -52,8 +53,27 @@ pub fn run(command: HostCommand) -> ExitCode {
 
 /// Print `e` and fail.
 fn fail(e: impl std::fmt::Display) -> ExitCode {
-    eprintln!("{e}");
+    style::error(e);
     ExitCode::FAILURE
+}
+
+/// What a switch came to, its first clause (up to `:`) as what worked:
+/// "Hosting is on: the host runs from boot, ...".
+fn switched(said: &str) {
+    let (done, rest) = said.split_once(':').unwrap_or((said, ""));
+    let rest = if rest.is_empty() {
+        String::new()
+    } else {
+        format!(":{rest}")
+    };
+    println!("{}{rest}", style::to(To::Out, Look::Good, done));
+}
+
+/// A change to the host's data: what it came to, and when a running host
+/// sees it.
+fn changed(what: &str) {
+    println!("{what}");
+    println!("{}", style::to(To::Out, Look::Quiet, RESTART));
 }
 
 /// The exit code a program gave, as this one's.
@@ -70,23 +90,24 @@ fn switch(on: bool) -> ExitCode {
     };
     match engine::switch(&program, on) {
         Ok(said) => {
-            println!("{said}");
+            switched(&said);
             ExitCode::SUCCESS
         }
         Err(Switched::NeedsElevation) => {
-            eprintln!(
+            let asking = format!(
                 "Turning hosting {} needs an administrator: Windows asks.",
                 if on { "on" } else { "off" }
             );
+            eprintln!("{}", style::to(To::Err, Look::Quiet, &asking));
             match engine::switch_elevated(&program, on) {
                 // What the elevated program printed is in a console of its
                 // own, which no one sees.
                 Ok(()) if on => {
-                    println!("Hosting is on: the host runs from boot, before anyone signs in.");
+                    switched("Hosting is on: the host runs from boot, before anyone signs in.");
                     ExitCode::SUCCESS
                 }
                 Ok(()) => {
-                    println!("Hosting is off: the host is stopped, and no longer starts.");
+                    switched("Hosting is off: the host is stopped, and no longer starts.");
                     ExitCode::SUCCESS
                 }
                 Err(e) => fail(e),
@@ -108,12 +129,34 @@ fn status(json: bool) -> ExitCode {
     }
     match command.output() {
         Ok(out) => {
-            let _ = std::io::stdout().write_all(&out.stdout);
+            let said = String::from_utf8_lossy(&out.stdout);
+            if json || !style::colour(To::Out) {
+                let _ = std::io::stdout().write_all(&out.stdout);
+            } else {
+                print!("{}", state_in_colour(&said));
+            }
             let _ = std::io::stderr().write_all(&out.stderr);
             exit_code(out.status.code())
         }
         Err(e) => fail(format!("{}: {e}", program.display())),
     }
+}
+
+/// `helio-host status`'s line with its state in the colour of it: "on" (and
+/// "on, but ..."), "starting", "failed: ...", "off".
+fn state_in_colour(said: &str) -> String {
+    let end = said
+        .find(|c: char| !c.is_ascii_alphabetic())
+        .unwrap_or(said.len());
+    let (state, rest) = said.split_at(end);
+    let look = match state {
+        "on" if rest.starts_with(", but") => Look::Warn,
+        "on" => Look::Good,
+        "starting" => Look::Warn,
+        "failed" => Look::Bad,
+        _ => Look::Quiet,
+    };
+    format!("{}{rest}", style::paint(true, look, state))
 }
 
 /// Run `then` on the host's data folder, where this process may: see the
@@ -136,11 +179,11 @@ fn refuse_without_administrator(dir: &Path, command: &str) {
     if std::env::var_os("HELIO_HOST_DATA_DIR").is_some() || private::elevated() {
         return;
     }
-    eprintln!(
+    style::error(format!(
         "helio host {command} needs an administrator: the host's data ({}) is readable by \
             administrators only. Run it again in an administrator terminal.",
         dir.display()
-    );
+    ));
     std::process::exit(engine::NEEDS_ELEVATION);
 }
 
@@ -169,21 +212,33 @@ fn spoken(p: Permissions) -> String {
 }
 
 fn list_clients(dir: &Path) -> ExitCode {
-    for c in Clients::load(dir).list() {
-        let role = if c.agent { "agent" } else { "person" };
-        println!(
-            "{}\t{}\t{role}\t{}",
-            c.name,
-            c.x25519,
-            spoken(c.permissions)
-        );
-    }
+    let rows: Vec<Vec<String>> = Clients::load(dir)
+        .list()
+        .iter()
+        .map(|c| {
+            let role = if c.agent { "agent" } else { "person" };
+            vec![
+                c.name.clone(),
+                c.x25519.clone(),
+                role.into(),
+                spoken(c.permissions),
+            ]
+        })
+        .collect();
+    crate::list(&["NAME", "X25519", "WHO", "MAY"], &rows, |c, cell| {
+        match (c, cell) {
+            (0, _) => Some(Look::Strong),
+            (3, "none") => Some(Look::Quiet),
+            _ => None,
+        }
+    });
     ExitCode::SUCCESS
 }
 
 /// What a running host makes of a change to its clients: it reads them
 /// when it starts.
-const RESTART: &str = "a running host takes it at its next start (helio host disable, then enable)";
+const RESTART: &str =
+    "A running host takes it at its next start (helio host disable, then enable).";
 
 fn permissions(dir: &Path, x25519: &str, set: Option<Permissions>) -> ExitCode {
     let mut clients = Clients::load(dir);
@@ -198,7 +253,7 @@ fn permissions(dir: &Path, x25519: &str, set: Option<Permissions>) -> ExitCode {
     };
     match clients.set_permissions(x25519, p) {
         Ok(Some(now)) => {
-            println!("{}; {RESTART}", spoken(now));
+            changed(&spoken(now));
             ExitCode::SUCCESS
         }
         Ok(None) => fail("no such client (helio host clients lists them)"),
@@ -220,7 +275,11 @@ fn add_client(
     };
     match Clients::load(dir).add(name, &public, None, agent, chosen) {
         Ok(c) => {
-            println!("paired {name} ({}); {RESTART}", spoken(c.permissions));
+            changed(&format!(
+                "{} {name} ({})",
+                style::to(To::Out, Look::Good, "Paired"),
+                spoken(c.permissions)
+            ));
             ExitCode::SUCCESS
         }
         Err(e) => fail(e),
@@ -230,10 +289,45 @@ fn add_client(
 fn remove_client(dir: &Path, x25519: &str) -> ExitCode {
     match Clients::load(dir).remove(x25519) {
         Ok(Some(c)) => {
-            println!("removed {}; {RESTART}", c.name);
+            changed(&format!(
+                "{} {}",
+                style::to(To::Out, Look::Good, "Removed"),
+                c.name
+            ));
             ExitCode::SUCCESS
         }
         Ok(None) => fail("no such client (helio host clients lists them)"),
         Err(e) => fail(e),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_hosts_state_is_coloured_by_what_it_says_and_the_rest_left_as_it_is() {
+        let painted = |look: Look, state: &str| style::paint(true, look, state);
+        assert_eq!(
+            state_in_colour("on; the web UI answers at https://localhost:47802\n"),
+            format!(
+                "{}; the web UI answers at https://localhost:47802\n",
+                painted(Look::Good, "on")
+            )
+        );
+        assert!(state_in_colour("on, but the web UI does not answer")
+            .starts_with(&painted(Look::Warn, "on")));
+        assert!(state_in_colour("starting\n").starts_with(&painted(Look::Warn, "starting")));
+        assert_eq!(
+            state_in_colour("failed: the host exited with code 3\n"),
+            format!(
+                "{}: the host exited with code 3\n",
+                painted(Look::Bad, "failed")
+            )
+        );
+        assert_eq!(
+            state_in_colour("off\n"),
+            format!("{}\n", painted(Look::Quiet, "off"))
+        );
     }
 }

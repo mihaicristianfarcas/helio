@@ -1,8 +1,9 @@
 //! `helio`: the command line. Streaming and pairing with the client's own
 //! code, the app's (`helio stream` opens a window of the platform's own,
 //! not the app's), and this computer as a host (`helio host`, `host`).
-//! `helio --help` lists every command (`args::HELP`), and docs/cli.md says
-//! more of each.
+//! `helio --help` lists every command (`help`), and docs/cli.md says more
+//! of each. In a terminal it is in colour, its lists in columns; piped, it
+//! is plain text, as programs read it (`style`).
 //!
 //! A library, with the `helio` bin a line over it, so that the app can be
 //! `helio` too: Helio's own program runs [`main`] when it is started as
@@ -13,16 +14,19 @@
 
 mod args;
 pub mod engine;
+mod help;
 mod host;
 #[cfg(any(target_os = "macos", windows, target_os = "linux"))]
 mod script;
 #[cfg(any(target_os = "macos", windows, target_os = "linux"))]
 mod stream;
+mod style;
 
 use std::path::Path;
 use std::process::ExitCode;
 
 use args::{Command, Usage};
+use style::{Look, To};
 
 /// Run the command `args` (without the program's name) and say how it went.
 pub fn main(args: &[String]) -> ExitCode {
@@ -37,23 +41,19 @@ pub fn main(args: &[String]) -> ExitCode {
                     .into()
             }),
         )
+        .with_ansi(style::colour(To::Out))
         .init();
     let dir = helio_client::store::data_dir();
     match command {
         Command::Help { host } => {
-            print!("{}", if host { args::HOST_HELP } else { args::HELP });
+            print!("{}", help::text(host, style::colour(To::Out)));
             ExitCode::SUCCESS
         }
         Command::Identity => identity(&dir),
         Command::Discover => discover(&dir),
         Command::Pair { address } => pair(&dir, &address),
         Command::PairAgent { address } => pair_agent(&dir, &address),
-        Command::Hosts => {
-            for h in helio_client::store::Hosts::load(&dir).list() {
-                println!("{}\t{}", h.name, h.address);
-            }
-            ExitCode::SUCCESS
-        }
+        Command::Hosts => hosts(&dir),
         Command::AddHost {
             name,
             address,
@@ -85,23 +85,68 @@ fn misread(usage: Usage) -> ExitCode {
         "helio --help"
     };
     match usage.why {
-        Some(why) => eprintln!("{why}\n(`{help}` lists the commands)"),
-        None => eprint!(
-            "{}",
-            if usage.host {
-                args::HOST_HELP
-            } else {
-                args::HELP
-            }
-        ),
+        Some(why) => {
+            style::error(why);
+            eprintln!(
+                "{}",
+                style::to(
+                    To::Err,
+                    Look::Quiet,
+                    &format!("(`{help}` lists the commands)")
+                )
+            );
+        }
+        None => eprint!("{}", help::text(usage.host, style::colour(To::Err))),
     }
     ExitCode::FAILURE
 }
 
 /// Print `e` and fail.
 fn fail(e: impl std::fmt::Display) -> ExitCode {
-    eprintln!("{e}");
+    style::error(e);
     ExitCode::FAILURE
+}
+
+/// A list on stdout: in columns under `header` in a terminal, else a line
+/// of tab-separated cells per row, as programs read it.
+pub(crate) fn list(
+    header: &[&str],
+    rows: &[Vec<String>],
+    look: impl Fn(usize, &str) -> Option<Look>,
+) {
+    if style::terminal(To::Out) {
+        print!(
+            "{}",
+            style::table(header, rows, style::colour(To::Out), look)
+        );
+    } else {
+        for row in rows {
+            println!("{}", row.join("\t"));
+        }
+    }
+}
+
+fn hosts(dir: &Path) -> ExitCode {
+    let rows: Vec<Vec<String>> = helio_client::store::Hosts::load(dir)
+        .list()
+        .iter()
+        .map(|h| vec![h.name.clone(), h.address.clone()])
+        .collect();
+    if rows.is_empty() && style::terminal(To::Out) {
+        eprintln!(
+            "{}",
+            style::to(
+                To::Err,
+                Look::Quiet,
+                "no paired hosts yet: `helio discover` finds them, `helio pair HOST` pairs one"
+            )
+        );
+        return ExitCode::SUCCESS;
+    }
+    list(&["NAME", "ADDRESS"], &rows, |c, _| {
+        (c == 0).then_some(Look::Strong)
+    });
+    ExitCode::SUCCESS
 }
 
 fn identity(dir: &Path) -> ExitCode {
@@ -125,18 +170,29 @@ fn discover(dir: &Path) -> ExitCode {
             ExitCode::SUCCESS
         }
         Ok(found) => {
-            for f in found {
-                let state = if f.paired { "paired" } else { "not paired" };
-                println!(
-                    "{}\t{}\t{}\t{}\thttps://{}:{}",
-                    f.name,
-                    f.os,
-                    f.pairing_addr(),
-                    state,
-                    f.address,
-                    f.web_port
-                );
-            }
+            let rows: Vec<Vec<String>> = found
+                .iter()
+                .map(|f| {
+                    let state = if f.paired { "paired" } else { "not paired" };
+                    vec![
+                        f.name.clone(),
+                        f.os.clone(),
+                        f.pairing_addr().to_string(),
+                        state.into(),
+                        format!("https://{}:{}", f.address, f.web_port),
+                    ]
+                })
+                .collect();
+            list(
+                &["NAME", "SYSTEM", "PAIR AT", "STATE", "WEB UI"],
+                &rows,
+                |c, cell| match (c, cell) {
+                    (0, _) => Some(Look::Strong),
+                    (3, "paired") => Some(Look::Good),
+                    (3, _) => Some(Look::Quiet),
+                    _ => None,
+                },
+            );
             ExitCode::SUCCESS
         }
         Err(e) => fail(e),
@@ -145,7 +201,10 @@ fn discover(dir: &Path) -> ExitCode {
 
 /// Where to type the PIN, while pairing waits for it.
 fn show_pin(pin: &str) {
-    eprintln!("\nOn the host, open its web UI (Pair a device) and enter this PIN:\n\n    {pin}\n");
+    eprintln!(
+        "\nOn the host, open its web UI (Pair a device) and enter this PIN:\n\n    {}\n",
+        style::to(To::Err, Look::Strong, pin)
+    );
 }
 
 fn pair(dir: &Path, spec: &str) -> ExitCode {
@@ -155,12 +214,26 @@ fn pair(dir: &Path, spec: &str) -> ExitCode {
     };
     let pin = helio_pairing::pair::new_pin();
     let name = helio_client::pair::client_name();
-    eprintln!("Pairing with {addr} as \"{name}\"...");
+    eprintln!(
+        "{}",
+        style::to(
+            To::Err,
+            Look::Quiet,
+            &format!("Pairing with {addr} as \"{name}\"...")
+        )
+    );
     match helio_client::pair::pair(dir, addr, &name, &pin, || show_pin(&pin)) {
         Ok(host) => {
             println!(
-                "Paired with {} ({}). Stream with: helio stream {}",
-                host.name, host.address, host.name
+                "{} with {} ({}). Stream with: {}",
+                style::to(To::Out, Look::Good, "Paired"),
+                host.name,
+                host.address,
+                style::to(
+                    To::Out,
+                    Look::Literal,
+                    &format!("helio stream {}", host.name)
+                )
             );
             ExitCode::SUCCESS
         }
@@ -174,12 +247,19 @@ fn pair_agent(dir: &Path, spec: &str) -> ExitCode {
         Err(e) => return fail(e),
     };
     let pin = helio_pairing::pair::new_pin();
-    eprintln!("Pairing this device's AI agent with {addr}...");
+    eprintln!(
+        "{}",
+        style::to(
+            To::Err,
+            Look::Quiet,
+            &format!("Pairing this device's AI agent with {addr}...")
+        )
+    );
     match helio_client::pair::pair_agent(dir, addr, &pin, &Default::default(), || show_pin(&pin)) {
         Ok(host) => {
             println!(
-                "The agent is paired with {}. Agents reach it through `Helio mcp` or \
-                    `helio-agent`.",
+                "{} with {}. Agents reach it through `Helio mcp` or `helio-agent`.",
+                style::to(To::Out, Look::Good, "The agent is paired"),
                 host.name
             );
             ExitCode::SUCCESS
@@ -206,7 +286,11 @@ fn wake(dir: &Path, name: &str) -> ExitCode {
     };
     match helio_client::wake::wake(host) {
         Ok(n) => {
-            println!("sent {n} wake packets to {}", host.name);
+            println!(
+                "{} {n} wake packets to {}",
+                style::to(To::Out, Look::Good, "Sent"),
+                host.name
+            );
             ExitCode::SUCCESS
         }
         Err(e) => fail(e),

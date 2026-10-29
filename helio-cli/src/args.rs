@@ -1,7 +1,7 @@
-//! The command line, read: what `helio` was asked to do ([`parse`]), the
-//! stream a `stream` or `watch` asks for ([`request`]), and the help that
-//! lists all of it. Nothing here does anything, so all of it is tested on
-//! every system.
+//! The command line, read: what `helio` was asked to do ([`parse`]), and
+//! the stream a `stream` or `watch` asks for ([`request`]); the help that
+//! lists all of it is `help`'s. Nothing here does anything, so all of it is
+//! tested on every system.
 //!
 //! A word out of place is an error that says which, not a word skipped: a
 //! stream asked for with a flag misspelt would otherwise start as something
@@ -10,102 +10,6 @@
 use helio_client::session::{NativeMode, StreamRequest};
 use helio_proto::control::{app, codec};
 use helio_proto::permission::Permissions;
-
-/// `helio --help`: every command, the host's and the stream's flags too.
-pub const HELP: &str = "\
-helio: play your other computers from this one, and let them play this one
-
-usage: helio COMMAND [ARGS]
-
-Streaming:
-  stream NAME [FLAGS]     stream a paired host (FLAGS below)
-  watch NAME [FLAGS]      watch the AI agent working on a paired host
-  wake NAME               send Wake-on-LAN packets to a paired host
-
-Hosts:
-  discover                hosts on the local network, paired or not
-  pair HOST[:PORT]        pair with a host: shows a PIN to type on it
-  pair-agent HOST[:PORT]  pair this device's AI agent (a key of its own)
-  hosts                   paired hosts
-  add-host NAME ADDR X25519 MLKEM
-                          pair by hand, with the keys `helio host identity`
-                          prints on the host
-  remove-host NAME        forget a host
-  identity                this device's public keys (X25519, ML-KEM-768)
-
-This computer as a host (more: helio host --help):
-  host enable             hosting on: the host starts now and at every start
-  host disable            hosting off: the host stops and no longer starts
-  host status [--json]    off, starting, on or failed (with why)
-  host identity           the host's public keys
-  host clients            paired devices and agents, and what each may do
-  host permissions X25519 [LIST]
-                          show or set what a paired device may do
-  host add-client NAME X25519 MLKEM [--agent] [--permissions LIST]
-                          pair a device or an agent by hand
-  host remove-client X25519
-                          unpair a device or an agent
-
-Stream flags (by default: this display's resolution at 60 fps, and
-Moonlight's bitrate for it):
-  --size WxH              resolution, exactly as given
-  --fps N                 frame rate
-  --mbps N                bitrate
-  --codec h264|hevc|av1   only this codec
-  --hdr                   HDR, when this display shows it and the host can
-  --yuv444                4:4:4 colour, when this computer decodes it and the host can
-  --windowed              a window, not full screen
-  --no-vsync              present frames at once, tearing allowed
-  --frame-pacing          one frame per display refresh
-  --stats                 show the statistics from the start
-  --cmd-is-win            send Command as the Windows key (macOS)
-  --mute-in-background    silence the stream while its window is not in front
-  --audio-channels 2|6|8  stereo, 5.1 or 7.1
-  --no-audio              no sound
-  --host-audio            play the sound on the host too
-  --steam                 open Steam Big Picture on the host for the session
-  --keep-host-displays    leave the host's own monitors on
-  --no-clipboard          do not share the clipboard
-  --wan-only              only the internet path: to test it
-  --via ADDR              only this address (repeatable): to diagnose a path
-
-Ctrl-C ends a stream as Ctrl+Alt+Shift+Q does. More in docs/cli.md:
-https://github.com/mihaicristianfarcas/helio/blob/main/docs/cli.md
-";
-
-/// `helio host --help`.
-pub const HOST_HELP: &str = "\
-helio host: this computer as a host (Helio Host, which hosting runs)
-
-usage: helio host COMMAND [ARGS]
-
-  enable                  hosting on: the host starts now and at every start after
-  disable                 hosting off: the host stops and no longer starts
-  status [--json]         off, starting, on or failed (with why); for on, whether
-                          the host's web UI answers on this computer. --json:
-                          one line, for programs
-  identity                the host's public keys, for `helio add-host` on a client
-  clients                 paired devices and agents: name, X25519 key, person or
-                          agent, permissions
-  permissions X25519      what a paired device or agent may do
-  permissions X25519 LIST set it: all, none, see-only, or names joined by commas:
-                          view, keyboard, mouse, controller, clipboard_read,
-                          clipboard_write, launch, take_over, watch (a person's
-                          device); view, keyboard, mouse, unwatched (an agent)
-  add-client NAME X25519 MLKEM [--agent] [--permissions LIST]
-                          pair a device by hand, with the keys `helio identity`
-                          prints on it (an agent: `helio-agent identity`, and
-                          --agent). Without --permissions, what pairing gives
-  remove-client X25519    unpair a device or an agent
-
-On Windows, enable and disable need an administrator: Windows asks. identity,
-clients, permissions, add-client and remove-client read the host's data, which
-only administrators may read there: run them in an administrator terminal.
-
-What permissions, add-client and remove-client change reaches a running host
-when it starts again (helio host disable, then enable); Helio's window and the
-host's web UI change it at once.
-";
 
 /// What `helio` was asked to do.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -872,11 +776,15 @@ mod tests {
 
     #[test]
     fn the_help_lists_every_command_and_flag() {
+        let (help, host_help) = (
+            crate::help::text(false, false),
+            crate::help::text(true, false),
+        );
         for flag in FLAGS {
             assert!(stream(flag).is_ok(), "{flag}");
             let name = flag.split(' ').next().unwrap();
             assert!(
-                HELP.contains(&format!("  {name} ")),
+                help.contains(&format!("  {name} ")),
                 "{name} is not in the help"
             );
         }
@@ -892,7 +800,7 @@ mod tests {
             "remove-host NAME",
             "identity",
         ] {
-            assert!(HELP.contains(&format!("  {command}")), "{command}");
+            assert!(help.contains(&format!("  {command}")), "{command}");
         }
         for command in [
             "enable",
@@ -904,8 +812,8 @@ mod tests {
             "add-client NAME X25519 MLKEM [--agent] [--permissions LIST]",
             "remove-client X25519",
         ] {
-            assert!(HELP.contains(&format!("  host {command}")), "{command}");
-            assert!(HOST_HELP.contains(&format!("  {command}")), "{command}");
+            assert!(help.contains(&format!("  host {command}")), "{command}");
+            assert!(host_help.contains(&format!("  {command}")), "{command}");
         }
     }
 }
