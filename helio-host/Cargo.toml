@@ -66,6 +66,8 @@ libc = "0.2"
 wayland-client = "0.31"
 wayland-protocols-plasma = { version = "0.3", features = ["client"] }
 wayland-scanner = "0.31"
+# KWin's keymap, to type text by the layout's keys (kwin.rs).
+xkbcommon = { version = "0.8", default-features = false }
 x11rb = { version = "0.13", features = ["dpms", "screensaver"] }
 
 [target.'cfg(windows)'.dependencies]

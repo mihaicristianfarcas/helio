@@ -83,12 +83,15 @@ drawn in, at its own density where the client says it (a Retina Mac's
   desktop entry asks for them (`X-KDE-Wayland-Interfaces`), found by the
   program's path: Helio's `install.sh` installs `helio-host`'s own,
   `dev.mihaicristian.helio.host.desktop`, hidden from the launcher. The
-  output extends the desktop; the host's monitors stay on. Text goes as
-  keysyms (fake input 6, as KWin 6.6 has it; with an older KWin, keys
-  only).
+  output extends the desktop; the host's monitors stay on. Text goes by
+  the keys that type it on the host's layout, read from KWin's keymap, with
+  Shift pressed around a capital, as the X11 host types: KWin's own keysym
+  typing sets the modifiers out of step with the key (a capital came out
+  small, the next letter capital).
 
 Typed text reaches characters on the host's keyboard layout only (mutter
-and KWin type a keysym with the layout's own keys), as through the portal.
+types a keysym with the layout's keys; one KWin types on a keymap of its
+own did not reach Konsole), as through the portal.
 Under X11, and on other Wayland desktops (wlroots), there is no virtual
 display. The host's log says which it uses (`a Wayland session: sessions
 get a virtual display of the desktop's own`, or `... go through the desktop
@@ -158,13 +161,14 @@ Data and logs are in `~/.config/helio-host`.
 
 `tools/linux/virtual-display-test` repeats the last row.
 
+| KDE's virtual display: Fedora 44's Plasma 6.6.4 under Wayland (a virtual machine, virtio GPU), `kwin.rs`'s desktop tests | a 1280x800 output at 200 % made, its frames received at 1280x800, the pointer drawn where it was moved, the output gone with its stream; a Konsole opened on it receives `ls from Helio!` typed as keys and text |
 `tools/linux/loopback-test` repeats the first row; see
 [../development.md](../development.md#linux).
 
 ## Not verified yet
 
-- KDE's virtual display on a real Plasma session (built, type-checked; a
-  headless KWin offers no screen cast without OpenGL).
+- A whole stream from a KDE host: its virtual display is checked on Plasma
+  6.6 by `kwin.rs`'s desktop tests (below), not yet with a client on it.
 - GNOME's on a desktop with real monitors (the tests ran headless mutter,
   whose own monitor is virtual too), and a client's density there (Linux
   clients do not send one; the scale chosen is unit-tested).
