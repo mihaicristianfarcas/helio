@@ -105,8 +105,10 @@ Helio-VERSION-linux-x86_64/install.sh
 in `~/.local/bin`, Helio's launcher entry with its icon, the host's own
 entry (hidden from the launcher: KDE gives the host a virtual display only
 through it), and the host's user service, installed but not turned on (see
-[Hosting on Linux](#hosting-on-linux)). It names any library the system is
-missing. Run from a newer download, it updates them, and
+[Hosting on Linux](#hosting-on-linux)). The libraries the programs need
+that the system lacks, it installs with apt, which asks for your password
+through `sudo`; run without a terminal (as Helio's own update runs it), it
+names them instead. Run from a newer download, it updates them, and
 restarts the host if hosting is on. `install.sh --uninstall` turns hosting
 off and removes what it installed.
 

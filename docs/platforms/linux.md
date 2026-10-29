@@ -136,7 +136,8 @@ environment does not make it clear.
 
 Helio Host runs in the desktop session, as the user: `tools/linux/helio-host.service` is
 a systemd user unit for that, which Helio's `install.sh` installs beside the
-app without turning it on, with the host's desktop entry
+app without turning it on, with the host's desktop entry and the
+libraries the programs need that the system lacks
 ([../install.md](../install.md#on-linux)),
 and which turning hosting on and off (the switch, or `helio host enable` and
 `disable`) enables and disables (`systemctl --user enable|disable --now

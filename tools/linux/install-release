@@ -11,6 +11,8 @@
 # - the launcher entry, with its icon, and the host's own entry, hidden,
 #   which KDE needs to give the host a virtual display
 #   (dev.mihaicristian.helio.host.desktop);
+# - the libraries the programs need that the system lacks, from its
+#   package manager (Ubuntu's apt, asking for sudo), when run in a terminal;
 # - the host's user unit (helio-host.service), installed but not enabled: hosting
 #   is off until the app's switch turns it on (`helio-host enable`). An update
 #   while hosting is on (the unit enabled) restarts the host on the new
@@ -59,16 +61,18 @@ if [[ ${1:-} == --uninstall ]]; then
     exit 0
 fi
 
-# A library the system lacks shows here, not as a program that will not
-# start from the launcher.
-missing=$(for program in helio-app helio-host; do
-    ldd "$HERE/$program" | awk '/not found/ { print $1 }'
-done | sort -u)
-if [[ -n $missing ]]; then
-    echo "These libraries are missing; install them with your package manager, then run this again:" >&2
-    echo "$missing" | sed 's/^/  /' >&2
-    # Ubuntu 24.04's names for them, which the programs were built against.
-    packages=$(for lib in $missing; do
+# A library the system lacks is installed here, or shows here, not as a
+# program that will not start from the launcher.
+missing_libraries() {
+    for program in helio-app helio-host; do
+        ldd "$HERE/$program" | awk '/not found/ { print $1 }'
+    done | sort -u
+}
+# Ubuntu 24.04's names for them, which the programs were built against.
+# Installing libavcodec60 brings, with apt's recommendations, the VA-API
+# drivers the host encodes with and x264.
+packages_for() {
+    for lib in "$@"; do
         case $lib in
             libavcodec.so.60) echo libavcodec60 ;;
             libavutil.so.58) echo libavutil58 ;;
@@ -80,7 +84,31 @@ if [[ -n $missing ]]; then
             libasound.so.2) echo libasound2t64 ;;
             libudev.so.1) echo libudev1 ;;
         esac
-    done | sort -u | tr '\n' ' ')
+    done | sort -u | tr '\n' ' '
+}
+missing=$(missing_libraries)
+if [[ -n $missing ]]; then
+    # shellcheck disable=SC2086
+    packages=$(packages_for $missing)
+    # Asked for in a terminal: sudo asks for the password there. Helio's
+    # own update runs this without one, and only says what is missing.
+    if [[ -n $packages && -t 0 ]] && command -v apt-get >/dev/null; then
+        echo "Helio needs libraries this system lacks; installing them: apt-get install $packages"
+        as_root=sudo
+        [[ $EUID -eq 0 ]] && as_root=
+        # The package lists first: a stale one names versions gone from the
+        # mirrors.
+        $as_root apt-get update -q
+        # shellcheck disable=SC2086
+        $as_root apt-get install -y $packages
+        missing=$(missing_libraries)
+    fi
+fi
+if [[ -n $missing ]]; then
+    echo "These libraries are missing; install them with your package manager, then run this again:" >&2
+    echo "$missing" | sed 's/^/  /' >&2
+    # shellcheck disable=SC2086
+    packages=$(packages_for $missing)
     if [[ -n $packages ]] && command -v apt-get >/dev/null; then
         echo "On Ubuntu: sudo apt install $packages" >&2
     fi
