@@ -1,0 +1,73 @@
+#!/usr/bin/env bash
+# GNOME's virtual display, in one container: Helio Host in a headless mutter
+# (Ubuntu 24.04's, with its own session bus and PipeWire) makes a monitor at
+# the client's size for the session, and a Linux Helio on Xvfb streams it
+# with scripted input and saves a picture. What the host and mutter said,
+# the picture, and mutter's monitors after the session land in
+# target/linux-out/virtual-display: the session's monitor (Meta-1) added and
+# removed, the host's own (Meta-0) off for the session and back after it.
+#
+#   tools/linux-dev tools/linux/virtual-display-test [HELIO STREAM ARGS]
+#
+# KDE's virtual display needs KWin with OpenGL and a seat, which the
+# container has not: it is checked on a Plasma desktop by hand
+# (docs/platforms/linux.md).
+set -euo pipefail
+# Debug builds: linking the release ones (LTO) takes more memory than the
+# container is given.
+cargo build -q -p helio-host
+cargo build -q -p helio-cli
+bin=${CARGO_TARGET_DIR:-/src/target}/debug
+OUT=/src/target/linux-out/virtual-display
+rm -rf "$OUT"
+mkdir -p "$OUT/helio-host" "$OUT/helio"
+
+# The desktop: a session bus, PipeWire, and mutter with a monitor of its own.
+export XDG_RUNTIME_DIR=/tmp/runtime
+mkdir -m 700 -p "$XDG_RUNTIME_DIR"
+dbus-daemon --session --address="unix:path=$XDG_RUNTIME_DIR/bus" --fork >/dev/null
+export DBUS_SESSION_BUS_ADDRESS=unix:path=$XDG_RUNTIME_DIR/bus
+pipewire >"$OUT/pipewire.log" 2>&1 &
+sleep 0.5
+wireplumber >"$OUT/wireplumber.log" 2>&1 &
+mutter --headless --wayland --no-x11 --virtual-monitor 1280x720 >"$OUT/mutter.log" 2>&1 &
+sleep 3
+
+export HELIO_HOST_DATA_DIR=$OUT/helio-host HELIO_DATA_DIR=$OUT/helio NO_COLOR=1
+cat >"$HELIO_HOST_DATA_DIR/config.toml" <<'TOML'
+name = "linux-vd"
+port = 47830
+pairing_port = 47831
+web_port = 47832
+internet_access = false
+port_mapping = false
+TOML
+# Pair by hand, both ways.
+host_keys=$("$bin/helio" host identity | sed -E 's/.*= "(.*)"/\1/' | paste -sd' ')
+# shellcheck disable=SC2046
+"$bin/helio" host add-client linux-helio $("$bin/helio" identity) >/dev/null
+# shellcheck disable=SC2086
+"$bin/helio" add-host linux-vd 127.0.0.1:47830 $host_keys >/dev/null
+
+WAYLAND_DISPLAY=wayland-0 XDG_SESSION_TYPE=wayland XDG_CURRENT_DESKTOP=GNOME \
+    RUST_LOG=${RUST_LOG:-info,mainline=error} "$bin/helio-host" host >"$OUT/helio-host.log" 2>&1 &
+host=$!
+sleep 3
+
+Xvfb :2 -screen 0 1920x1080x24 -nolisten tcp >/dev/null 2>&1 &
+sleep 1
+args=("$@")
+[[ ${#args[@]} -eq 0 ]] && args=(--windowed --size 1440x900 --fps 60 --stats)
+DISPLAY=:2 HELIO_TEST_SNAPSHOT=${HELIO_TEST_SNAPSHOT:-$OUT/stream.png@30} \
+    HELIO_TEST_INPUT=${HELIO_TEST_INPUT:-"wait 2500; abs 720 450; click; wait 3000; quit"} \
+    RUST_LOG=info,mainline=error,helio_client::stats=debug \
+    timeout 60 "$bin/helio" stream linux-vd "${args[@]}" >"$OUT/helio.log" 2>&1 || echo "helio exited with $?"
+
+kill -INT "$host" 2>/dev/null || true
+for _ in $(seq 100); do kill -0 "$host" 2>/dev/null || break; sleep 0.2; done
+kill -0 "$host" 2>/dev/null && { echo "helio-host did not stop within 20 s"; kill -9 "$host"; }
+gdbus call --session -d org.gnome.Mutter.DisplayConfig -o /org/gnome/Mutter/DisplayConfig \
+    -m org.gnome.Mutter.DisplayConfig.GetCurrentState >"$OUT/monitors-after.txt" 2>&1 || true
+grep -E "virtual monitor|arranged|streaming a virtual" "$OUT/helio-host.log" | cut -c1-200 || true
+grep -E "Added|Removed" "$OUT/mutter.log" || true
+echo "logs in $OUT"

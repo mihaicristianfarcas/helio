@@ -92,6 +92,7 @@ tools/linux-dev                                  # cargo build -p helio-app -p h
 tools/linux-dev cargo test -p helio-host
 tools/linux-dev cargo test --workspace --exclude helio-host -j 1
 tools/linux-dev tools/linux/loopback-test        # a Linux host streaming to a Linux client
+tools/linux-dev tools/linux/virtual-display-test # GNOME's virtual display, headless
 ```
 
 - Link the GPUI apps one at a time (`-j 1` for tests): two at once can run
@@ -103,6 +104,15 @@ tools/linux-dev tools/linux/loopback-test        # a Linux host streaming to a L
   `HELIO_DOCKER_ARGS="-e LOOPBACK_PERMISSIONS=view,mouse"` the client is
   paired with those permissions, and the input log shows what the host
   let through (here the click and the wheel, no keys).
+- `tools/linux/virtual-display-test` runs Helio Host in a headless mutter
+  (its own session bus and PipeWire) and Helio on an X screen: the host
+  makes a monitor of the client's size for the session, arranges it as the
+  whole desktop and leaves mutter to put the desktop back; the logs, a
+  picture and mutter's monitors after the session land in
+  `target/linux-out/virtual-display`. KDE's virtual display needs KWin with
+  OpenGL and a seat: a Plasma desktop, by hand, with `helio-host` installed
+  by `tools/linux/install-apps` (KWin gives its virtual output only to a
+  program its desktop entry names).
 - `tools/linux/gnome-desktop` runs a GNOME desktop (mutter nested in an X
   screen, the portal, PipeWire) to test the Wayland host by hand;
   `helio-capture`'s `x11-poke` example answers its dialogs.

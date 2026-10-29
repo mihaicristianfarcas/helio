@@ -83,7 +83,7 @@ it applies), **no** (not built, with the reason), **n/a** (does not apply).
 
 | Sunshine/Apollo | Helio Host | Status |
 |---|---|---|
-| Streams a physical display, changing its mode to the client's (Sunshine); a virtual display at the client's mode (Apollo) | A virtual display at the client's mode on Windows (SudoVDA, Apollo's driver) and macOS (`CGVirtualDisplay`), primary, the host's monitors off for the session (Sunshine's "deactivate other displays"); without one, the main display as it is, scaled (not its mode changed) | done |
+| Streams a physical display, changing its mode to the client's (Sunshine); a virtual display at the client's mode (Apollo) | A virtual display at the client's mode on Windows (SudoVDA, Apollo's driver), macOS (`CGVirtualDisplay`) and Linux (mutter's on GNOME, KWin's on KDE), primary, the host's monitors off for the session (Sunshine's "deactivate other displays"; not on KDE); without one, the main display as it is, scaled (not its mode changed) | done |
 | A virtual display identity for each client, so Windows remembers each one's settings (Apollo) | One identity for every client: a session that wants the other HDR state than the last waits 3.8 s while Windows switches it ([platforms/windows.md](platforms/windows.md)) | no |
 | Apps: Desktop, Steam Big Picture (closed at the end) | Same | done |
 | Apps of your own, with commands before and after; commands when a client connects or disconnects (Apollo) | Not built | no |
@@ -105,8 +105,8 @@ it applies), **no** (not built, with the reason), **n/a** (does not apply).
 - Everything in one post-quantum tunnel (WireGuard with ML-KEM), paired
   with a hybrid post-quantum PIN exchange.
 - Reaching the host from anywhere without port forwarding or a VPN.
-- A virtual display at the client's exact mode on macOS hosts too, in HDR
-  (Apollo's is Windows only).
+- A virtual display at the client's exact mode on macOS hosts too, in HDR,
+  and on Linux hosts (GNOME, KDE) (Apollo's is Windows only).
 - Held keys repeat at the client keyboard's own pace.
 - The clipboard shared both ways as you copy, images and files included
   (Apollo's: text, when the client asks).
@@ -117,5 +117,5 @@ it applies), **no** (not built, with the reason), **n/a** (does not apply).
 
 PlayStation pads with motion and touchpad, apps of your own and commands
 when a client connects, clients that only send input, a virtual display identity per client, AMD and Intel
-encoders on a Windows host, and Linux capture and input beyond X11 and the
-portal. Phones, tablets and TVs are out of scope: Helio is for desktops.
+encoders on a Windows host, and Linux capture and input beyond X11, the
+portal and GNOME's and KDE's own interfaces. Phones, tablets and TVs are out of scope: Helio is for desktops.

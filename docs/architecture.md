@@ -46,7 +46,7 @@ it is, and what was measured on the way, is in the
 | `helio-transport` | The tunnel endpoint: pq-boringtun per peer on one UDP socket, roaming, segmented handshakes, batched sends and receives |
 | `helio-pairing` | PIN pairing (SPAKE2 + ML-KEM-768), mDNS discovery, Wake-on-LAN |
 | `helio-nat` | Reaching a host from anywhere: STUN, sealed rendezvous records on the Mainline DHT, hole punching, UPnP / NAT-PMP port mapping |
-| `helio-display` | Virtual displays: SudoVDA on Windows, `CGVirtualDisplay` on macOS |
+| `helio-display` | Virtual displays: SudoVDA on Windows, `CGVirtualDisplay` on macOS (Linux's are the compositor's own, in `helio-host/src/linux/virtual_display.rs`) |
 | `helio-capture` | Screen capture: Desktop Duplication (Windows), ScreenCaptureKit (macOS), MIT-SHM and PipeWire (Linux) |
 | `helio-encode` | Video encoders: NVENC with a D3D11 colour converter, or Media Foundation's H.264 encoder without NVENC (Windows), VideoToolbox (macOS), FFmpeg (Linux) |
 | `helio-decode` | Video decoders: VideoToolbox (macOS), FFmpeg with D3D11VA (Windows) or VA-API (Linux) |
@@ -83,10 +83,10 @@ So there is one client and one host, with a platform layer each:
 | Client present | Metal | Direct3D 11 | wgpu (Vulkan or GL) |
 | Client controllers | GameController + IOHID | XInput | gilrs (evdev) |
 | Client audio out | CoreAudio | WASAPI | cpal |
-| Host display | `CGVirtualDisplay` at the client's mode | SudoVDA at the client's mode (without it, the main display, scaled) | the screen as it is, scaled |
+| Host display | `CGVirtualDisplay` at the client's mode | SudoVDA at the client's mode (without it, the main display, scaled) | a virtual display at the client's mode, mutter's (GNOME) or KWin's (KDE); elsewhere the screen as it is, scaled |
 | Host capture | ScreenCaptureKit | Desktop Duplication | MIT-SHM (X11), PipeWire through the desktop portal (Wayland) |
 | Host encode | VideoToolbox | NVENC, else Media Foundation (H.264, software) | FFmpeg: VA-API, NVENC or x264 |
-| Host input | CoreGraphics events | `SendInput`, ViGEm pads | XTest (X11), the RemoteDesktop portal (Wayland) |
+| Host input | CoreGraphics events | `SendInput`, ViGEm pads | XTest (X11); under Wayland mutter's remote desktop (GNOME), KWin's fake input (KDE), else the RemoteDesktop portal |
 | Host sound | ScreenCaptureKit | WASAPI loopback of a virtual sink | PulseAudio / PipeWire monitor |
 
 The host's platform layer is `helio-host/src/platform.rs` (Windows),

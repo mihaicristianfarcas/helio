@@ -17,8 +17,8 @@ switch, off until you turn it on) it lets them play this one, through
   same video path) on the same machines ([benchmarks](docs/benchmarks.md)).
 - **Post-quantum**: every packet travels in pq-boringtun (WireGuard with
   ML-KEM-768), and pairing is a hybrid SPAKE2 + ML-KEM PIN exchange.
-- **A virtual display at the client's exact mode** on Windows and macOS
-  hosts, so nothing is scaled or letterboxed.
+- **A virtual display at the client's exact mode** on Windows, macOS and
+  Linux (GNOME, KDE) hosts, so nothing is scaled or letterboxed.
 - **From anywhere, without port forwarding**: hosts are found through
   sealed records on the BitTorrent DHT, and NATs are punched from both sides.
 - **The clipboard, both ways**: text, images, files and folders.
@@ -55,7 +55,7 @@ switch, off until you turn it on) it lets them play this one, through
 |---|---|---|
 | macOS 14+ | Helio.app: in daily use | Helio Host, inside Helio.app: works; stereo, or 5.1/7.1 with a surround output ([macOS](docs/platforms/macos.md#sound-in-surround)); no controllers yet |
 | Windows 10/11 | Helio.exe: works; less tested than macOS | Helio Host, a Windows service: in daily use (best with an NVIDIA GPU and SudoVDA; without them, H.264 in software and the host's own display) |
-| Linux | works under X11 and Wayland; tested in a container | works under X11 and Wayland (portal); scaled, no virtual display |
+| Linux | works under X11 and Wayland; tested in a container | works under X11 and Wayland; a virtual display on GNOME and KDE, elsewhere the screen as it is, scaled |
 
 What is verified and what is not, per platform:
 [docs/platforms/](docs/platforms/). Feature by feature against Moonlight +

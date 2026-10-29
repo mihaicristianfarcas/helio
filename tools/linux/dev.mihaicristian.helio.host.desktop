@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Name=Helio Host
+Comment=Streams this computer to the devices paired with it
+Exec=helio-host host
+Icon=dev.mihaicristian.helio
+Terminal=false
+NoDisplay=true
+# Not in the launcher: the host runs as a user service. This entry is how
+# KWin knows the program at its Exec path (install.sh writes the installed
+# one there) may make a virtual output and give input, which KDE keeps from
+# programs that do not ask (helio-host/src/linux/kwin.rs).
+X-KDE-Wayland-Interfaces=zkde_screencast_unstable_v1,org_kde_kwin_fake_input

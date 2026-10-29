@@ -10,7 +10,8 @@
 # The archive is a folder of the same name with the app (helio-app), the
 # host's engine (helio-host) and its user unit (helio-host.service, installed but not
 # enabled: hosting is off until the app's switch turns it on), the launcher
-# entry and its icon, and install.sh (tools/linux/install-release). ARCH is
+# entry and its icon, the host's hidden entry (for KDE's virtual display),
+# and install.sh (tools/linux/install-release). ARCH is
 # this machine's (x86_64, aarch64); VERSION the workspace's. The programs
 # link the system's libraries (FFmpeg, PipeWire, ...) as this machine has
 # them: built on Ubuntu 24.04, they run on it and on distributions built on
@@ -46,6 +47,7 @@ for file in \
     "$OUT/helio-host" \
     "$REPO/tools/linux/helio-host.service" \
     "$REPO/tools/linux/dev.mihaicristian.helio.desktop" \
+    "$REPO/tools/linux/dev.mihaicristian.helio.host.desktop" \
     "$REPO/tools/linux/install-release:install.sh"; do
     from=${file%%:*} to=${file#*:}
     [[ $file == *:* ]] || to=$(basename "$from")

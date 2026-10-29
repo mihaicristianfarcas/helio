@@ -52,11 +52,12 @@ pub struct Portal {
     done: std::sync::mpsc::Receiver<()>,
 }
 
-/// Where every portal call runs. One runtime for the life of the process:
+/// Where every portal call runs, and mutter's (`mutter`). One runtime for
+/// the life of the process:
 /// ashpd keeps one D-Bus connection for all of them, and that connection
 /// lives on the runtime that first made it (with a runtime per session, the
 /// second session's calls waited forever on the first's, gone).
-fn runtime() -> Result<&'static tokio::runtime::Runtime, String> {
+pub fn runtime() -> Result<&'static tokio::runtime::Runtime, String> {
     static RUNTIME: OnceLock<Result<tokio::runtime::Runtime, String>> = OnceLock::new();
     RUNTIME
         .get_or_init(|| {
@@ -175,22 +176,7 @@ async fn serve(
     tracing::info!(node, ?size, input, "the desktop is shared");
 
     // Keep the screen on while it streams.
-    let inhibit = match InhibitProxy::new().await {
-        Ok(p) => p
-            .inhibit(
-                None,
-                enumflags2::BitFlags::from(InhibitFlags::Idle),
-                InhibitOptions::default().set_reason("Helio Host is streaming this screen"),
-            )
-            .await
-            .map_err(|e| tracing::info!(error = %e, "the screen may blank during the session"))
-            .ok(),
-        Err(e) => {
-            tracing::info!(error = %e, "no Inhibit portal: the screen may blank during the \
-                session");
-            None
-        }
-    };
+    let inhibit = inhibit().await;
 
     let _ = ready.send(Ok(Granted {
         fd,
@@ -301,6 +287,59 @@ async fn start(saved: &str) -> Result<(Kind, Stream, Option<String>), String> {
                 .ok_or("the desktop shared no screen")?;
             let token = started.restore_token().map(|t| format!("sc:{t}"));
             Ok((Kind::Cast(session), stream, token))
+        }
+    }
+}
+
+/// The desktop keeping the screen on (the Inhibit portal), until the
+/// request is closed; none where it will not.
+async fn inhibit() -> Option<ashpd::desktop::Request<()>> {
+    match InhibitProxy::new().await {
+        Ok(p) => p
+            .inhibit(
+                None,
+                enumflags2::BitFlags::from(InhibitFlags::Idle),
+                InhibitOptions::default().set_reason("Helio Host is streaming this screen"),
+            )
+            .await
+            .map_err(|e| tracing::info!(error = %e, "the screen may blank during the session"))
+            .ok(),
+        Err(e) => {
+            tracing::info!(error = %e, "no Inhibit portal: the screen may blank during the \
+                session");
+            None
+        }
+    }
+}
+
+/// Held for a session that streams without a portal session of its own (a
+/// virtual display): the desktop keeps the screen on until it is dropped.
+/// Remote input counts as someone at the desktop, but a client that only
+/// watches would see it lock.
+pub struct KeepAwake {
+    release: Option<tokio::sync::oneshot::Sender<()>>,
+}
+
+pub fn keep_awake() -> KeepAwake {
+    let (release, released) = tokio::sync::oneshot::channel::<()>();
+    if let Ok(rt) = runtime() {
+        rt.spawn(async move {
+            let request = inhibit().await;
+            let _ = released.await;
+            if let Some(r) = request {
+                let _ = r.close().await;
+            }
+        });
+    }
+    KeepAwake {
+        release: Some(release),
+    }
+}
+
+impl Drop for KeepAwake {
+    fn drop(&mut self) {
+        if let Some(r) = self.release.take() {
+            let _ = r.send(());
         }
     }
 }

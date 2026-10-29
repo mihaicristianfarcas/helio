@@ -1,11 +1,18 @@
-//! Linux under Wayland: a screen cast the desktop portal set up, received
-//! from PipeWire. The portal hands over a PipeWire connection (a file
-//! descriptor) and the stream's node; frames arrive in shared memory, the
+//! Linux under Wayland: a screen cast received from PipeWire. The desktop
+//! portal hands over a PipeWire connection (a file descriptor) and the
+//! stream's node; a compositor's own screen cast (mutter's, KWin's: a
+//! virtual display) puts its stream on the session's PipeWire, which is
+//! connected to as any of its clients. Frames arrive in shared memory, the
 //! pointer drawn in by the compositor, and are copied out on PipeWire's
 //! thread into buffers the encoder reads.
 //!
 //! Compositors send a frame when the screen changes, so `grab` waits for
 //! the next one, as it does on X11.
+//!
+//! A virtual monitor of mutter's takes its size from the stream: the size
+//! the consumer asks for, as gnome-remote-desktop asks for its client's
+//! (`grd-rdp-pipewire-stream.c`). So [`Mode`] asks for exactly one size,
+//! where other streams are offered any.
 
 use std::os::fd::OwnedFd;
 use std::sync::Arc;
@@ -37,6 +44,15 @@ struct Shared {
     arrived: Condvar,
 }
 
+/// The one size and rate a stream is asked for (a virtual monitor's).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Mode {
+    pub width: u32,
+    pub height: u32,
+    /// Whole frames a second.
+    pub fps: u32,
+}
+
 pub struct PipeWireCapture {
     shared: Arc<Shared>,
     /// The count `grab` last handed out.
@@ -46,8 +62,14 @@ pub struct PipeWireCapture {
 }
 
 impl PipeWireCapture {
-    /// Receive stream `node` over the PipeWire connection `fd`.
-    pub fn new(fd: OwnedFd, node: u32) -> Result<PipeWireCapture, CaptureError> {
+    /// Receive stream `node` over the PipeWire connection `fd` (a portal's),
+    /// or, without one, from the session's PipeWire. With `mode`, the
+    /// stream is asked for that size and rate alone.
+    pub fn new(
+        fd: Option<OwnedFd>,
+        node: u32,
+        mode: Option<Mode>,
+    ) -> Result<PipeWireCapture, CaptureError> {
         let shared = Arc::new(Shared {
             latest: Mutex::new(Latest::default()),
             arrived: Condvar::new(),
@@ -59,7 +81,7 @@ impl PipeWireCapture {
             std::thread::Builder::new()
                 .name("pipewire".into())
                 .spawn(move || {
-                    if let Err(e) = run(fd, node, shared.clone(), quit_rx, &ready_tx) {
+                    if let Err(e) = run(fd, node, mode, shared.clone(), quit_rx, &ready_tx) {
                         tracing::warn!(error = %e, "screen cast stopped");
                         let _ = ready_tx.try_send(Err(e.clone()));
                         shared.latest.lock().failed = Some(e);
@@ -168,8 +190,9 @@ impl Stream {
 }
 
 fn run(
-    fd: OwnedFd,
+    fd: Option<OwnedFd>,
     node: u32,
+    mode: Option<Mode>,
     shared: Arc<Shared>,
     quit: pw::channel::Receiver<()>,
     ready: &std::sync::mpsc::SyncSender<Result<(), String>>,
@@ -177,7 +200,11 @@ fn run(
     pw::init();
     let mainloop = pw::main_loop::MainLoopRc::new(None).map_err(|e| e.to_string())?;
     let context = pw::context::ContextRc::new(&mainloop, None).map_err(|e| e.to_string())?;
-    let core = context.connect_fd_rc(fd, None).map_err(|e| e.to_string())?;
+    let core = match fd {
+        Some(fd) => context.connect_fd_rc(fd, None),
+        None => context.connect_rc(None),
+    }
+    .map_err(|e| e.to_string())?;
     let stream = pw::stream::StreamBox::new(
         &core,
         "helio-host-screen",
@@ -235,62 +262,7 @@ fn run(
         .register()
         .map_err(|e| e.to_string())?;
 
-    // 4 bytes a pixel, whichever way round; any size and rate the desktop has.
-    let format = spa::pod::object!(
-        spa::utils::SpaTypes::ObjectParamFormat,
-        spa::param::ParamType::EnumFormat,
-        spa::pod::property!(
-            spa::param::format::FormatProperties::MediaType,
-            Id,
-            spa::param::format::MediaType::Video
-        ),
-        spa::pod::property!(
-            spa::param::format::FormatProperties::MediaSubtype,
-            Id,
-            spa::param::format::MediaSubtype::Raw
-        ),
-        spa::pod::property!(
-            spa::param::format::FormatProperties::VideoFormat,
-            Choice,
-            Enum,
-            Id,
-            VideoFormat::BGRx,
-            VideoFormat::BGRx,
-            VideoFormat::BGRA,
-            VideoFormat::RGBx,
-            VideoFormat::RGBA
-        ),
-        spa::pod::property!(
-            spa::param::format::FormatProperties::VideoSize,
-            Choice,
-            Range,
-            Rectangle,
-            spa::utils::Rectangle {
-                width: 1920,
-                height: 1080
-            },
-            spa::utils::Rectangle {
-                width: 1,
-                height: 1
-            },
-            spa::utils::Rectangle {
-                width: 8192,
-                height: 8192
-            }
-        ),
-        spa::pod::property!(
-            spa::param::format::FormatProperties::VideoFramerate,
-            Choice,
-            Range,
-            Fraction,
-            spa::utils::Fraction { num: 60, denom: 1 },
-            spa::utils::Fraction { num: 0, denom: 1 },
-            spa::utils::Fraction {
-                num: 1000,
-                denom: 1
-            }
-        ),
-    );
+    let format = asked_format(mode);
     let bytes: Vec<u8> = spa::pod::serialize::PodSerializer::serialize(
         std::io::Cursor::new(Vec::new()),
         &spa::pod::Value::Object(format),
@@ -315,4 +287,98 @@ fn run(
     let _ = ready.send(Ok(()));
     mainloop.run();
     Ok(())
+}
+
+/// The formats asked for: 4 bytes a pixel, whichever way round; any size and
+/// rate the desktop has, or `mode` alone.
+fn asked_format(mode: Option<Mode>) -> spa::pod::Object {
+    let media_type = spa::pod::property!(
+        spa::param::format::FormatProperties::MediaType,
+        Id,
+        spa::param::format::MediaType::Video
+    );
+    let media_subtype = spa::pod::property!(
+        spa::param::format::FormatProperties::MediaSubtype,
+        Id,
+        spa::param::format::MediaSubtype::Raw
+    );
+    let pixels = spa::pod::property!(
+        spa::param::format::FormatProperties::VideoFormat,
+        Choice,
+        Enum,
+        Id,
+        VideoFormat::BGRx,
+        VideoFormat::BGRx,
+        VideoFormat::BGRA,
+        VideoFormat::RGBx,
+        VideoFormat::RGBA
+    );
+    let (size, rate) = match mode {
+        Some(m) => (
+            spa::pod::property!(
+                spa::param::format::FormatProperties::VideoSize,
+                Rectangle,
+                spa::utils::Rectangle {
+                    width: m.width,
+                    height: m.height
+                }
+            ),
+            spa::pod::property!(
+                spa::param::format::FormatProperties::VideoFramerate,
+                Choice,
+                Range,
+                Fraction,
+                spa::utils::Fraction {
+                    num: m.fps,
+                    denom: 1
+                },
+                spa::utils::Fraction { num: 0, denom: 1 },
+                spa::utils::Fraction {
+                    num: m.fps,
+                    denom: 1
+                }
+            ),
+        ),
+        None => (
+            spa::pod::property!(
+                spa::param::format::FormatProperties::VideoSize,
+                Choice,
+                Range,
+                Rectangle,
+                spa::utils::Rectangle {
+                    width: 1920,
+                    height: 1080
+                },
+                spa::utils::Rectangle {
+                    width: 1,
+                    height: 1
+                },
+                spa::utils::Rectangle {
+                    width: 8192,
+                    height: 8192
+                }
+            ),
+            spa::pod::property!(
+                spa::param::format::FormatProperties::VideoFramerate,
+                Choice,
+                Range,
+                Fraction,
+                spa::utils::Fraction { num: 60, denom: 1 },
+                spa::utils::Fraction { num: 0, denom: 1 },
+                spa::utils::Fraction {
+                    num: 1000,
+                    denom: 1
+                }
+            ),
+        ),
+    };
+    spa::pod::object!(
+        spa::utils::SpaTypes::ObjectParamFormat,
+        spa::param::ParamType::EnumFormat,
+        media_type,
+        media_subtype,
+        pixels,
+        size,
+        rate,
+    )
 }
