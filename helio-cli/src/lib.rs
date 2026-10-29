@@ -17,6 +17,7 @@
 //!
 //! `HELIO_TEST_INPUT` scripts input into a stream (see `script`).
 
+pub mod engine;
 #[cfg(any(target_os = "macos", windows, target_os = "linux"))]
 mod script;
 #[cfg(any(target_os = "macos", windows, target_os = "linux"))]
