@@ -29,8 +29,9 @@ use helio_transport::{Endpoint, Peer};
 use crate::audio::AudioHandle;
 use crate::config::HostConfig;
 use crate::negotiate::Negotiated;
-use crate::portal::{Portal, PortalSink};
+use crate::portal::Portal;
 use crate::power::Awake;
+use crate::remote_input::RemoteSink;
 use crate::session::Shared;
 use crate::video::VideoParams;
 
@@ -51,7 +52,7 @@ pub enum VideoSource {
 
 enum SinkKind {
     X11(Box<XTestSink>),
-    Portal(PortalSink),
+    Remote(RemoteSink),
     /// Nowhere (no XTEST; a desktop that shares no input).
     None,
 }
@@ -67,7 +68,7 @@ impl InputSink for Sink {
         self.received += events.len() as u64;
         match &mut self.inner {
             SinkKind::X11(s) => s.inject(events),
-            SinkKind::Portal(s) => s.inject(events),
+            SinkKind::Remote(s) => s.inject(events),
             SinkKind::None => Ok(()),
         }
     }
@@ -75,7 +76,7 @@ impl InputSink for Sink {
     fn release_all(&mut self) -> Result<(), InputError> {
         match &mut self.inner {
             SinkKind::X11(s) => s.release_all(),
-            SinkKind::Portal(s) => s.release_all(),
+            SinkKind::Remote(s) => s.release_all(),
             SinkKind::None => Ok(()),
         }
     }
@@ -280,7 +281,7 @@ impl Platform {
                 portal,
                 size,
                 input: true,
-            }) => SinkKind::Portal(PortalSink::new(portal, d.picture, *size)),
+            }) => SinkKind::Remote(portal.sink(d.picture, *size)),
             Some(_) => SinkKind::None,
             None => XTestSink::new(None, d.picture)
                 .map_or(SinkKind::None, |s| SinkKind::X11(Box::new(s))),
