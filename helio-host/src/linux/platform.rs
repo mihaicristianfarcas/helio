@@ -150,7 +150,8 @@ impl Platform {
         }
         if codecs.is_empty() {
             tracing::error!(
-                "no video encoder: FFmpeg has none of VA-API, NVENC or libx264 working here"
+                "no video encoder: FFmpeg has none of VA-API, NVENC, libx264 or libopenh264 \
+                    working here"
             );
         }
         let virtual_display = wayland.then(virtual_display::offered).flatten();

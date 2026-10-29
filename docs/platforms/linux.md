@@ -103,9 +103,12 @@ portal`).
   know when the screen changed, the pointer drawn in from XFixes
   (`helio-capture/src/x11.rs`; x11rb, no C libraries).
 - **Encode.** FFmpeg, trying VA-API (Intel, AMD), then NVENC, then x264
-  (H.264 only, in software), set up as Sunshine sets them up: no B-frames,
-  an endless GOP, a VBV of about a frame, an IDR on a loss (none of these
-  encoders invalidates references). swscale converts to BT.709 4:2:0 and
+  (H.264 only, in software), then OpenH264 (H.264 at 4:2:0, in software:
+  Fedora's FFmpeg has it in place of x264, and Fedora's VA-API encodes no
+  H.264; `sudo dnf install openh264` installs Cisco's library it loads),
+  set up as Sunshine sets them up: no B-frames, an endless GOP, a VBV of
+  about a frame, an IDR on a loss (none of these encoders invalidates
+  references). swscale converts to BT.709 4:2:0 and
   scales (`helio-encode/src/ffmpeg.rs`); to 4:4:4 for a client that asks
   for it, where NVENC or x264 encodes (VA-API takes 4:2:0 only). No HDR:
   the X server and the portal share SDR pictures.
@@ -158,10 +161,10 @@ Data and logs are in `~/.config/helio-host`.
 | Offscreen decode and present of the 600-frame test stream (`helio-client/examples/linux-render-check.rs`) | every colour bar matches FFmpeg's own BT.709 conversion exactly |
 | GNOME's virtual display: Ubuntu 26.04's mutter 50.1, headless (no GPU), to a client in the same VM, x264 in software, release build | a 1600x900@60 monitor made for the session and removed at its end; the host's monitor off for the session and back after it; 2.9 ms capture to encoded (p50), 4.2 ms capture to screen; a still desktop sends 12 fps; a click, keys and typed text reach a terminal opened on it |
 | The same with Ubuntu 24.04's mutter 46.2 (no `modes`), in the container, debug build | a 1440x900 monitor sized from the stream; arranged and restored the same |
+| KDE's virtual display: Fedora 44's Plasma 6.6.4 under Wayland (a virtual machine, virtio GPU), `kwin.rs`'s desktop tests | a 1280x800 output at 200 % made, its frames received at 1280x800, the pointer drawn where it was moved, the output gone with its stream; a Konsole opened on it receives `ls from Helio!` typed as keys and text |
 
 `tools/linux/virtual-display-test` repeats the last row.
 
-| KDE's virtual display: Fedora 44's Plasma 6.6.4 under Wayland (a virtual machine, virtio GPU), `kwin.rs`'s desktop tests | a 1280x800 output at 200 % made, its frames received at 1280x800, the pointer drawn where it was moved, the output gone with its stream; a Konsole opened on it receives `ls from Helio!` typed as keys and text |
 `tools/linux/loopback-test` repeats the first row; see
 [../development.md](../development.md#linux).
 
@@ -169,6 +172,8 @@ Data and logs are in `~/.config/helio-host`.
 
 - A whole stream from a KDE host: its virtual display is checked on Plasma
   6.6 by `kwin.rs`'s desktop tests (below), not yet with a client on it.
+- Encoding with OpenH264 (no FFmpeg here had it working: Ubuntu's leaves it
+  out, and Fedora's needs Cisco's library installed).
 - GNOME's on a desktop with real monitors (the tests ran headless mutter,
   whose own monitor is virtual too), and a client's density there (Linux
   clients do not send one; the scale chosen is unit-tested).
