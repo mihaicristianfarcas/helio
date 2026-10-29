@@ -176,8 +176,12 @@ try {
     # What Helio makes beside its files: Settings > General's PATH entry
     # and start at login, and what an update renames aside or brings.
     Set-UserPath ((@($pathBefore -split ';' | Where-Object { $_ }) + (Join-Path $app 'bin')) -join ';')
-    New-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run' -Name Helio `
-        -Value ('"{0}" --background' -f (Join-Path $app 'Helio.exe')) -PropertyType String -Force | Out-Null
+    # A new profile may have no Run key yet: Helio creates it as this does
+    # (helio-ui/src/login.rs).
+    $run = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
+    if (-not (Test-Path $run)) { New-Item $run -Force | Out-Null }
+    New-ItemProperty $run -Name Helio -Value ('"{0}" --background' -f (Join-Path $app 'Helio.exe')) `
+        -PropertyType String -Force | Out-Null
     foreach ($left in 'Helio.exe.old', 'bin\helio.exe.2.old', 'avcodec-1.dll') {
         Set-Content -LiteralPath (Join-Path $app $left) -Value 'left by an update'
     }
