@@ -8,9 +8,10 @@
 //!   prompts as it starts. What macOS allows the host is what the host
 //!   reports (`api::Grants`); each not allowed has a button to its pane of
 //!   System Settings, and the row changes as soon as the host says so.
-//! - Windows: NVIDIA's encoder and SudoVDA's virtual display, used when
-//!   they are here (without them: software H.264, and the main display
-//!   scaled, `docs/platforms/windows.md`).
+//! - Windows: NVIDIA's encoder, used when it is here (without it: software
+//!   H.264), and the drivers turning hosting on installs where they are
+//!   missing: SudoVDA's virtual display (without it: the main display
+//!   scaled) and ViGEmBus's controllers (`docs/platforms/windows.md`).
 //! - Linux: nothing to grant ahead (GNOME and KDE make each session a
 //!   display of its own; elsewhere the desktop portal asks on Wayland when a
 //!   device connects).
@@ -35,31 +36,37 @@ const ACCESSIBILITY_PANE: &str =
 /// What a Windows host has to stream with.
 #[cfg_attr(not(windows), allow(dead_code))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Gpu {
+pub struct Equipment {
     /// NVIDIA's encoder (`nvEncodeAPI64.dll`, installed with the driver).
     pub nvidia: bool,
     /// SudoVDA, the virtual display driver.
     pub sudovda: bool,
+    /// ViGEmBus, the virtual controllers' driver.
+    pub vigembus: bool,
 }
 
-/// What this Windows computer has (looked at as the page is drawn: a file
-/// and a device list, both quick).
+/// What this Windows computer has (looked at as the page is drawn: files
+/// and a device list, all quick).
 #[cfg(windows)]
-pub fn gpu() -> Gpu {
+pub fn equipment() -> Equipment {
     let system = std::env::var_os("SystemRoot")
         .map(std::path::PathBuf::from)
-        .unwrap_or_else(|| std::path::PathBuf::from(r"C:\Windows"));
-    Gpu {
-        nvidia: system.join("System32").join("nvEncodeAPI64.dll").is_file(),
+        .unwrap_or_else(|| std::path::PathBuf::from(r"C:\Windows"))
+        .join("System32");
+    Equipment {
+        nvidia: system.join("nvEncodeAPI64.dll").is_file(),
         sudovda: helio_display::sudovda::present(),
+        vigembus: system.join("drivers").join("ViGEmBus.sys").is_file(),
     }
 }
 
-/// The lines the GPU check says: (it is there, what, why).
+/// The lines the check says: (it is there, what, why). The drivers are
+/// installed by turning hosting on (`helio-host/src/hosting/drivers.rs`),
+/// so one missing while hosting is on did not install.
 #[cfg_attr(not(windows), allow(dead_code))]
-fn gpu_lines(gpu: Gpu) -> [(bool, &'static str, &'static str); 2] {
+fn equipment_lines(e: Equipment, hosting: bool) -> [(bool, &'static str, &'static str); 3] {
     [
-        if gpu.nvidia {
+        if e.nvidia {
             (
                 true,
                 "NVIDIA graphics",
@@ -73,19 +80,42 @@ fn gpu_lines(gpu: Gpu) -> [(bool, &'static str, &'static str); 2] {
                  lower quality for the bitrate and with more of the processor.",
             )
         },
-        if gpu.sudovda {
-            (
+        match (e.sudovda, hosting) {
+            (true, _) => (
                 true,
                 "SudoVDA",
                 "A virtual display at each device's own resolution and refresh rate.",
-            )
-        } else {
-            (
+            ),
+            (false, false) => (
+                false,
+                "SudoVDA, with hosting",
+                "Turning hosting on installs it, for a virtual display at each device's own \
+                 resolution (on x64 PCs: it is not built for Arm).",
+            ),
+            (false, true) => (
                 false,
                 "No SudoVDA",
-                "Streams the main display, scaled to each device. Install SudoVDA for a \
-                 display at the device's own resolution.",
-            )
+                "Streams the main display, scaled to each device: SudoVDA is built for x64 \
+                 PCs only, or did not install (turn hosting off and on to try again).",
+            ),
+        },
+        match (e.vigembus, hosting) {
+            (true, _) => (
+                true,
+                "ViGEmBus",
+                "Each device's controllers become Xbox controllers on this PC.",
+            ),
+            (false, false) => (
+                false,
+                "ViGEmBus, with hosting",
+                "Turning hosting on installs it, for each device's controllers.",
+            ),
+            (false, true) => (
+                false,
+                "No ViGEmBus",
+                "Takes no controllers: ViGEmBus did not install (turn hosting off and on to \
+                 try again).",
+            ),
         },
     ]
 }
@@ -254,8 +284,8 @@ impl HelioApp {
         }
         #[cfg(windows)]
         {
-            let _ = cx;
-            gpu_lines(gpu())
+            let hosting = self.hosting.read(cx).state.enabled();
+            equipment_lines(equipment(), hosting)
                 .into_iter()
                 .map(|(here, name, why)| {
                     div()
@@ -311,16 +341,38 @@ mod tests {
 
     #[test]
     fn without_nvidia_the_check_says_it_streams_in_software_h264() {
-        let [nvenc, display] = gpu_lines(Gpu {
-            nvidia: false,
-            sudovda: true,
-        });
+        let [nvenc, display, _] = equipment_lines(
+            Equipment {
+                nvidia: false,
+                sudovda: true,
+                vigembus: true,
+            },
+            true,
+        );
         assert!(!nvenc.0 && nvenc.2.contains("H.264, encoded in software"));
         assert!(display.0);
-        let [nvenc, display] = gpu_lines(Gpu {
+        let [nvenc, display, _] = equipment_lines(
+            Equipment {
+                nvidia: true,
+                sudovda: false,
+                vigembus: true,
+            },
+            true,
+        );
+        assert!(nvenc.0 && !display.0 && display.2.contains("scaled"));
+    }
+
+    #[test]
+    fn a_missing_driver_is_one_hosting_installs_until_hosting_is_on() {
+        let none = Equipment {
             nvidia: true,
             sudovda: false,
-        });
-        assert!(nvenc.0 && !display.0 && display.2.contains("scaled"));
+            vigembus: false,
+        };
+        let [_, display, pads] = equipment_lines(none, false);
+        assert!(display.2.starts_with("Turning hosting on installs it"));
+        assert!(pads.2.starts_with("Turning hosting on installs it"));
+        let [_, display, pads] = equipment_lines(none, true);
+        assert!(display.2.contains("did not install") && pads.2.contains("did not install"));
     }
 }

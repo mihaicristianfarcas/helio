@@ -75,6 +75,8 @@ helio-capture = { path = "../helio-capture" }
 helio-encode = { path = "../helio-encode" }
 windows-service = "0.8"
 windows = { version = "0.61", features = [
+    "Win32_Devices_DeviceAndDriverInstallation",
+    "Win32_Devices_Properties",
     "Win32_Foundation",
     "Win32_Graphics_Dwm",
     "Win32_Graphics_Gdi",

@@ -7,8 +7,9 @@
 //! computers from it, let devices play it, or both); for hosting, what the
 //! system must allow, each said in a line before it is asked (on a Mac,
 //! Screen Recording and Accessibility for the host; on Windows, the
-//! administrator UAC asks for, and whether there are NVIDIA graphics and
-//! SudoVDA); how to pair from the other computer; done.
+//! administrator UAC asks for, whether there are NVIDIA graphics, and the
+//! drivers turning hosting on installs); how to pair from the other
+//! computer; done.
 //!
 //! The step reached is saved as it is reached, so setup goes on from there
 //! after a restart (a Mac asks for one once Screen Recording is allowed).
@@ -474,8 +475,9 @@ impl HelioApp {
             (
                 "Hosting runs as a service, so Windows asks for an administrator once, to turn \
                  it on.",
-                "The host uses NVIDIA's encoder and SudoVDA's virtual display when they are \
-                 here; without them it still streams.",
+                "Turning it on also installs SudoVDA, for a virtual display at each device's \
+                 mode, and ViGEmBus, for controllers, where they are missing; turning it off \
+                 removes them again.",
             )
         } else {
             (

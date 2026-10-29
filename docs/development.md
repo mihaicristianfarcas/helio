@@ -130,8 +130,11 @@ tools/linux-dev tools/linux/virtual-display-test # GNOME's virtual display, head
 - `target\release\helio.exe host enable`, on the host, installs the built
   engine beside it as `HelioHost` (Windows asks for an administrator; the
   engine copies itself to `C:\Program Files\Helio Host` and runs the service
-  from there); run it again after a build, and `helio host disable` removes
-  it. A built Helio's switch does the same with the `helio-host.exe` beside
+  from there, and installs SudoVDA and ViGEmBus where they are missing:
+  ViGEmBus only from a `drivers\ViGEmBus_setup.exe` beside the engine, which
+  `tools/build-helio-win.ps1` puts in `target\Helio`); run it again after a
+  build, and `helio host disable` removes it, and the drivers it
+  installed. A built Helio's switch does the same with the `helio-host.exe` beside
   it (`tools/build-helio-win.ps1` puts it in `target\Helio`).
 - `tools/host-run.ps1 -Command '…'` runs a command in the interactive
   console session and prints its output: SSH lands in session 0, where there

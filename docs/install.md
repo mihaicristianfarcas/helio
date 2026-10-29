@@ -72,10 +72,11 @@ this once, for any program, since a program installed without an
 administrator cannot add a firewall rule. The host's own rules come with
 turning hosting on.
 
-To host, see what [Hosting on Windows](#hosting-on-windows) lists first
-(an NVIDIA GPU, SudoVDA), then turn hosting on in Helio: Windows asks
-whether Helio may make changes as an administrator, once to turn it on and
-once to turn it off.
+To host, turn hosting on in Helio ([Hosting on Windows](#hosting-on-windows)
+says what the host uses): Windows asks whether Helio may make changes as an
+administrator, once to turn it on and once to turn it off. Turning it on
+also installs the drivers the host uses that the PC lacks, SudoVDA and
+ViGEmBus; turning it off removes them again.
 
 To check the download before you run it, compare its SHA-256 with the one
 the site publishes (`latest/SHA256SUMS`) or GitHub shows beside the file on
@@ -105,9 +106,9 @@ in `~/.local/bin`, Helio's launcher entry with its icon, the host's own
 entry (hidden from the launcher: KDE gives the host a virtual display only
 through it), and the host's user service, installed but not turned on (see
 [Hosting on Linux](#hosting-on-linux)). It names any library the system is
-missing. Run from a newer download, it updates them, and restarts the
-host if hosting is on. `install.sh --uninstall` turns hosting off and
-removes what it installed.
+missing. Run from a newer download, it updates them, and
+restarts the host if hosting is on. `install.sh --uninstall` turns hosting
+off and removes what it installed.
 
 ## With Homebrew (macOS)
 
@@ -196,7 +197,9 @@ LaunchAgent that starts that copy at login and keeps it running
 **Screen Recording** (to capture) and **Accessibility** (to use the
 keyboard and mouse); grant both to **Helio Host** in System Settings >
 Privacy & Security. Helio itself never needs them. Without Accessibility,
-clients can watch but not control.
+clients can watch but not control. The host needs nothing installed
+beside Helio: its virtual display, capture, encoder and sound tap are
+macOS's own.
 
 A Helio run from `target/debug` or `target/release` uses the helper in the
 `target/Helio.app` that `tools/build-helio-app` made. To run the host from a
@@ -235,17 +238,19 @@ First, on the host PC:
 1. An **NVIDIA GPU** and a current driver (Helio Host encodes with NVENC).
    Without one, Helio Host encodes H.264 in software, with Media Foundation's
    encoder (part of Windows): no HDR, 4:4:4, HEVC or AV1.
-2. **SudoVDA**, the virtual display driver: installed by
-   [Apollo](https://github.com/ClassicOldSong/Apollo), or from
-   [SudoMaker/SudoVDA](https://github.com/SudoMaker/SudoVDA). If Apollo is
-   installed, stop its service while Helio Host runs (they share the driver).
-   Without it, Helio Host streams the PC's main display as it is.
-
-   [platforms/windows.md](platforms/windows.md#without-nvenc-or-sudovda)
-   says what a host without them can do.
-3. Optional: **[ViGEmBus](https://github.com/nefarius/ViGEmBus)**, for
-   controllers; **Steam** (its *Steam Streaming Speakers* device keeps the
-   sound on the client only, as Sunshine does).
+2. **SudoVDA**, the virtual display driver, and **ViGEmBus**, the
+   controllers' driver: turning hosting on installs each one the PC does
+   not have, and turning it off removes what it installed
+   ([platforms/windows.md](platforms/windows.md#the-drivers-hosting-installs)).
+   One already there, as Apollo's SudoVDA, is used as it is and left. SudoVDA
+   is built for x64 PCs: on Windows on Arm, Helio Host streams the main
+   display as it is
+   ([platforms/windows.md](platforms/windows.md#without-nvenc-or-sudovda)).
+   If Apollo runs, stop its service while Helio Host runs (they share the
+   driver).
+3. Optional: **Steam** (its *Steam Streaming Speakers* device keeps the
+   sound on the client only, as Sunshine does). It is Steam's own, so Helio
+   does not install it.
 
 Then turn hosting on in Helio, or in a terminal with `helio` installed
 (Windows asks for an administrator, as it does for the switch):
@@ -255,12 +260,15 @@ helio host enable    # or target\Helio\bin\helio.exe host enable from a build
 ```
 
 Turning hosting on copies the host's engine to `C:\Program Files\Helio Host`,
-and installs and starts **HelioHost** from there (it starts at boot, before
-anyone signs in, and adds Windows Firewall rules for Helio Host). Helio's own
+installs the drivers the PC lacks, and installs and starts **HelioHost**
+from there (it starts at boot, before anyone signs in, and adds Windows
+Firewall rules for Helio Host). What it says names what became of each
+driver. Helio's own
 updates put the new engine there while hosting is on; after a build of your
 own, turn hosting off and on (or run `helio host enable` again) to put the
 new engine in place. Turning it off (`helio host disable`) removes the service, its
-firewall rules and the host's copy in `C:\Program Files\Helio Host`.
+firewall rules, the drivers it installed and the host's copy in
+`C:\Program Files\Helio Host`.
 
 Helio Host's settings and state are in `C:\ProgramData\Helio Host`. Details:
 [platforms/windows.md](platforms/windows.md).
@@ -321,7 +329,7 @@ anywhere ([networking.md](networking.md)). Next: [usage.md](usage.md).
 |---|---|
 | Homebrew | `brew uninstall --cask helio`: it quits Helio, `helio` goes with the app, and the host, finding the app gone, turns hosting off itself 15 s later (its LaunchAgent and copy removed); `--zap` stops it at once and also deletes the data folders, Helio's and the host's, Helio's start at login and `/etc/paths.d/helio` (the line that put `helio` on the `PATH`) |
 | macOS | Turn hosting off in Helio (or run `helio host disable`), quit Helio, then delete Helio.app: `helio` goes with it. Deleted with hosting on, the host notices and, 15 s later, turns hosting off itself. Your data is in `~/Library/Application Support/Helio` and `~/Library/Application Support/Helio Host` (the host's identity and pairings), and `/etc/paths.d/helio` names the folder `helio` was in, if you installed it (`sudo rm /etc/paths.d/helio`) |
-| Windows | **Settings > Apps > Installed apps**, **Helio**, **Uninstall** (or `unins000.exe` in `%LOCALAPPDATA%\Programs\Helio`). While hosting is on, it turns it off first (HelioHost, its firewall rules and the host's copy go), and Windows asks for an administrator; if you say no, Helio stays installed. It takes `helio` off your `PATH`, if you put it there, and Helio's start at login. It leaves your hosts and settings, the host's identity and pairings, and the firewall rule Windows made when it asked about Helio (only an administrator can remove it, and it lets nothing in once Helio is gone): delete `%APPDATA%\Helio` and `C:\ProgramData\Helio Host` too to remove them. A copy run from the extracted zip: turn hosting off in it, then delete the folder |
+| Windows | **Settings > Apps > Installed apps**, **Helio**, **Uninstall** (or `unins000.exe` in `%LOCALAPPDATA%\Programs\Helio`). While hosting is on, it turns it off first (HelioHost, its firewall rules, the drivers hosting installed and the host's copy go), and Windows asks for an administrator; if you say no, Helio stays installed. It takes `helio` off your `PATH`, if you put it there, and Helio's start at login. It leaves your hosts and settings, the host's identity and pairings, and the firewall rule Windows made when it asked about Helio (only an administrator can remove it, and it lets nothing in once Helio is gone): delete `%APPDATA%\Helio` and `C:\ProgramData\Helio Host` too to remove them. A copy run from the extracted zip: turn hosting off in it, then delete the folder |
 | Linux | `install.sh --uninstall` from the download, or `tools/linux/install-apps --uninstall`: it turns hosting off first, then removes the programs, the `helio` link (if you installed it), the host's unit and the launcher entries. Then `~/.config/helio` and `~/.config/helio-host` |
 
 Unpair a device on the other side too (Helio: the host's menu > Unpair; the host:

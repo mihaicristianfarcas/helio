@@ -11,9 +11,51 @@ Moonlight, with Apollo's virtual display. Helio also runs on Windows 10 and 11.
 |---|---|
 | Windows 10 or 11, 64-bit | |
 | An NVIDIA GPU with NVENC, and its driver | Encoding. NVENC is loaded from the driver (`nvEncodeAPI64.dll`) at runtime: no CUDA toolkit or Video Codec SDK is needed to build or run. Without it, Helio Host encodes H.264 in software ([below](#without-nvenc-or-sudovda)) |
-| [SudoVDA](https://github.com/SudoMaker/SudoVDA) (SudoMaker Virtual Display Adapter) | A virtual display at each client's mode. Apollo installs it; it can also be installed on its own. Helio Host and Apollo cannot stream at the same time (they share the driver). Without it, Helio Host streams the host's main display ([below](#without-nvenc-or-sudovda)) |
-| [ViGEmBus](https://github.com/nefarius/ViGEmBus) (optional) | Controllers: each of the client's pads becomes a virtual Xbox 360 pad |
-| Steam's **Steam Streaming Speakers** (optional) | Sound only on the client: during a session the host's default output moves to this virtual device, so the host's speakers stay quiet (Sunshine's approach, its `virtual_sink`). Without it, the sound plays on the host too |
+| [SudoVDA](https://github.com/SudoMaker/SudoVDA) (SudoMaker Virtual Display Adapter) | A virtual display at each client's mode. Turning hosting on installs it if the PC has none, on x64 PCs (it is built for x64 only) ([below](#the-drivers-hosting-installs)). Helio Host and Apollo cannot stream at the same time (they share the driver). Without it, Helio Host streams the host's main display ([below](#without-nvenc-or-sudovda)) |
+| [ViGEmBus](https://github.com/nefarius/ViGEmBus) | Controllers: each of the client's pads becomes a virtual Xbox 360 pad. Turning hosting on installs it if the PC has none ([below](#the-drivers-hosting-installs)) |
+| Steam's **Steam Streaming Speakers** (optional) | Sound only on the client: during a session the host's default output moves to this virtual device, so the host's speakers stay quiet (Sunshine's approach, its `virtual_sink`). Without it, the sound plays on the host too. Steam's own: Helio does not install it |
+
+### The drivers hosting installs
+
+`helio-host enable` (the hosting switch), which runs as an administrator
+anyway, installs the two drivers Helio Host uses that the PC lacks, before
+it starts the service, as Apollo's installer installs them
+(`windows_nsis.cmake`) — so a PC that only plays never gets either
+(`helio-host/src/hosting/drivers.rs`):
+
+1. **SudoVDA 1.10.9.289**, the build Apollo 0.4.6 ships, comes inside
+   `helio-host.exe` ([vendor/sudovda](../../vendor/sudovda/README.md) says
+   where from, with its hashes and licenses). It is written to
+   `C:\Program Files\Helio Host\drivers\sudovda`; its publisher's
+   certificate, `CN=sudovda@su.mk`, is added to the machine's **Trusted Root**
+   and **Trusted Publishers** stores (Windows installs a user-mode driver
+   signed by its author only from a publisher it trusts; the certificate is
+   for code signing only); a root device with the hardware ID
+   `Root\SudoMaker\SudoVDA` is made, and the driver installed on it — what
+   Apollo's `install.bat` does with `nefconc`, here with SetupAPI. Not on
+   Windows on Arm.
+2. **ViGEmBus 1.22.0** is its author's signed installer, in `drivers\`
+   beside `helio-host.exe` (`tools/windows/drivers.ps1` puts it in the
+   package, pinned by its SHA-256). It is copied into the engine's folder,
+   checked against the same SHA-256 there, where only administrators can
+   change it, and run without a window (`/exenoui /qn /norestart`).
+
+A driver already on the PC — Apollo's SudoVDA, a ViGEmBus another program
+installed — is used as it is. What `enable` installed it writes down
+(`drivers\installed.toml` in the engine's folder), and `helio-host
+disable` removes exactly that once the service has stopped: SudoVDA's
+device, its driver package and the certificate, and ViGEmBus's Windows
+Installer product. So turning hosting off leaves the PC's drivers as they
+were before hosting; a program installed meanwhile that relies on a
+ViGEmBus Helio installed loses it then. Neither driver is needed to host:
+one that does not install is a line in what `enable` says (and the Hosting
+page says it is missing), not a failure.
+
+Measured in a Windows 11 Arm virtual machine (UTM on an M4 Pro), from a
+PC with neither driver: `enable` took 19 s, most of it ViGEmBus's
+installer; `disable` 3 s, ViGEmBus's uninstall included. On a PC with
+both already there (Windows 11 25H2, Apollo's SudoVDA, ViGEmBus 1.21),
+`enable` and `disable` left both as they were.
 
 ### How it runs
 
@@ -65,8 +107,9 @@ again through UAC (`ShellExecuteEx` with `runas`), says it waits for
 Windows meanwhile, and that nothing changed if you choose No. `helio host
 enable` and `disable` do the same from a terminal. Its Hosting
 page says whether there are NVIDIA graphics (NVENC; else H.264 in software,
-Media Foundation) and SudoVDA (a virtual display; else the main display,
-scaled).
+Media Foundation), SudoVDA (a virtual display; else the main display,
+scaled) and ViGEmBus (controllers): with hosting off, that turning it on
+installs them; with hosting on, that one missing did not install.
 
 While hosting is on, Helio is also the host's icon in the taskbar's
 notification area, as Sunshine's is: it runs as the signed-in user, not as

@@ -119,6 +119,8 @@ pub fn exit_code(result: &Result<String, Error>) -> i32 {
 }
 
 #[cfg(windows)]
+mod drivers;
+#[cfg(windows)]
 mod signature;
 #[cfg(windows)]
 #[path = "hosting/windows.rs"]
