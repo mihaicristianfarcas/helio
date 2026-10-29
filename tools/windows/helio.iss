@@ -14,19 +14,21 @@
 ;
 ; Hosting stays off: Helio's switch turns it on (Windows asks for an
 ; administrator then). Installed over a Helio whose hosting is on, the
-; installer turns it on again from the new files, as Helio's own update
-; does (helio-update/src/install/windows.rs): Windows asks, and the service
-; runs the new engine. A per-user install cannot add firewall rules: Windows
-; asks once, the first time Helio listens, as it does for any program; the
-; host's rules come with `helio host enable`.
+; installer turns it on again from the new files: Windows asks, and the
+; service runs the new engine. Helio's own update runs this installer too,
+; silently and with /HELIOUPDATE (helio-update/src/install/windows.rs): it
+; updates the host itself, having asked Windows while its window was in
+; front, so the installer leaves the host alone then. A per-user install
+; cannot add firewall rules: Windows asks once, the first time Helio
+; listens, as it does for any program; the host's rules come with
+; `helio host enable`.
 ;
 ; Uninstalling turns hosting off first, while it is on (`helio-host
 ; disable`: the service, its firewall rules and the engine's copy in
 ; Program Files go; Windows asks for an administrator, and a refusal stops
 ; the uninstall with Helio in place). It also takes away what Helio made
-; beside its files: `bin` on the user's PATH, Helio's start at login, and
-; the files an in-app update brings that this installer did not (FFmpeg's
-; DLLs of another version, files renamed aside as *.old). It keeps Helio's
+; beside its files: `bin` on the user's PATH and Helio's start at login.
+; It keeps Helio's
 ; hosts and settings (%APPDATA%\Helio), the host's identity and pairings
 ; (C:\ProgramData\Helio Host), and the firewall rules Windows made when it
 ; asked about Helio.exe: only an administrator can remove those, and they
@@ -111,22 +113,14 @@ Source: "{#Source}\FFmpeg LICENSE.txt"; DestDir: "{app}"; Flags: ignoreversion
 
 [InstallDelete]
 ; What an older release left: FFmpeg's DLLs of another version (this
-; release's are copied right after), and files its update renamed aside.
+; release's are copied right after).
 Type: files; Name: "{app}\avcodec-*.dll"
 Type: files; Name: "{app}\avutil-*.dll"
 Type: files; Name: "{app}\swresample-*.dll"
-Type: files; Name: "{app}\*.old"
-Type: files; Name: "{app}\bin\*.old"
 
 [UninstallDelete]
-; What an in-app update put in the folder, which the uninstaller's record
-; of this install does not list. Only Helio's own names: the folder goes
-; once it is empty, and only then.
-Type: files; Name: "{app}\avcodec-*.dll"
-Type: files; Name: "{app}\avutil-*.dll"
-Type: files; Name: "{app}\swresample-*.dll"
-Type: files; Name: "{app}\*.old"
-Type: files; Name: "{app}\bin\*.old"
+; The folders, once the uninstaller's record of every install over them
+; has gone; only empty, and only then.
 Type: dirifempty; Name: "{app}\bin"
 Type: dirifempty; Name: "{app}"
 
@@ -194,14 +188,27 @@ begin
     Result := ERROR_CANCELLED;
 end;
 
+{ Run by Helio's own update (/HELIOUPDATE): Helio updates the host
+  itself. Asked here, by a setup with no window, Windows would only flash
+  its request in the taskbar; Helio asked while its window was in front. }
+function UpdatedByHelio: Boolean;
+var
+  I: Integer;
+begin
+  Result := False;
+  for I := 1 to ParamCount do
+    if CompareText(ParamStr(I), '/HELIOUPDATE') = 0 then
+      Result := True;
+end;
+
 { Installed over a Helio whose hosting is on: the host is put on the new
-  engine, as Helio's own update does. Declined, Helio is installed all the
-  same and the host keeps the engine it had. }
+  engine. Declined, Helio is installed all the same and the host keeps the
+  engine it had. }
 procedure CurStepChanged(CurStep: TSetupStep);
 var
   Code: Integer;
 begin
-  if (CurStep <> ssPostInstall) or not HostingIsOn then
+  if (CurStep <> ssPostInstall) or not HostingIsOn or UpdatedByHelio then
     Exit;
   Code := RunEngineElevated('enable');
   if Code <> 0 then

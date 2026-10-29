@@ -60,7 +60,16 @@ certificates, as `webpki-roots` carries them), once a day, without an
 account, sending nothing but the request and the version in its
 `User-Agent`. Its answers are read as untrusted input, and the only
 links it passes on for opening are pages of this repository. Nothing is
-downloaded or installed. It can be turned off
+downloaded or installed until you choose **Install and Restart**. That
+downloads the release's package for your system from the repository's
+releases, keeps it only if it is the file GitHub's SHA-256 says, and then
+only if it is signed by Helio's maker: on macOS with the same team's
+Developer ID as the app it replaces; on Windows, the installer with
+Helio's Authenticode certificate (required by releases built once Helio
+had one; before that the SHA-256 is the only check). On Windows, while
+hosting is on, the host's engine in Program Files is replaced only by the
+new engine's own `enable`, which checks the signature of its copy there
+as turning hosting on does. The check can be turned off
 ([docs/usage.md](docs/usage.md#updates)).
 
 **The window's local socket.** On macOS and Linux each app listens on a

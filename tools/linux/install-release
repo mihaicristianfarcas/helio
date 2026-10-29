@@ -11,8 +11,9 @@
 # - the launcher entry, with its icon;
 # - the host's user unit (helio-host.service), installed but not enabled: hosting
 #   is off until the app's switch turns it on (`helio-host enable`). An update
-#   over a host that runs restarts it on the new engine; one that is off
-#   stays off.
+#   while hosting is on (the unit enabled) restarts the host on the new
+#   engine, whether it ran or had failed; one that is off stays off. This
+#   is also how Helio's own update installs (helio-update/src/install/linux.rs).
 #
 #   ./install.sh                # from the unpacked archive
 #   ./install.sh --uninstall    # hosting off first, then all of the above
@@ -107,14 +108,22 @@ while IFS= read -r line; do
 done < "$HERE/helio-host.service" > "$UNITS/helio-host.service"
 echo "installed helio-app and helio-host in $BIN"
 
-# The unit known to systemd, not enabled; a host that runs (hosting on)
-# restarted on the new engine. Without a systemd user instance (some
-# distributions, a session without one) the app works, but cannot host.
+# The unit known to systemd, not enabled; while hosting is on (enabled),
+# the host restarted on the new engine, or started if it had failed. A host
+# started by hand with hosting off is restarted only if it runs. Without a
+# systemd user instance (some distributions, a session without one) the
+# app works, but cannot host.
 if systemctl --user daemon-reload 2>/dev/null; then
-    systemctl --user try-restart helio-host.service
     if systemctl --user is-enabled --quiet helio-host.service 2>/dev/null; then
-        echo "hosting is on: the host runs the new engine (systemctl --user status helio-host)"
+        # Installed all the same if it does not start: hosting stays on,
+        # and the unit's status says why.
+        if systemctl --user restart helio-host.service; then
+            echo "hosting is on: the host runs the new engine (systemctl --user status helio-host)"
+        else
+            echo "note: hosting is on, but the host did not start on the new engine: systemctl --user status helio-host says why"
+        fi
     else
+        systemctl --user try-restart helio-host.service
         echo "hosting is off: turn it on in Helio (Settings > Hosting)"
     fi
 else

@@ -1,35 +1,72 @@
-//! Installing an update on Windows.
+//! Installing an update on Windows: the release's installer
+//! (`Helio-X.Y.Z-windows-x86_64-setup.exe`, `tools/windows/helio.iss`),
+//! the one program that installs Helio, the host's engine with it. An
+//! update is that installer run again over Helio, as a person would run a
+//! newer one, silently.
 //!
-//! The app replaces its files, the host's engine (`helio-host.exe`) and the
-//! `helio` command (`bin\helio.exe`) among them, in the folder it runs from
-//! (per user, so no administrator is needed). A
-//! running program or loaded DLL cannot be written over or deleted, but it
-//! can be renamed: the old files are renamed `*.old` and the new ones
-//! copied beside them; the next start deletes the old ones. The archive is
-//! the release's zip, the installer's files and nothing else
-//! (`tools/package-windows.ps1`), and no installer runs: the new app, when
-//! it starts, brings the installer's entry in Settings > Apps to its
-//! version ([`keep_listed`]).
+//! 1. The installer is downloaded and checked: GitHub's SHA-256, then its
+//!    Authenticode signature, by Helio's publisher (`authenticode`).
+//! 2. A waiter is started, Windows PowerShell with no window ([`waiter`]):
+//!    once the app has quit, it runs the installer for this user, with no
+//!    administrator (`/VERYSILENT /SUPPRESSMSGBOXES /NORESTART`), and opens
+//!    the app again, the new one or, if the installer failed (it then puts
+//!    everything back), the one there was. What went wrong goes in the
+//!    update log, which the next start reads.
+//! 3. While hosting is on, the service runs the engine's copy in Program
+//!    Files, which only `helio-host enable`, as an administrator, replaces
+//!    (`helio-host/src/hosting/windows.rs`). So Windows is asked now, while
+//!    the app's window is in front ([`update_host`]): asked later, by the
+//!    waiter or the installer, which have no window, it would only flash in
+//!    the taskbar. Allowed, the engine there waits for the waiter and then
+//!    runs the new engine's `enable` (`helio-host update-engine`), which
+//!    checks it, puts it in place and restarts the service on it. Declined,
+//!    the update stops there: the waiter is ended and nothing has changed.
+//!    The installer is told to leave the host to Helio (`/HELIOUPDATE`).
+//!    Without hosting on, nothing asks for an administrator.
 //!
-//! The host itself runs from the engine's own copy in Program Files, which
-//! only `helio-host enable`, as an administrator, replaces
-//! (`helio-host/src/hosting/windows.rs`): while hosting is on, the update runs it
-//! again from the new files, and Windows asks ([`update_host`]).
+//! Only a copy the installer put in place updates itself: one unpacked
+//! elsewhere would be installed beside, not replaced.
 
 use std::os::windows::process::CommandExt;
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Child, Command, Stdio};
 use std::time::Duration;
 
-use super::ps_quote;
+use super::{authenticode, ps_quote};
 
-/// How this copy is updated: the files in `dir`.
+/// How this copy is updated: the installer's, in `dir`.
 pub(crate) struct Method {
     dir: PathBuf,
 }
 
 /// No console window for a script or a tool.
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
+/// Helio's entry in Settings > Apps, under HKEY_CURRENT_USER, as the
+/// installer names it: its `AppId`, to which Inno Setup adds `_is1`.
+const HELIO_ENTRY: &str =
+    r"Software\Microsoft\Windows\CurrentVersion\Uninstall\dev.mihaicristian.helio_is1";
+
+/// HelioHost, the service hosting runs as (`helio-host/src/service.rs`):
+/// registered while hosting is on, and only then (`helio-host enable`,
+/// `disable`). The installer looks at the same key.
+const HOST_SERVICE: &str = r"SYSTEM\CurrentControlSet\Services\HelioHost";
+
+/// What tells the installer that Helio updates the host itself
+/// (`tools/windows/helio.iss`).
+const HELIO_UPDATE: &str = "/HELIOUPDATE";
+
+/// The file the app writes once it has handed the update over: the waiter
+/// runs the installer only when it is there. An app that gave the update
+/// up (Windows was not allowed to update the host), or died before handing
+/// over, leaves none.
+const HANDED_OVER: &str = "handed-over";
+
+/// How long the waiter waits for the app to quit before it runs the
+/// installer all the same, which then closes what still runs from Helio's
+/// folder (Restart Manager). Quitting takes the app well under a second;
+/// a stream ending takes a moment more.
+const APP_QUIT_WAIT: Duration = Duration::from_secs(60);
 
 /// Windows' own programs, by full path: never one that happens to be on
 /// PATH or in the current folder.
@@ -44,271 +81,23 @@ fn powershell() -> PathBuf {
     system32(r"WindowsPowerShell\v1.0\powershell.exe")
 }
 
-pub(crate) fn method() -> Result<Method, String> {
-    let exe = std::env::current_exe().map_err(|e| e.to_string())?;
-    let dir = exe
-        .parent()
-        .ok_or("Helio's folder is unknown")?
-        .to_path_buf();
-    let probe = dir.join(".helio-update-probe");
-    std::fs::write(&probe, b"")
-        .and_then(|()| std::fs::remove_file(&probe))
-        .map_err(|_| {
-            format!(
-                "Helio cannot change its own folder ({}): download the update instead.",
-                dir.display()
-            )
-        })?;
-    Ok(Method { dir })
-}
-
-pub(crate) fn needs_archive(_method: &Method) -> bool {
-    true
-}
-
-/// Windows' own tar (Windows 10 1803 and later) unpacks a zip; failing
-/// that, PowerShell's Expand-Archive.
-pub(crate) fn unpack(archive: &Path, into: &Path) -> Result<(), String> {
-    let tar = system32("tar.exe");
-    let out = if tar.is_file() {
-        Command::new(tar)
-            .arg("-xf")
-            .arg(archive)
-            .arg("-C")
-            .arg(into)
-            .creation_flags(CREATE_NO_WINDOW)
-            .output()
-    } else {
-        Command::new(powershell())
-            .args(["-NoProfile", "-NonInteractive", "-Command"])
-            .arg(format!(
-                "Expand-Archive -LiteralPath {} -DestinationPath {} -Force",
-                ps_quote(&archive.to_string_lossy()),
-                ps_quote(&into.to_string_lossy())
-            ))
-            .creation_flags(CREATE_NO_WINDOW)
-            .output()
-    }
-    .map_err(|e| format!("the archive could not be unpacked: {e}"))?;
-    if out.status.success() {
-        Ok(())
-    } else {
-        Err(format!(
-            "the archive did not unpack: {}",
-            String::from_utf8_lossy(&out.stderr).trim()
-        ))
-    }
-}
-
-pub(crate) fn place(
-    method: &Method,
-    unpacked: &Path,
-    _stage: &Path,
-    _dir: &Path,
-) -> Result<(), String> {
-    let folder = &method.dir;
-    replace_files(unpacked, folder)?;
-    update_host(folder);
-    let new = folder.join("Helio.exe");
-    Command::new(&new)
-        .args(["--after-update", &std::process::id().to_string()])
-        .spawn()
-        .map(drop)
-        .map_err(|e| format!("the new Helio did not start: {e}"))
-}
-
-/// While hosting is on, `helio-host enable` from the new files in `folder`, as an
-/// administrator (Windows asks, as when hosting was turned on): it puts the
-/// new engine in Program Files and restarts the service on it. Without it
-/// the host would go on running the engine of the release before. Not
-/// allowed, or failed: the app is updated all the same, the host keeps the
-/// engine it had, and turning hosting off and on brings it up to date.
-fn update_host(folder: &Path) {
-    let engine = folder.join("helio-host.exe");
-    let status = Command::new(&engine)
-        .args(["status", "--json"])
-        .creation_flags(CREATE_NO_WINDOW)
-        .output();
-    if !status.is_ok_and(|out| hosting_on(&out.stdout)) {
-        return;
-    }
-    tracing::info!("hosting is on: the host's engine is updated as an administrator");
-    // Stop: a refused prompt is an error, and the exit code says so.
-    let script = format!(
-        "$ErrorActionPreference = 'Stop'; \
-         $p = Start-Process -FilePath {} -ArgumentList enable -Verb RunAs -WindowStyle Hidden \
-         -Wait -PassThru; exit $p.ExitCode",
-        ps_quote(&engine.to_string_lossy())
-    );
-    match Command::new(powershell())
-        .args(["-NoProfile", "-NonInteractive", "-Command", &script])
-        .creation_flags(CREATE_NO_WINDOW)
-        .output()
-    {
-        Ok(out) if out.status.success() => tracing::info!("the host runs the new engine"),
-        Ok(out) => tracing::warn!(
-            code = ?out.status.code(),
-            error = %String::from_utf8_lossy(&out.stderr).trim(),
-            "the host's engine was not updated: it runs the one it had until hosting is \
-             turned off and on"
-        ),
-        Err(e) => tracing::warn!(error = %e, "the host's engine was not updated"),
-    }
-}
-
-/// Whether what `helio-host status --json` printed says hosting is on (starting,
-/// on, or on but failing: the service runs an engine either way).
-fn hosting_on(status: &[u8]) -> bool {
-    serde_json::from_slice::<serde_json::Value>(status)
-        .ok()
-        .and_then(|v| v.get("state")?.as_str().map(|s| s != "off"))
-        .unwrap_or(false)
-}
-
-/// Whether `name` is one of the app's own files: only those are renamed
-/// aside or deleted, in a folder that may hold anything (Downloads).
-fn ours(name: &str) -> bool {
-    let lower = name.to_ascii_lowercase();
-    let dll = |prefix: &str| {
-        lower
-            .strip_prefix(prefix)
-            .and_then(|rest| rest.strip_suffix(".dll"))
-            .is_some_and(|n| !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit()))
-    };
-    lower == "helio.exe"
-        || lower == "helio-host.exe"
-        || lower == "ffmpeg license.txt"
-        || dll("avcodec-")
-        || dll("avutil-")
-        || dll("swresample-")
-}
-
-/// The `helio` command, in a folder of its own beside the app's files, which
-/// Helio's Settings > General puts on the PATH (helio-app's command.rs):
-/// `helio.exe` cannot sit beside `Helio.exe`.
-const COMMAND: &str = r"bin\helio.exe";
-
-/// The name a file renamed aside gets: `Helio.exe.old`, or
-/// `Helio.exe.2.old` while an older one is still held.
-fn aside(path: &Path) -> PathBuf {
-    let name = path
-        .file_name()
-        .map(|n| n.to_string_lossy().into_owned())
-        .unwrap_or_default();
-    let first = path.with_file_name(format!("{name}.old"));
-    if std::fs::remove_file(&first).is_ok() || !first.exists() {
-        return first;
-    }
-    (2..100)
-        .map(|n| path.with_file_name(format!("{name}.{n}.old")))
-        .find(|p| std::fs::remove_file(p).is_ok() || !p.exists())
-        .unwrap_or(first)
-}
-
-/// The archive's program files over Helio's in `dir`, all or none: those
-/// beside Helio.exe, and the command in its folder ([`COMMAND`]). FFmpeg's
-/// DLLs of an older version (another number) are renamed aside too: the
-/// uninstaller deletes what an update leaves (`tools/windows/helio.iss`).
-fn replace_files(unpacked: &Path, dir: &Path) -> Result<(), String> {
-    let mut new: Vec<(PathBuf, PathBuf)> = std::fs::read_dir(unpacked)
-        .map_err(|e| e.to_string())?
-        .filter_map(Result::ok)
-        .map(|e| e.path())
-        .filter(|p| p.is_file() && p.file_name().is_some_and(|n| ours(&n.to_string_lossy())))
-        .filter_map(|p| {
-            let to = dir.join(p.file_name()?);
-            Some((p, to))
-        })
-        .collect();
-    let names: Vec<String> = new
-        .iter()
-        .filter_map(|(p, _)| {
-            p.file_name()
-                .map(|n| n.to_string_lossy().to_ascii_lowercase())
-        })
-        .collect();
-    if !names.iter().any(|n| n == "helio.exe") {
-        return Err("the archive has no Helio.exe".into());
-    }
-    let command = unpacked.join(COMMAND);
-    if command.is_file() {
-        let to = dir.join(COMMAND);
-        if let Some(bin) = to.parent() {
-            std::fs::create_dir_all(bin).map_err(|e| format!("{}: {e}", bin.display()))?;
-        }
-        new.push((command, to));
-    }
-    let stale: Vec<PathBuf> = std::fs::read_dir(dir)
-        .map_err(|e| e.to_string())?
-        .filter_map(Result::ok)
-        .map(|e| e.path())
-        .filter(|p| {
-            p.file_name()
-                .map(|n| n.to_string_lossy().into_owned())
-                .is_some_and(|n| ours(&n) && !names.contains(&n.to_ascii_lowercase()))
-        })
-        .collect();
-
-    let mut moved: Vec<(PathBuf, PathBuf)> = Vec::new();
-    let mut written: Vec<PathBuf> = Vec::new();
-    let result = (|| -> Result<(), String> {
-        for old in &stale {
-            let to = aside(old);
-            std::fs::rename(old, &to).map_err(|e| format!("{}: {e}", old.display()))?;
-            moved.push((old.clone(), to));
-        }
-        for (file, target) in &new {
-            if target.exists() {
-                let to = aside(target);
-                std::fs::rename(target, &to).map_err(|e| format!("{}: {e}", target.display()))?;
-                moved.push((target.clone(), to));
-            }
-            std::fs::copy(file, target).map_err(|e| format!("{}: {e}", target.display()))?;
-            written.push(target.clone());
-        }
-        Ok(())
-    })();
-    if result.is_err() {
-        for path in &written {
-            let _ = std::fs::remove_file(path);
-        }
-        for (from, to) in moved.iter().rev() {
-            let _ = std::fs::rename(to, from);
-        }
-    }
-    result
-}
-
-/// Where the installer (`tools/windows/helio.iss`) installs Helio.
-fn helio_install_folder() -> Option<PathBuf> {
-    std::env::var_os("LOCALAPPDATA").map(|dir| PathBuf::from(dir).join(r"Programs\Helio"))
-}
-
-/// Helio's entry in Settings > Apps, under HKEY_CURRENT_USER, as the
-/// installer names it: its `AppId`, to which Inno Setup adds `_is1`.
-const HELIO_ENTRY: &str =
-    r"Software\Microsoft\Windows\CurrentVersion\Uninstall\dev.mihaicristian.helio_is1";
-
-/// Whether two paths name the same folder, as Windows compares them:
-/// without regard to case or a trailing separator.
-fn same_folder(a: &Path, b: &Path) -> bool {
-    let norm = |p: &Path| p.to_string_lossy().trim_end_matches('\\').to_lowercase();
-    norm(a) == norm(b)
-}
-
-/// The version Helio's entry in Settings > Apps names, if there is one.
-fn listed_version() -> Option<String> {
+/// A string value of a registry key, if both are there.
+fn registry_string(
+    root: windows::Win32::System::Registry::HKEY,
+    key: &str,
+    value: &str,
+) -> Option<String> {
     use windows::core::HSTRING;
-    use windows::Win32::System::Registry::{RegGetValueW, HKEY_CURRENT_USER, RRF_RT_REG_SZ};
-    let mut text = [0u16; 64];
+    use windows::Win32::System::Registry::{RegGetValueW, RRF_RT_REG_SZ};
+    let mut text = [0u16; 2048];
     let mut bytes = std::mem::size_of_val(&text) as u32;
     // SAFETY: `text` is writable for the `bytes` said; RegGetValueW writes at
     // most that, ends a REG_SZ with a NUL, and says how many bytes it wrote.
     let status = unsafe {
         RegGetValueW(
-            HKEY_CURRENT_USER,
-            &HSTRING::from(HELIO_ENTRY),
-            &HSTRING::from("DisplayVersion"),
+            root,
+            &HSTRING::from(key),
+            &HSTRING::from(value),
             RRF_RT_REG_SZ,
             None,
             Some(text.as_mut_ptr().cast()),
@@ -322,89 +111,279 @@ fn listed_version() -> Option<String> {
     Some(String::from_utf16_lossy(&text[..len]))
 }
 
-/// At each start: a Helio that runs from the folder the installer put it
-/// in keeps the installer's entry in Settings > Apps naming its `version`.
-/// Helio's own update replaces the files and runs no installer, so the
-/// entry would go on naming the release that was installed. A folder with
-/// no entry (files copied there by hand) is given none: the entry is the
-/// uninstaller's, and only the installer puts one there. Run on the update
-/// check's thread, not the window's.
-pub(crate) fn keep_listed(version: &str) {
-    use windows::core::{w, HSTRING};
-    use windows::Win32::System::Registry::{RegSetKeyValueW, HKEY_CURRENT_USER, REG_SZ};
-    let Some(dir) = std::env::current_exe()
-        .ok()
-        .and_then(|e| e.parent().map(Path::to_path_buf))
-    else {
-        return;
-    };
-    if !helio_install_folder().is_some_and(|f| same_folder(&dir, &f)) {
-        return;
+/// Whether two paths name the same folder, as Windows compares them:
+/// without regard to case or a trailing separator.
+fn same_folder(a: &Path, b: &Path) -> bool {
+    let norm = |p: &Path| p.to_string_lossy().trim_end_matches('\\').to_lowercase();
+    norm(a) == norm(b)
+}
+
+pub(crate) fn method() -> Result<Method, String> {
+    use windows::Win32::System::Registry::HKEY_CURRENT_USER;
+    let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+    let dir = exe
+        .parent()
+        .ok_or("Helio's folder is unknown")?
+        .to_path_buf();
+    // Where the installer put Helio, as its entry in Settings > Apps says
+    // (per user, as it installs).
+    let installed = registry_string(HKEY_CURRENT_USER, HELIO_ENTRY, "InstallLocation");
+    if !installed.is_some_and(|f| same_folder(&dir, Path::new(&f))) {
+        return Err(format!(
+            "This copy of Helio was not installed with its installer (it runs from {}): \
+             download the update and install it.",
+            dir.display()
+        ));
     }
-    match listed_version() {
-        Some(listed) if listed != version => {}
-        _ => return,
+    Ok(Method { dir })
+}
+
+pub(crate) fn needs_package(_method: &Method) -> bool {
+    true
+}
+
+/// The installer, once its signature is known to be Helio's publisher's.
+pub(crate) fn open(setup: &Path, _stage: &Path) -> Result<PathBuf, String> {
+    authenticode::check(setup, authenticode::PUBLISHER)?;
+    Ok(setup.to_path_buf())
+}
+
+/// Hand the update over: the waiter started, Windows asked to update the
+/// host while hosting is on, and, once all that is settled, the word the
+/// waiter waits for. The app then quits.
+pub(crate) fn place(method: &Method, setup: &Path, stage: &Path, dir: &Path) -> Result<(), String> {
+    let handed_over = stage.join(HANDED_OVER);
+    let _ = std::fs::remove_file(&handed_over);
+    let log = super::log_path(dir);
+    let mut waiter = start_waiter(&Waiter {
+        app_pid: std::process::id(),
+        handed_over: &handed_over,
+        setup,
+        setup_log: &setup_log_path(dir),
+        app: &method.dir.join("Helio.exe"),
+        log: &log,
+    })?;
+    let handed = (|| {
+        if hosting_on() {
+            update_host(waiter.id(), &method.dir)?;
+        }
+        std::fs::write(&handed_over, b"").map_err(|e| format!("{}: {e}", handed_over.display()))
+    })();
+    if handed.is_err() {
+        let _ = waiter.kill();
     }
-    tracing::info!(version, "Settings > Apps: Helio's entry names this version");
-    let wide: Vec<u16> = version.encode_utf16().chain([0]).collect();
-    // SAFETY: `wide` is NUL-ended, lives across the call, and is `cbdata`
-    // bytes long, its NUL included, as REG_SZ wants.
+    handed
+}
+
+/// Inno Setup's own log of the update's run, beside the update log.
+fn setup_log_path(dir: &Path) -> PathBuf {
+    dir.join("update-setup.log")
+}
+
+/// Whether hosting is on: HelioHost is registered.
+fn hosting_on() -> bool {
+    use windows::core::HSTRING;
+    use windows::Win32::System::Registry::{RegGetValueW, HKEY_LOCAL_MACHINE, RRF_RT_ANY};
+    // SAFETY: asks only whether the value exists: no buffer is passed.
     let status = unsafe {
-        RegSetKeyValueW(
-            HKEY_CURRENT_USER,
-            &HSTRING::from(HELIO_ENTRY),
-            w!("DisplayVersion"),
-            REG_SZ.0,
-            Some(wide.as_ptr().cast()),
-            (wide.len() * 2) as u32,
+        RegGetValueW(
+            HKEY_LOCAL_MACHINE,
+            &HSTRING::from(HOST_SERVICE),
+            &HSTRING::from("ImagePath"),
+            RRF_RT_ANY,
+            None,
+            None,
+            None,
         )
     };
-    if let Err(e) = status.ok() {
-        tracing::warn!(error = %e, "Helio's entry in Settings > Apps was not updated");
-    }
+    status.is_ok()
 }
 
-/// `install::rehearse`: the app's files replaced in `folder` as in its
-/// own. The host and the entry in Settings > Apps are left alone.
-pub(crate) fn rehearse(unpacked: &Path, folder: &Path) -> Result<(), String> {
-    replace_files(unpacked, folder)
+/// What the waiter is told.
+struct Waiter<'a> {
+    /// The app, which quits first.
+    app_pid: u32,
+    /// [`HANDED_OVER`].
+    handed_over: &'a Path,
+    setup: &'a Path,
+    /// [`setup_log_path`].
+    setup_log: &'a Path,
+    /// Helio.exe, opened again after.
+    app: &'a Path,
+    /// The update log.
+    log: &'a Path,
 }
 
-/// Delete what an update renamed aside in Helio's folder and the command's
-/// ([`COMMAND`]), now that nothing holds it.
-pub(crate) fn tidy() {
-    let Some(dir) = std::env::current_exe()
-        .ok()
-        .and_then(|e| e.parent().map(Path::to_path_buf))
-    else {
-        return;
+/// The waiter's script, for Windows PowerShell 5.1 (every Windows 10 and 11
+/// has it). It exits with the installer's exit code (0: installed), which
+/// the host's update waits for; 2 when the update was given up. Inno
+/// Setup's own codes: 1 it did not start, 2 or 5 cancelled, 3 or 4 a fatal
+/// error, 8 it asks for a restart first.
+fn waiter(w: &Waiter) -> String {
+    // One string, as the installer reads its command line: the log's path
+    // may have spaces, and Start-Process passes the string as it is.
+    let arguments = format!(
+        "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /NOCANCEL {HELIO_UPDATE} /LOG=\"{}\"",
+        w.setup_log.display()
+    );
+    let folder = w.app.parent().unwrap_or(w.app);
+    format!(
+        "# Helio's update (helio-update), once Helio has quit: its installer, silently, \
+         then Helio again.\n\
+         $ErrorActionPreference = 'Stop'\n\
+         $code = 1\n\
+         try {{\n\
+         \x20   Wait-Process -Id {pid} -Timeout {wait} -ErrorAction SilentlyContinue\n\
+         \x20   if (-not (Test-Path -LiteralPath {handed_over})) {{ exit 2 }}\n\
+         \x20   $setup = Start-Process -FilePath {setup} -ArgumentList {arguments} -PassThru\n\
+         \x20   # Held from the start: a process that has exited has no exit code to give\n\
+         \x20   # without it.\n\
+         \x20   $null = $setup.Handle\n\
+         \x20   $setup.WaitForExit()\n\
+         \x20   $code = $setup.ExitCode\n\
+         \x20   if ($code -ne 0) {{\n\
+         \x20       throw ('the installer stopped with exit code ' + $code + ' (its log: ' + {setup_log} + ')')\n\
+         \x20   }}\n\
+         }} catch {{\n\
+         \x20   Add-Content -LiteralPath {log} -Encoding UTF8 -Value $_.Exception.Message\n\
+         }}\n\
+         Start-Process -FilePath {app} -WorkingDirectory {folder}\n\
+         exit $code\n",
+        pid = w.app_pid,
+        wait = APP_QUIT_WAIT.as_secs(),
+        handed_over = ps_quote(&w.handed_over.to_string_lossy()),
+        setup = ps_quote(&w.setup.to_string_lossy()),
+        arguments = ps_quote(&arguments),
+        setup_log = ps_quote(&w.setup_log.to_string_lossy()),
+        log = ps_quote(&w.log.to_string_lossy()),
+        app = ps_quote(&w.app.to_string_lossy()),
+        folder = ps_quote(&folder.to_string_lossy()),
+    )
+}
+
+/// Started with this app's environment, which the new app is then opened
+/// with (a data folder it was pointed at, say), but for a UI demo's steps:
+/// those were for this copy.
+fn start_waiter(w: &Waiter) -> Result<Child, String> {
+    Command::new(powershell())
+        .args(["-NoProfile", "-NonInteractive", "-Command", &waiter(w)])
+        .env_remove("HELIO_UI_DEMO")
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .creation_flags(CREATE_NO_WINDOW)
+        .spawn()
+        .map_err(|e| format!("the update's installer could not be started: {e}"))
+}
+
+/// `C:\Program Files\Helio Host\helio-host.exe`, the engine the service
+/// runs, found as helio-host finds it: by its known folder, not
+/// `%ProgramFiles%`, which whoever runs this could point anywhere.
+fn service_engine() -> Result<PathBuf, String> {
+    use windows::Win32::System::Com::CoTaskMemFree;
+    use windows::Win32::UI::Shell::{FOLDERID_ProgramFiles, SHGetKnownFolderPath, KF_FLAG_DEFAULT};
+    // SAFETY: the shell allocates the path; it is copied, then freed once.
+    let folder = unsafe {
+        let path = SHGetKnownFolderPath(&FOLDERID_ProgramFiles, KF_FLAG_DEFAULT, None)
+            .map_err(|e| format!("cannot find Program Files: {}", e.message()))?;
+        let text = path.to_string();
+        CoTaskMemFree(Some(path.0 as *const _));
+        text.map_err(|e| e.to_string())?
     };
-    tidy_in(&dir);
-    if let Some(bin) = dir.join(COMMAND).parent() {
-        tidy_in(bin);
-    }
+    Ok(PathBuf::from(folder).join(r"Helio Host\helio-host.exe"))
 }
 
-fn tidy_in(dir: &Path) {
-    let Ok(entries) = std::fs::read_dir(dir) else {
-        return;
-    };
-    for path in entries.filter_map(Result::ok).map(|e| e.path()) {
-        let Some(name) = path.file_name().map(|n| n.to_string_lossy().into_owned()) else {
-            continue;
-        };
-        // name.old, name.N.old
-        let Some(rest) = name.strip_suffix(".old") else {
-            continue;
-        };
-        let original = match rest.rsplit_once('.') {
-            Some((stem, n)) if n.bytes().all(|b| b.is_ascii_digit()) && !n.is_empty() => stem,
-            _ => rest,
-        };
-        if ours(original) {
-            let _ = std::fs::remove_file(&path);
+/// This app's window, if it is the one in front: the window Windows' UAC
+/// prompt is asked for, so that it opens at once rather than as a button
+/// that flashes in the taskbar (Windows does that for a request from a
+/// window, or a program without one, that is not in front).
+fn own_window_in_front() -> windows::Win32::Foundation::HWND {
+    use windows::Win32::Foundation::HWND;
+    use windows::Win32::System::Threading::GetCurrentProcessId;
+    use windows::Win32::UI::WindowsAndMessaging::{GetForegroundWindow, GetWindowThreadProcessId};
+    // SAFETY: both only read which window is in front and whose it is.
+    unsafe {
+        let window = GetForegroundWindow();
+        let mut pid = 0u32;
+        GetWindowThreadProcessId(window, Some(&mut pid));
+        if pid == GetCurrentProcessId() {
+            window
+        } else {
+            HWND::default()
         }
     }
+}
+
+/// Have Windows ask for an administrator now, and, allowed, start the
+/// host's update: the service's engine runs `helio-host update-engine`,
+/// which waits for process `waiter` and then runs the new engine's
+/// `enable` from `app_dir` (its log is the host's: an administrator
+/// writes it). Declined: nothing has started, and the update stops.
+fn update_host(waiter: u32, app_dir: &Path) -> Result<(), String> {
+    use windows::core::{HSTRING, PCWSTR};
+    use windows::Win32::Foundation::{CloseHandle, ERROR_CANCELLED};
+    use windows::Win32::UI::Shell::{
+        ShellExecuteExW, SEE_MASK_FLAG_NO_UI, SEE_MASK_NOASYNC, SEE_MASK_NOCLOSEPROCESS,
+        SHELLEXECUTEINFOW,
+    };
+    use windows::Win32::UI::WindowsAndMessaging::SW_HIDE;
+
+    let engine = service_engine()?;
+    if !engine.is_file() {
+        return Err(format!(
+            "hosting is on, but its engine is not in {}: turn hosting off and on in Helio, then \
+             update",
+            engine.parent().unwrap_or(&engine).display()
+        ));
+    }
+    tracing::info!("hosting is on: Windows is asked to let the host's engine be updated");
+    let (verb, file) = (HSTRING::from("runas"), HSTRING::from(engine.as_os_str()));
+    let args = HSTRING::from(update_engine_args(waiter, app_dir));
+    let mut info = SHELLEXECUTEINFOW {
+        cbSize: std::mem::size_of::<SHELLEXECUTEINFOW>() as u32,
+        fMask: SEE_MASK_NOCLOSEPROCESS | SEE_MASK_NOASYNC | SEE_MASK_FLAG_NO_UI,
+        hwnd: own_window_in_front(),
+        lpVerb: PCWSTR(verb.as_ptr()),
+        lpFile: PCWSTR(file.as_ptr()),
+        lpParameters: PCWSTR(args.as_ptr()),
+        nShow: SW_HIDE.0,
+        ..Default::default()
+    };
+    // SAFETY: `info` is filled as ShellExecuteExW documents, its strings live
+    // until it returns; the process handle it gives is closed below.
+    unsafe {
+        if let Err(e) = ShellExecuteExW(&mut info) {
+            return Err(if e.code() == ERROR_CANCELLED.to_hresult() {
+                "Windows was not allowed to update the host, so nothing changed: try again, \
+                 and choose Yes when Windows asks"
+                    .into()
+            } else {
+                format!("Windows could not start the host's update: {}", e.message())
+            });
+        }
+        if !info.hProcess.is_invalid() {
+            let _ = CloseHandle(info.hProcess);
+        }
+    }
+    Ok(())
+}
+
+/// `update-engine PID ENGINE`, quoted as Windows splits a command line (a
+/// path has no `"` in it, and this one ends in a file's name, not a `\`).
+fn update_engine_args(waiter: u32, app_dir: &Path) -> String {
+    format!(
+        "update-engine {waiter} \"{}\"",
+        app_dir.join("helio-host.exe").display()
+    )
+}
+
+/// `install::rehearse`: the checked installer copied into `folder`, not
+/// run. Run, it would install over the Helio that is installed.
+pub(crate) fn rehearse(setup: &Path, folder: &Path) -> Result<(), String> {
+    let name = setup.file_name().ok_or("the installer has no name")?;
+    std::fs::copy(setup, folder.join(name))
+        .map(drop)
+        .map_err(|e| format!("{}: {e}", folder.display()))
 }
 
 /// Wait until process `pid` has exited, or `timeout`.
@@ -429,49 +408,65 @@ pub(crate) fn wait_for_exit(pid: u32, timeout: Duration) {
 mod tests {
     use super::*;
 
-    #[test]
-    fn the_host_is_updated_only_while_hosting_is_on() {
-        assert!(!hosting_on(br#"{"state":"off"}"#));
-        assert!(hosting_on(br#"{"state":"on","api":true}"#));
-        assert!(hosting_on(br#"{"state":"starting"}"#));
-        assert!(hosting_on(
-            br#"{"state":"failed","reason":"the host exited with code 3"}"#
-        ));
-        // An engine that could not say: nothing is asked of the user.
-        assert!(!hosting_on(b""));
-        assert!(!hosting_on(b"not json"));
+    fn sample(dir: &Path) -> String {
+        waiter(&Waiter {
+            app_pid: 4242,
+            handed_over: &dir.join(r"helio-update\Helio-1.0.1\handed-over"),
+            setup: &dir.join(r"helio-update\Helio-1.0.1\Helio-1.0.1-windows-x86_64-setup.exe"),
+            setup_log: &dir.join(r"Roaming\Helio\update-setup.log"),
+            app: Path::new(r"C:\Users\o'brien\AppData\Local\Programs\Helio\Helio.exe"),
+            log: &dir.join(r"Roaming\Helio\update.log"),
+        })
     }
 
     #[test]
-    fn an_update_replaces_the_command_in_its_folder_too() {
+    fn the_waiter_runs_the_installer_silently_for_helio_then_opens_helio() {
+        let script = sample(Path::new(r"C:\Users\o'brien\AppData"));
+        assert!(script.contains("Wait-Process -Id 4242 -Timeout 60"));
+        assert!(script.contains(
+            r#"-ArgumentList '/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /NOCANCEL /HELIOUPDATE /LOG="C:\Users\o''brien\AppData\Roaming\Helio\update-setup.log"'"#
+        ));
+        // Nothing runs unless the app handed the update over.
+        let handed = script.find("handed-over").unwrap();
+        assert!(handed < script.find("Start-Process -FilePath").unwrap());
+        assert!(script.ends_with(
+            "Start-Process -FilePath 'C:\\Users\\o''brien\\AppData\\Local\\Programs\\Helio\\Helio.exe' \
+             -WorkingDirectory 'C:\\Users\\o''brien\\AppData\\Local\\Programs\\Helio'\nexit $code\n"
+        ));
+    }
+
+    #[test]
+    fn the_waiters_script_is_powershell_that_parses() {
         let dir = tempfile::tempdir().unwrap();
-        let (unpacked, folder) = (dir.path().join("unpacked"), dir.path().join("Helio"));
-        for (path, text) in [
-            (unpacked.join("Helio.exe"), "new app"),
-            (unpacked.join(COMMAND), "new command"),
-            (folder.join("Helio.exe"), "old app"),
-        ] {
-            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
-            std::fs::write(path, text).unwrap();
-        }
-        // A copy from before the command: its folder is made.
-        replace_files(&unpacked, &folder).unwrap();
-        assert_eq!(
-            std::fs::read_to_string(folder.join(COMMAND)).unwrap(),
-            "new command"
+        let script = sample(dir.path());
+        let file = dir.path().join("waiter.ps1");
+        std::fs::write(&file, &script).unwrap();
+        // The script as Windows PowerShell's parser reads it, run nowhere.
+        let check = format!(
+            "$e = $null; [void][System.Management.Automation.Language.Parser]::ParseFile({}, \
+             [ref]$null, [ref]$e); if ($e.Count) {{ $e | ForEach-Object {{ $_.Message }}; exit 1 }}",
+            ps_quote(&file.to_string_lossy())
         );
-        // And the next one renames the old command aside, as it does the
-        // app (a terminal may be running it).
-        std::fs::write(unpacked.join(COMMAND), "newer command").unwrap();
-        replace_files(&unpacked, &folder).unwrap();
-        assert_eq!(
-            std::fs::read_to_string(folder.join(COMMAND)).unwrap(),
-            "newer command"
+        let out = Command::new(powershell())
+            .args(["-NoProfile", "-NonInteractive", "-Command", &check])
+            .output()
+            .unwrap();
+        assert!(
+            out.status.success(),
+            "{}\n{script}",
+            String::from_utf8_lossy(&out.stdout)
         );
-        assert!(folder.join(r"bin\helio.exe.old").is_file());
+    }
+
+    #[test]
+    fn the_hosts_update_names_the_waiter_and_the_new_engine_whole() {
+        // As helio-host's update-engine reads them: PID ENGINE, no more.
         assert_eq!(
-            std::fs::read_to_string(folder.join("Helio.exe")).unwrap(),
-            "new app"
+            update_engine_args(
+                77,
+                Path::new(r"C:\Users\Jo Doe\AppData\Local\Programs\Helio"),
+            ),
+            r#"update-engine 77 "C:\Users\Jo Doe\AppData\Local\Programs\Helio\helio-host.exe""#
         );
     }
 
@@ -486,28 +481,5 @@ mod tests {
             Path::new(r"C:\Users\o'brien\Downloads\Helio-0.9.5-windows-x86_64"),
             installed
         ));
-    }
-
-    #[test]
-    fn only_the_apps_own_files_are_renamed_or_deleted() {
-        for name in [
-            "Helio.exe",
-            "helio-host.exe",
-            "avcodec-62.dll",
-            "AVUTIL-60.dll",
-            "swresample-6.dll",
-            "FFmpeg LICENSE.txt",
-        ] {
-            assert!(ours(name), "{name}");
-        }
-        for name in [
-            "thesis.docx",
-            "avcodec-.dll",
-            "avcodec-x.dll",
-            "helio-host.exe.lnk",
-            "helio.exe.lnk",
-        ] {
-            assert!(!ours(name), "{name}");
-        }
     }
 }

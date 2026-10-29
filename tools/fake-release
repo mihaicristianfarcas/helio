@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+# A fake latest release of Helio, to check an update by hand: a folder laid
+# out as GitHub's API and site serve a release, for any static web server,
+# which the older Helio is then pointed at with HELIO_UPDATE_API
+# (docs/development.md, Checking an update).
+#
+#   tools/fake-release URL DIR VERSION PACKAGE...
+#   python3 -m http.server 8080 --bind 0.0.0.0 --directory DIR
+#   HELIO_UPDATE_API=URL    (in the older Helio's environment)
+#
+# URL is where the server will be, as the other computer reaches it
+# (http://192.168.1.20:8080); VERSION the release's
+# (1.0.1); each PACKAGE a file named as the packaging scripts name it,
+# for that version (Helio-1.0.1-windows-x86_64-setup.exe). DIR then holds
+# repos/OWNER/NAME/releases/latest, the release with each file's size and
+# SHA-256, and OWNER/NAME/releases/download/vVERSION/FILE. To check that a
+# changed package is refused, change the file in DIR after this lists it.
+set -euo pipefail
+[[ $# -ge 4 ]] || { sed -n '2,17p' "$0" >&2; exit 2; }
+URL=${1%/} DIR=$2 VERSION=$3
+shift 3
+REPO=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+SLUG=$(sed -n 's|^repository = "https://github.com/\(.*\)"|\1|p' "$REPO/Cargo.toml")
+[[ -n $SLUG ]] || { echo "no repository in Cargo.toml" >&2; exit 1; }
+sha256() { if command -v sha256sum >/dev/null; then sha256sum "$1"; else shasum -a 256 "$1"; fi | cut -d' ' -f1; }
+
+FILES=$DIR/$SLUG/releases/download/v$VERSION
+mkdir -p "$FILES" "$DIR/repos/$SLUG/releases"
+assets=
+for package in "$@"; do
+    name=$(basename "$package")
+    cp "$package" "$FILES/$name"
+    size=$(wc -c < "$package" | tr -d ' ')
+    assets+="${assets:+,}
+    {\"name\": \"$name\", \"size\": $size, \"digest\": \"sha256:$(sha256 "$package")\",
+     \"browser_download_url\": \"$URL/$SLUG/releases/download/v$VERSION/$name\"}"
+done
+cat > "$DIR/repos/$SLUG/releases/latest" <<EOF
+{"tag_name": "v$VERSION", "html_url": "https://github.com/$SLUG/releases/tag/v$VERSION", "assets": [$assets
+]}
+EOF
+echo "release v$VERSION in $DIR, for HELIO_UPDATE_API=$URL"

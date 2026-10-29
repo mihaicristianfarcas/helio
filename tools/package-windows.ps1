@@ -8,8 +8,8 @@
 #   powershell -NoProfile -ExecutionPolicy Bypass -File tools\package-windows.ps1 -From DIR [-Sign]
 #     -> target\dist\Helio-VERSION-windows-x86_64-setup.exe  (tools\windows\helio.iss: installs Helio
 #                                                             for whoever runs it, no administrator)
-#        target\dist\Helio-VERSION-windows-x86_64.zip        (the same files: what Helio's own update
-#                                                             unpacks, helio-update/src/install/windows.rs)
+#        target\dist\Helio-VERSION-windows-x86_64.zip        (the same files, unpacked; Helio's own update
+#                                                             runs the installer, helio-update/src/install/windows.rs)
 #
 # The files: Helio.exe beside FFmpeg's DLLs (avcodec, avutil, swresample)
 # and FFmpeg's license, helio-host.exe, and bin\helio.exe. helio-host.exe

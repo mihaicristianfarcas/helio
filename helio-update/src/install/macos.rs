@@ -1,9 +1,15 @@
 //! Installing an update on a Mac: the release's app bundle in place of the
 //! running one, once it is known to be signed, helper and all, by the same
 //! team's Developer ID; or, for a copy Homebrew installed, `brew upgrade
-//! --cask`. Either way hosting stays as it was: the host, which runs from a
-//! copy of the app's helper outside the app, sees the app replaced and
-//! moves onto the new helper by itself (`helio-host/src/hosting/mac.rs`).
+//! --cask`. Either way hosting stays as it was. The host runs from a copy
+//! of the app's helper outside the app, which its LaunchAgent starts
+//! (`helio-host/src/hosting/mac.rs`): once the new app is in place, the
+//! agent's host is told to stop ([`restart_host`]), launchd starts it again
+//! at once, and at its start the host sees the new app's helper, checks it
+//! and moves onto it. Left alone, the host would also see the app replaced,
+//! but only 15 s later. Only a host that came with this copy of Helio is
+//! restarted: one that follows another (a build, a second copy) is left
+//! to it.
 
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
@@ -81,23 +87,27 @@ pub(crate) fn method() -> Result<Method, String> {
     Ok(Method::Bundles { own, folder })
 }
 
-/// Whether the release's archive is downloaded first: Homebrew gets its own.
-pub(crate) fn needs_archive(method: &Method) -> bool {
+/// Whether the release's package is downloaded first: Homebrew gets its own.
+pub(crate) fn needs_package(method: &Method) -> bool {
     matches!(method, Method::Bundles { .. })
 }
 
+/// The archive unpacked in `stage` (its `unpacked` folder, returned) by
 /// ditto, as the Finder unpacks a zip: extended attributes and the
-/// bundles' signatures as they were packed.
-pub(crate) fn unpack(archive: &Path, into: &Path) -> Result<(), String> {
+/// bundles' signatures as they were packed. Its signature is checked when
+/// it is put in place, against the app it replaces.
+pub(crate) fn open(archive: &Path, stage: &Path) -> Result<PathBuf, String> {
+    let into = stage.join("unpacked");
+    std::fs::create_dir_all(&into).map_err(|e| format!("{}: {e}", into.display()))?;
     let out = Command::new("/usr/bin/ditto")
         .arg("-x")
         .arg("-k")
         .arg(archive)
-        .arg(into)
+        .arg(&into)
         .output()
         .map_err(|e| format!("ditto did not run: {e}"))?;
     if out.status.success() {
-        Ok(())
+        Ok(into)
     } else {
         Err(format!(
             "the archive did not unpack: {}",
@@ -192,7 +202,8 @@ fn swap(new: &Path, target: &Path, aside: &Path) -> Result<(), String> {
 }
 
 /// The bundle in `unpacked` in place of the running one, after checking
-/// it; or Homebrew's upgrade, started.
+/// it, and the host restarted on it while hosting is on; or Homebrew's
+/// upgrade, started.
 pub(crate) fn place(
     method: &Method,
     unpacked: &Path,
@@ -209,10 +220,82 @@ pub(crate) fn place(
             }
             // --deep: the helper inside, which the host runs from, too.
             verify(&new, &team)?;
+            let hosting = hosts_from(own);
             replace(unpacked, folder)?;
+            if hosting {
+                restart_host();
+            }
             relaunch(own)
         }
         Method::Homebrew { own, brew } => homebrew_upgrade(own, brew, stage, dir),
+    }
+}
+
+/// The host's LaunchAgent (`helio-host/src/hosting/mac.rs`), loaded while
+/// hosting is on.
+const HOST_AGENT: &str = "dev.mihaicristian.helio.host";
+
+/// The agent's service, as launchctl names it: `gui/UID/LABEL`.
+fn host_service() -> String {
+    // SAFETY: getuid cannot fail and touches nothing.
+    format!("gui/{}/{HOST_AGENT}", unsafe { libc::getuid() })
+}
+
+/// The agent's file, `~/Library/LaunchAgents/LABEL.plist`.
+fn host_agent_file() -> Option<PathBuf> {
+    let home = std::env::var_os("HOME").filter(|h| !h.is_empty())?;
+    Some(
+        PathBuf::from(home)
+            .join("Library/LaunchAgents")
+            .join(format!("{HOST_AGENT}.plist")),
+    )
+}
+
+/// What the agent's file says for the app its host follows, `own`: one of
+/// its arguments (`--app PATH`), as `helio-host enable` writes it (the
+/// app's real path, XML-escaped: `helio_host::hosting::launch_agent`).
+fn agent_argument(own: &Path) -> String {
+    let own = own.canonicalize().unwrap_or_else(|_| own.to_path_buf());
+    let text = own
+        .to_string_lossy()
+        .replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;");
+    format!("<string>{text}</string>")
+}
+
+/// Whether hosting is on with the host that came with the app `own`: the
+/// host's agent is loaded, and follows `own`.
+fn hosts_from(own: &Path) -> bool {
+    let follows = host_agent_file()
+        .and_then(|f| std::fs::read_to_string(f).ok())
+        .is_some_and(|text| text.contains(&agent_argument(own)));
+    follows
+        && Command::new("/bin/launchctl")
+            .args(["print", &host_service()])
+            .output()
+            .is_ok_and(|out| out.status.success())
+}
+
+/// The host stopped as `helio-host disable` stops it (SIGTERM: it ends a
+/// session properly and puts the displays back); launchd starts it again at
+/// once (KeepAlive), and the host, at its start, moves onto the new app's
+/// helper.
+fn restart_host() {
+    let service = host_service();
+    match Command::new("/bin/launchctl")
+        .args(["kill", "SIGTERM", &service])
+        .output()
+    {
+        Ok(out) if out.status.success() => {
+            tracing::info!("hosting is on: the host restarts on the new app's helper")
+        }
+        Ok(out) => tracing::warn!(
+            error = %String::from_utf8_lossy(&out.stderr).trim(),
+            "the host was not restarted: it moves onto the new app by itself, 15 s after it \
+             was replaced"
+        ),
+        Err(e) => tracing::warn!(error = %e, "the host was not restarted"),
     }
 }
 
@@ -225,12 +308,13 @@ pub(crate) fn replace(unpacked: &Path, folder: &Path) -> Result<(), String> {
     Ok(())
 }
 
-/// Open the new copy once this one has quit. LaunchServices starts it
-/// with its own environment: a data folder this copy was pointed at
-/// (`HELIO_DATA_DIR`, `HELIO_HOST_DATA_DIR`) is passed on.
+/// Open the new copy once this one has quit, with a data folder this copy
+/// was pointed at (`HELIO_DATA_DIR`, `HELIO_HOST_DATA_DIR`) passed on. Not
+/// a UI demo's steps, which were for this copy: `open` hands the app the
+/// rest of its environment too (macOS 26.5).
 fn relaunch(own: &Path) -> Result<(), String> {
     let mut open = Command::new("/usr/bin/open");
-    open.arg("-n");
+    open.arg("-n").env_remove("HELIO_UI_DEMO");
     for var in ["HELIO_DATA_DIR", "HELIO_HOST_DATA_DIR"] {
         if let Some(value) = std::env::var_os(var).filter(|v| !v.is_empty()) {
             let mut pair = std::ffi::OsString::from(format!("{var}="));
@@ -248,13 +332,21 @@ fn relaunch(own: &Path) -> Result<(), String> {
 /// Start the script that has Homebrew upgrade the cask once this app has
 /// quit, and opens the app again.
 fn homebrew_upgrade(own: &Path, brew: &Path, stage: &Path, dir: &Path) -> Result<(), String> {
-    let script = homebrew_script(std::process::id(), own, brew, &super::log_path(dir));
+    let script = homebrew_script(
+        std::process::id(),
+        own,
+        brew,
+        &super::log_path(dir),
+        hosts_from(own),
+    );
     let path = stage.join("update.sh");
     std::fs::write(&path, script).map_err(|e| e.to_string())?;
     tracing::info!(cask = CASK, "upgrading with Homebrew once the app has quit");
-    // Its own process group: nothing sent to the app's reaches it.
+    // Its own process group: nothing sent to the app's reaches it. A UI
+    // demo's steps were for this copy, not the one it opens.
     Command::new("/bin/sh")
         .arg(&path)
+        .env_remove("HELIO_UI_DEMO")
         .process_group(0)
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())
@@ -265,16 +357,27 @@ fn homebrew_upgrade(own: &Path, brew: &Path, stage: &Path, dir: &Path) -> Result
 }
 
 /// The script that, once process `pid` (the app) has quit, has Homebrew
-/// upgrade the cask (its output to `log`), and opens `own` again. The host
-/// follows the new app by itself, and the cask leaves the app's login item
-/// alone (`tools/update-casks`).
-fn homebrew_script(pid: u32, own: &Path, brew: &Path, log: &Path) -> String {
+/// upgrade the cask (its output to `log`), restarts the host on the new
+/// app if hosting was on with this app's host (`hosting`, as
+/// [`restart_host`] does), and opens `own` again. The cask leaves the app's
+/// login item and the host's agent alone (`tools/update-casks`).
+fn homebrew_script(pid: u32, own: &Path, brew: &Path, log: &Path, hosting: bool) -> String {
     let prefix_bin = brew.parent().unwrap_or(Path::new("/opt/homebrew/bin"));
+    let restart = if hosting {
+        format!(
+            "/bin/launchctl kill SIGTERM {} >>{log} 2>&1\n",
+            sh_quote(&host_service()),
+            log = sh_quote(&log.to_string_lossy()),
+        )
+    } else {
+        String::new()
+    };
     format!(
         "#!/bin/sh\n\
          # {APP}'s update by Homebrew (helio-update), once {APP} has quit.\n\
          while kill -0 {pid} 2>/dev/null; do sleep 0.2; done\n\
          PATH={path}:/usr/bin:/bin:/usr/sbin:/sbin {brew} upgrade --cask {CASK} >>{log} 2>&1\n\
+         {restart}\
          open -n {own}\n",
         path = sh_quote(&prefix_bin.to_string_lossy()),
         brew = sh_quote(&brew.to_string_lossy()),
@@ -293,14 +396,6 @@ pub(crate) fn rehearse(unpacked: &Path, folder: &Path) -> Result<(), String> {
     verify(&new, &team)?;
     replace(unpacked, folder)
 }
-
-/// Nothing is left behind on a Mac: the old bundle goes once the new one
-/// is in place.
-pub(crate) fn tidy() {}
-
-/// A Mac lists an app by where it is (Applications): there is no entry to
-/// keep.
-pub(crate) fn keep_listed(_version: &str) {}
 
 /// Wait until process `pid` has exited, or `timeout`.
 pub(crate) fn wait_for_exit(pid: u32, timeout: Duration) {
@@ -321,14 +416,18 @@ mod tests {
     #[test]
     fn the_homebrew_script_is_a_shell_script_that_parses() {
         let dir = tempfile::tempdir().unwrap();
-        let script = homebrew_script(
-            4242,
-            Path::new("/Applications/Helio.app"),
-            Path::new("/opt/homebrew/bin/brew"),
-            Path::new("/Users/o'brien/Library/Application Support/Helio/update.log"),
-        );
+        let script = |hosting| {
+            homebrew_script(
+                4242,
+                Path::new("/Applications/Helio.app"),
+                Path::new("/opt/homebrew/bin/brew"),
+                Path::new("/Users/o'brien/Library/Application Support/Helio/update.log"),
+                hosting,
+            )
+        };
+        let hosting = script(true);
         let path = dir.path().join("update.sh");
-        std::fs::write(&path, &script).unwrap();
+        std::fs::write(&path, &hosting).unwrap();
         let out = Command::new("/bin/sh")
             .arg("-n")
             .arg(&path)
@@ -336,14 +435,34 @@ mod tests {
             .unwrap();
         assert!(
             out.status.success(),
-            "{}\n{script}",
+            "{}\n{hosting}",
             String::from_utf8_lossy(&out.stderr)
         );
-        assert!(script.contains("kill -0 4242"));
-        assert!(script.contains("upgrade --cask helio >>'/Users/o'\\''brien/"));
-        // The host follows the new app by itself, and the cask keeps the
-        // login item: the script touches neither.
-        assert!(!script.contains("LaunchAgents") && !script.contains("enable"));
-        assert!(script.contains(r"open -n '/Applications/Helio.app'"));
+        assert!(hosting.contains("kill -0 4242"));
+        assert!(hosting.contains("upgrade --cask helio >>'/Users/o'\\''brien/"));
+        // The host is restarted on the new app, after the upgrade and
+        // before the app opens; nothing is turned on or off.
+        let upgrade = hosting.find("upgrade --cask").unwrap();
+        let restart = hosting
+            .find("launchctl kill SIGTERM 'gui/")
+            .expect("the host restarted");
+        let open = hosting.find(r"open -n '/Applications/Helio.app'").unwrap();
+        assert!(upgrade < restart && restart < open);
+        assert!(hosting.contains("/dev.mihaicristian.helio.host' >>'/Users/o'"));
+        assert!(!hosting.contains("LaunchAgents") && !hosting.contains("enable"));
+        // Without this app's host, no host is touched.
+        let client = script(false);
+        assert!(!client.contains("launchctl"));
+        assert!(client.contains(r"open -n '/Applications/Helio.app'"));
+    }
+
+    #[test]
+    fn the_host_of_this_app_is_known_by_the_argument_its_agent_names() {
+        // As helio-host's launch_agent writes `--app PATH` (its test has
+        // the same app).
+        assert_eq!(
+            agent_argument(Path::new("/Applications/A & B.app")),
+            "<string>/Applications/A &amp; B.app</string>"
+        );
     }
 }

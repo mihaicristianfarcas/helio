@@ -303,19 +303,25 @@ How each system installs it:
 
 | | The app | The host, while hosting is on |
 |---|---|---|
-| macOS | The app is replaced where it is (Applications), the host inside it too | Sees the new app and restarts on it 15 s later |
-| macOS, installed with Homebrew | `brew upgrade --cask helio`, run for you | Sees the new app and restarts on it 15 s later |
-| Windows | The app's files, `helio-host.exe` and `bin\helio.exe` (the `helio` command) among them, are replaced in its folder; Settings > Apps shows the new version | Hosting is turned on again from the new files: Windows asks for an administrator's permission, and HelioHost restarts on the new engine. Declined, the host keeps the engine it had until hosting is turned off and on |
-| Linux | The new release's `install.sh` (into `~/.local/bin`) | The host's user service restarts |
+| macOS | The app is replaced where it is (Applications), the host inside it too | Restarts at once, on the new app's helper |
+| macOS, installed with Homebrew | `brew upgrade --cask helio`, run for you | Restarts at once, on the new app's helper |
+| Windows | The release's installer runs again over Helio, silently and for you only (no administrator), then Helio opens again; Settings > Apps shows the new version | Windows asks for an administrator's permission when the update starts; the new engine then replaces the host's copy in `C:\Program Files\Helio Host`, and HelioHost restarts on it. Declined, nothing is installed. A PC that does not host is never asked |
+| Linux | The new release's `install.sh` (into `~/.local/bin`) | The host's user service restarts on the new engine |
 
 The download is checked against the SHA-256 GitHub records for the
-release's file. On a Mac the new app must also be signed with the same
-team's Developer ID as the one it replaces, which a copy built from source
-is not: download those updates yourself. A stream that runs ends when the
-app restarts (and while hosting is on, streams to this computer stop while
-the host restarts). If an update does not install, the app says why when
-it opens again; nothing of the copy that runs is changed, and **Try
-Again** or the release's page are left.
+release's file, then for who made it: on a Mac the new app must be signed
+with the same team's Developer ID as the one it replaces, and on Windows
+the installer with Helio's code-signing certificate (once Helio's
+releases are signed; until then the SHA-256 is all there is to check). A
+copy built from source, or one not installed the way the downloads
+install it (a Windows copy unpacked by hand), does not update itself:
+download those updates yourself. Your hosts, pairings and settings, the
+host's identity and its paired devices, and whether hosting is on all
+stay as they were. A stream that runs ends when the app restarts (and
+while hosting is on, streams to this computer stop while the host
+restarts). If an update does not install, the app says why when it opens
+again; nothing of the copy that runs is changed, and **Try Again** or the
+release's page are left.
 
 They ask GitHub's public API, without an account: a few seconds after
 starting when the last answer is more than a day old, and once a day while
