@@ -53,9 +53,12 @@ page says it is missing), not a failure.
 
 Measured in a Windows 11 Arm virtual machine (UTM on an M4 Pro), from a
 PC with neither driver: `enable` took 19 s, most of it ViGEmBus's
-installer; `disable` 3 s, ViGEmBus's uninstall included. On a PC with
-both already there (Windows 11 25H2, Apollo's SudoVDA, ViGEmBus 1.21),
-`enable` and `disable` left both as they were.
+installer; `disable` 3 s, ViGEmBus's uninstall included. On an x64 PC
+(Windows 11 25H2, NVIDIA RTX 3070 Ti) with ViGEmBus 1.21 already there and
+no SudoVDA, `enable` installed SudoVDA in 3 s, which then made and removed
+a 1920x1080 monitor; `disable` took its device, driver package and
+certificate away again in 1 s, and left ViGEmBus as it was. With
+Apollo's SudoVDA there, `enable` and `disable` left it as it was.
 
 ### How it runs
 
