@@ -35,6 +35,12 @@ The app's program also takes the command after `cli`, wherever it is:
 `helio stream` is the app's streaming code, in a window of the platform's
 own.
 
+In a terminal, `helio` is in colour (headings, what to type, what worked
+and what failed) and its lists (`hosts`, `discover`, `host clients`) are
+in columns under a header. Piped or redirected, it prints plain text, each
+list a line of tab-separated cells per row, for scripts. `NO_COLOR` turns
+the colour off, `CLICOLOR_FORCE=1` on (through a pager, say).
+
 ### Streaming
 
 | Command | Does |
@@ -217,6 +223,7 @@ For everyone:
 | `ANTHROPIC_BASE_URL`, `OPENAI_BASE_URL` | agents | Point the API loops at a gateway or proxy |
 | `CLOUDFLARE_AUTH_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` | agents | The Workers AI token and account clef's screen checks use; win over Agent setup's |
 | `HELIO_APPEARANCE` | the apps | `light` or `dark`, whatever the system says |
+| `NO_COLOR`, `CLICOLOR_FORCE` | `helio` | No colour in a terminal; colour even where the output is not one ([no-color.org](https://no-color.org), [bixense.com/clicolors](https://bixense.com/clicolors/)) |
 | `HELIO_UPDATE_API` | the apps | Where the update check asks instead of `https://api.github.com` (a mirror, or a test) |
 | `HELIO_SOFTWARE_DECODE` | Helio on Linux | Decode in software even where VA-API is available |
 | `HELIO_HOST_CAPTURE` | Helio Host on Linux | `x11` or `portal`, where the session type is not clear |
