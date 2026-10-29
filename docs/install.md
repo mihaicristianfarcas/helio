@@ -15,6 +15,11 @@ everywhere it builds from this repository with Rust.
 
 Then [pair them](#pairing).
 
+`helio`, the command line ([cli.md](cli.md)), comes inside the app on every
+system, but no install puts it on your `PATH`: to type it in a terminal,
+choose **Install** under **Command line** in Helio's **Settings → General**.
+Uninstalling Helio takes it away again.
+
 ## From the website
 
 [helio.mihaicristian.dev](https://helio.mihaicristian.dev/#install)
@@ -45,9 +50,10 @@ them, and names their publisher as unknown.
 
 Extract the zip and double-click **Install Helio.cmd**. Windows asks whether
 to run it. It installs Helio for you, with no administrator needed: Helio and
-the host's engine (`helio-host.exe`) in `%LOCALAPPDATA%\Programs\Helio`, Helio in
-the Start menu and in **Settings > Apps > Installed apps**, which
-uninstalls it. Then it opens Helio. Helio also runs from the extracted folder
+the host's engine (`helio-host.exe`) in `%LOCALAPPDATA%\Programs\Helio`,
+with `helio`, the command line, in its `bin` folder; Helio in the Start
+menu and in **Settings > Apps > Installed apps**, which uninstalls it.
+Then it opens Helio. Helio also runs from the extracted folder
 as it is: open **Helio.exe** there (it needs FFmpeg's DLLs and `helio-host.exe`
 beside it).
 
@@ -75,8 +81,8 @@ tar xzf Helio-VERSION-linux-x86_64.tar.gz
 Helio-VERSION-linux-x86_64/install.sh
 ```
 
-`install.sh` puts Helio (`helio-app`) and the host's engine (`helio-host`) in
-`~/.local/bin`, Helio's launcher entry with its icon, and the host's user
+`install.sh` puts Helio (`helio-app`) and the host's engine (`helio-host`)
+in `~/.local/bin`, Helio's launcher entry with its icon, and the host's user
 service, installed but not turned on (see
 [Hosting on Linux](#hosting-on-linux)). It names any library the system is
 missing. Run from a newer download, it updates them, and restarts the
@@ -160,7 +166,8 @@ created one (`tools/dev-signing-identity`, see
 
 The host comes inside the app: `Helio.app/Contents/Helpers/Helio Host.app`, a
 helper app of its own. Turn hosting on in Helio (setup asks, or **Settings →
-Hosting**): Helio runs the helper's `helio-host enable`, which copies the helper
+Hosting**, or `helio host enable` in a terminal): Helio runs the helper's
+`helio-host enable`, which copies the helper
 to `~/Library/Application Support/Helio Host/Helio Host.app` and writes a
 LaunchAgent that starts that copy at login and keeps it running
 (`~/Library/LaunchAgents/dev.mihaicristian.helio.host.plist`; see
@@ -218,20 +225,20 @@ First, on the host PC:
    controllers; **Steam** (its *Steam Streaming Speakers* device keeps the
    sound on the client only, as Sunshine does).
 
-Then turn hosting on in Helio, or run `helio-host enable` from Helio's folder in an
-**administrator** PowerShell:
+Then turn hosting on in Helio, or in a terminal with `helio` installed
+(Windows asks for an administrator, as it does for the switch):
 
 ```powershell
-& "$env:LOCALAPPDATA\Programs\Helio\helio-host.exe" enable  # or target\Helio\helio-host.exe from a build
+helio host enable    # or target\Helio\bin\helio.exe host enable from a build
 ```
 
-`helio-host enable` copies the host to `C:\Program Files\Helio Host`, and installs and
-starts **HelioHost** from there (it starts at boot, before anyone signs
-in, and adds Windows Firewall rules for Helio Host). Helio's own updates run it
-again while hosting is on; after a build of your own, turn hosting off and
-on (or run `helio-host enable` again) to put the new engine in place. `helio-host
-disable` (as administrator) removes the service, its firewall rules and the
-host's copy in `C:\Program Files\Helio Host`.
+Turning hosting on copies the host's engine to `C:\Program Files\Helio Host`,
+and installs and starts **HelioHost** from there (it starts at boot, before
+anyone signs in, and adds Windows Firewall rules for Helio Host). Helio's own
+updates do it again while hosting is on; after a build of your own, turn
+hosting off and on (or run `helio host enable` again) to put the new engine
+in place. Turning it off (`helio host disable`) removes the service, its
+firewall rules and the host's copy in `C:\Program Files\Helio Host`.
 
 Helio Host's settings and state are in `C:\ProgramData\Helio Host`. Details:
 [platforms/windows.md](platforms/windows.md).
@@ -241,7 +248,7 @@ Helio Host's settings and state are in `C:\ProgramData\Helio Host`. Details:
 ```sh
 cargo build --release -p helio-app         # the app: target/release/helio-app
 cargo build --release -p helio-host        # the host's engine, on its own
-cargo build --release -p helio-cli          # the CLI, if you want it
+cargo build --release -p helio-cli          # `helio` on its own (the app is `helio` too)
 ```
 
 Build the host's engine **on its own**, not in one `cargo` invocation with
@@ -260,13 +267,13 @@ Details: [platforms/linux.md](platforms/linux.md).
 
 ## Hosting on Linux
 
-Turn hosting on in Helio (or run `~/.local/bin/helio-host enable`: `systemctl
---user enable --now helio-host`). Helio Host runs in your desktop session, as you,
+Turn hosting on in Helio (or run `helio host enable`: `systemctl --user
+enable --now helio-host`). Helio Host runs in your desktop session, as you,
 started at each login. Under Wayland, the desktop asks once whether Helio Host
 may share the screen (on GNOME, switch on **Allow Remote Interaction** for
-the keyboard and mouse). Helio's This computer pages show the host, and its
-hosting switch runs `helio-host enable` and `helio-host disable` for you, finding
-`helio-host` beside Helio or on the `PATH`. Data and logs are in `~/.config/helio-host`.
+the keyboard and mouse). Helio's This computer pages show the host. Its
+hosting switch, as `helio host enable` and `disable` do, runs the host's
+program, `helio-host`, which it finds beside Helio or on the `PATH`. Data and logs are in `~/.config/helio-host`.
 Details: [platforms/linux.md](platforms/linux.md).
 
 ## Pairing
@@ -286,10 +293,10 @@ anywhere ([networking.md](networking.md)). Next: [usage.md](usage.md).
 
 | | |
 |---|---|
-| Homebrew | `brew uninstall --cask helio`: it quits Helio, and the host, finding the app gone, turns hosting off itself 15 s later (its LaunchAgent and copy removed); `--zap` stops it at once and also deletes the data folders, Helio's and the host's, and Helio's start at login |
-| macOS | Turn hosting off in Helio (or run `helio-host disable` from inside it: `"/Applications/Helio.app/Contents/Helpers/Helio Host.app/Contents/MacOS/helio-host" disable`), quit Helio, then delete Helio.app. Deleted with hosting on, the host notices and, 15 s later, turns hosting off itself. Your data is in `~/Library/Application Support/Helio` and `~/Library/Application Support/Helio Host` (the host's identity and pairings) |
-| Windows | **Settings > Apps > Installed apps**, **Helio**, **Uninstall** (or `install.ps1 -Uninstall` in `%LOCALAPPDATA%\Programs\Helio`). While hosting is on, it turns it off first (`helio-host disable`: HelioHost, its firewall rules and the host's copy), and Windows asks for an administrator. It leaves your hosts and settings, and the host's identity and pairings: delete `%APPDATA%\Helio` and `C:\ProgramData\Helio Host` too to remove them. A copy run from its extracted folder: turn hosting off in it, then delete the folder |
-| Linux | `install.sh --uninstall` from the download, or `tools/linux/install-apps --uninstall`: it turns hosting off first (`helio-host disable`), then removes the programs, the host's unit and the launcher entry. Then `~/.config/helio` and `~/.config/helio-host` |
+| Homebrew | `brew uninstall --cask helio`: it quits Helio, `helio` goes with the app, and the host, finding the app gone, turns hosting off itself 15 s later (its LaunchAgent and copy removed); `--zap` stops it at once and also deletes the data folders, Helio's and the host's, Helio's start at login and `/etc/paths.d/helio` (the line that put `helio` on the `PATH`) |
+| macOS | Turn hosting off in Helio (or run `helio host disable`), quit Helio, then delete Helio.app: `helio` goes with it. Deleted with hosting on, the host notices and, 15 s later, turns hosting off itself. Your data is in `~/Library/Application Support/Helio` and `~/Library/Application Support/Helio Host` (the host's identity and pairings), and `/etc/paths.d/helio` names the folder `helio` was in, if you installed it (`sudo rm /etc/paths.d/helio`) |
+| Windows | **Settings > Apps > Installed apps**, **Helio**, **Uninstall** (or `install.ps1 -Uninstall` in `%LOCALAPPDATA%\Programs\Helio`). While hosting is on, it turns it off first (HelioHost, its firewall rules and the host's copy go), and Windows asks for an administrator. It takes `helio` off your `PATH`, if you put it there. It leaves your hosts and settings, and the host's identity and pairings: delete `%APPDATA%\Helio` and `C:\ProgramData\Helio Host` too to remove them. A copy run from its extracted folder: turn hosting off in it, then delete the folder |
+| Linux | `install.sh --uninstall` from the download, or `tools/linux/install-apps --uninstall`: it turns hosting off first, then removes the programs, the `helio` link (if you installed it), the host's unit and the launcher entry. Then `~/.config/helio` and `~/.config/helio-host` |
 
 Unpair a device on the other side too (Helio: the host's menu > Unpair; the host:
 **This computer → Devices**).

@@ -1,7 +1,8 @@
 # Build Helio for Windows: Helio.exe (the app) beside FFmpeg's DLLs and the
-# host's engine (helio-host.exe, which the app's hosting switch runs), in
+# host's engine (helio-host.exe, which the app's hosting switch runs), with
+# bin\helio.exe (the `helio` command, which runs Helio.exe's), in
 # target\Helio, as the release archive holds them; and helio.exe and
-# helio-agent.exe, the CLIs, in target\release.
+# helio-agent.exe, the CLIs on their own, in target\release.
 #
 #   powershell -NoProfile -ExecutionPolicy Bypass -File tools\build-helio-win.ps1 [-FFmpeg DIR] [-Install]
 #
@@ -34,6 +35,8 @@ try {
     New-Item -ItemType Directory -Force $dist | Out-Null
     Copy-Item (Join-Path $repo 'target\release\helio-app.exe') (Join-Path $dist 'Helio.exe')
     Copy-Item (Join-Path $repo 'target\release\helio-host.exe') $dist
+    New-Item -ItemType Directory (Join-Path $dist 'bin') | Out-Null
+    Copy-Item (Join-Path $repo 'target\release\helio-console.exe') (Join-Path $dist 'bin\helio.exe')
     # What avcodec needs: itself, avutil, and swresample (some decoders).
     foreach ($dll in Get-ChildItem (Join-Path $FFmpeg 'bin') -Filter '*.dll' | Where-Object { $_.Name -match '^(avcodec|avutil|swresample)-\d+\.dll$' }) {
         Copy-Item $dll.FullName $dist

@@ -1,7 +1,9 @@
 # Install Helio for whoever runs this: Helio.exe, the host's engine (helio-host.exe)
-# and FFmpeg's DLLs in %LOCALAPPDATA%\Programs\Helio, Helio in the Start menu,
-# and Helio in Windows' list of installed apps (Settings > Apps), whose
-# Uninstall runs this script, copied there as install.ps1, with -Uninstall.
+# and FFmpeg's DLLs in %LOCALAPPDATA%\Programs\Helio, the `helio` command in
+# its bin folder (not on the PATH: Helio's Settings > General puts it there,
+# helio-app/src/command.rs), Helio in the Start menu, and Helio in Windows'
+# list of installed apps (Settings > Apps), whose Uninstall runs this
+# script, copied there as install.ps1, with -Uninstall.
 # Helio is per user, as its data is: no administrator is needed. Hosting
 # stays off: Helio's switch turns it on, which copies helio-host.exe to
 # C:\Program Files\Helio Host and runs it as HelioHost (Windows asks for an
@@ -15,13 +17,16 @@
 # checkout, from target\Helio (tools/build-helio-win.ps1 -Install runs it).
 # Helio's own update (helio-update) replaces the files itself and then runs
 # the new archive's install.ps1 with -Register FOLDER: when FOLDER is the one
-# this installs into, the script there and the entry in the list are brought
-# up to date; a copy anywhere else has no entry and is left as it is. Helio
+# this installs into, the script there, the command (an update by a
+# release without it copies no bin folder) and the entry in the list are
+# brought up to date; a copy anywhere else has no entry and is left as it
+# is. Helio
 # runs the install.ps1 beside it the same way when it starts and finds its
 # entry missing or naming another version (an update by an older release,
 # which runs no installer).
 #
-# Uninstalling turns hosting off first, if it is on (`helio-host disable`: the
+# Uninstalling takes the command's folder off the PATH, if Settings put it
+# there, and turns hosting off first, if it is on (`helio-host disable`: the
 # service, its firewall rules and the engine's copy in Program Files go;
 # Windows asks for an administrator). It leaves Helio's hosts and settings
 # (%APPDATA%\Helio), the host's identity and pairings (C:\ProgramData\Helio Host),
@@ -90,6 +95,44 @@ function Invoke-Retrying([scriptblock]$Do) {
     }
 }
 
+# The `helio` command (bin\helio.exe, which runs Helio.exe's command line:
+# helio-app/src/bin/console.rs) from $From, unless it is there already.
+function Copy-Command([string]$From) {
+    $command = Join-Path $From 'bin\helio.exe'
+    if (-not (Test-Path $command) -or (Test-SameFolder $From $dest)) { return }
+    New-Item -ItemType Directory -Force (Join-Path $dest 'bin') | Out-Null
+    Invoke-Retrying { Copy-Item -Force $command (Join-Path $dest 'bin\helio.exe') }
+}
+
+# The command's folder off the user's PATH, where Settings > General put it
+# (helio-app/src/command.rs). Written back as the REG_EXPAND_SZ Windows
+# keeps it as: [Environment]::SetEnvironmentVariable would write REG_SZ,
+# and an entry such as %USERPROFILE%\bin would stop expanding. Then
+# Explorer, and what it starts from now on, hears of it; terminals already
+# open keep the PATH they had.
+function Remove-CommandPath {
+    $bin = Join-Path $dest 'bin'
+    $key = [Microsoft.Win32.Registry]::CurrentUser.CreateSubKey('Environment')
+    try {
+        $path = [string]$key.GetValue('Path', '', [Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)
+        $others = @($path -split ';' | Where-Object {
+            $_ -and ([Environment]::ExpandEnvironmentVariables($_).TrimEnd('\') -ne $bin.TrimEnd('\'))
+        })
+        $new = $others -join ';'
+        if ($new -eq $path) { return }
+        if ($others.Count -eq 0) { $key.DeleteValue('Path', $false) }
+        else { $key.SetValue('Path', $new, [Microsoft.Win32.RegistryValueKind]::ExpandString) }
+    } finally {
+        $key.Close()
+    }
+    if (-not ('Helio.Settings' -as [type])) {
+        Add-Type -Namespace Helio -Name Settings -MemberDefinition '[DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern IntPtr SendMessageTimeout(IntPtr hWnd, uint Msg, UIntPtr wParam, string lParam, uint fuFlags, uint uTimeout, out UIntPtr lpdwResult);'
+    }
+    $result = [UIntPtr]::Zero
+    # HWND_BROADCAST, WM_SETTINGCHANGE, SMTO_ABORTIFHUNG: 5 s at most.
+    [void][Helio.Settings]::SendMessageTimeout([IntPtr]0xffff, 0x1A, [UIntPtr]::Zero, 'Environment', 2, 5000, [ref]$result)
+}
+
 # This script beside Helio.exe, for the entry's Uninstall to run.
 function Copy-Script {
     if (-not (Test-SameFolder $PSScriptRoot $dest)) {
@@ -130,6 +173,7 @@ function Write-Entry {
 if ($Uninstall) {
     Disable-Hosting
     Stop-Helio
+    Remove-CommandPath
     Remove-Item $link -Force -ErrorAction SilentlyContinue
     Remove-Item $entry -Recurse -Force -ErrorAction SilentlyContinue
     # Not from inside the folder that goes.
@@ -142,6 +186,7 @@ if ($Uninstall) {
 if ($Register) {
     if (Test-SameFolder $Register $dest) {
         Copy-Script
+        Copy-Command $PSScriptRoot
         Write-Entry
     }
     return
@@ -165,10 +210,11 @@ if (-not (Test-SameFolder $from $dest)) {
             (($_.Name -match '\.old$') -and (Test-Ours ($_.Name -replace '(\.\d+)?\.old$', '')))
     } | Remove-Item -Force
 }
+Copy-Command $from
 # A download's files carry the internet's mark, and SmartScreen would
 # question Helio at its first start: the copies are trusted as this
 # installer is.
-Get-ChildItem $dest -File | Unblock-File
+Get-ChildItem $dest -File -Recurse | Unblock-File
 Copy-Script
 
 $shell = New-Object -ComObject WScript.Shell

@@ -3,8 +3,14 @@
 # hosting is on (helio-host), as a helper app of its own:
 #
 #   Helio.app/Contents/MacOS/Helio                      the app
+#   Helio.app/Contents/Resources/bin/helio              the command line
 #   Helio.app/Contents/Helpers/Helio Host.app           the host
 #       Contents/MacOS/helio-host
+#
+# The command line is a link to the app's program, which is `helio` when
+# started under that name (helio-app's main.rs), in a folder of its own that
+# Settings > General puts on the PATH (helio-app/src/command.rs): it is
+# inside the app, so it goes when the app does.
 #
 # The helper has its own bundle identifier (dev.mihaicristian.helio.host) and usage
 # strings, so the permissions the host needs (Screen Recording,
@@ -74,6 +80,8 @@ bundle() {
 rm -rf "$APP"
 bundle "$APP" "$REPO/helio-app/macos/Info.plist" "$OUT/helio-app" Helio "$REPO/target/AppIcon.icns"
 bundle "$HELPER" "$REPO/helio-host/macos/Info.plist" "$OUT/helio-host" helio-host "$REPO/target/AppIcon.icns"
+mkdir -p "$APP/Contents/Resources/bin"
+ln -s ../../MacOS/Helio "$APP/Contents/Resources/bin/helio"
 
 # A Developer ID (HELIO_SIGN_IDENTITY, as the release workflow sets it)
 # with the hardened runtime and a secure timestamp, which notarization

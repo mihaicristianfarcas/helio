@@ -9,6 +9,13 @@
 //! `--background` (at login, with Open at login): no window, just the
 //! host's icon, when hosting is on; nothing at all, and the app quits, when
 //! it is off.
+//!
+//! The app's program is also `helio`, the command line (helio-cli), so that
+//! the command comes with Helio: started under that name
+//! (`Contents/Resources/bin/helio` in the Mac app, the link Settings makes
+//! on Linux), or with `cli` first (`bin\helio.exe` on Windows,
+//! `helio-console`), it runs the command and nothing of the app
+//! ([`command_line`]). Settings > General puts it on the PATH (`command`).
 
 // No console window behind the app on Windows.
 #![cfg_attr(windows, windows_subsystem = "windows")]
@@ -16,6 +23,7 @@
 mod agents;
 mod app;
 mod chat;
+mod command;
 mod host;
 mod hosting;
 mod hosts;
@@ -26,6 +34,7 @@ mod prefs;
 mod settings;
 mod setup;
 
+use std::process::ExitCode;
 use std::rc::Rc;
 
 use gpui::{actions, App, KeyBinding, Menu, MenuItem};
@@ -53,17 +62,47 @@ actions!(
     ]
 );
 
-fn main() {
+/// The command `helio` was given, when the app's program was started as
+/// `helio`: under that name, exactly (the app's own is `Helio`, or
+/// `helio-app`), or as `PROGRAM cli ARGS`. `args` is the whole command
+/// line, the program first.
+fn command_line(args: &[String]) -> Option<&[String]> {
+    let (program, rest) = args.split_first()?;
+    let name = std::path::Path::new(program).file_stem()?;
+    if name == "helio" {
+        Some(rest)
+    } else {
+        rest.split_first()
+            .filter(|(first, _)| *first == "cli")
+            .map(|(_, rest)| rest)
+    }
+}
+
+/// Windows: the app's program is a window program, which Windows starts
+/// without a console. Run as `helio` from a terminal (by `bin\helio.exe`),
+/// it takes that terminal's console: Ctrl-C then reaches it (`helio stream`
+/// ends properly), and what it runs (`helio-host`) prints there. Its own
+/// output goes where the launcher's does already: the launcher hands its
+/// standard handles on, and taking the console keeps them.
+#[cfg(windows)]
+fn take_console() {
+    use windows::Win32::System::Console::{AttachConsole, ATTACH_PARENT_PROCESS};
+    // SAFETY: no arguments but a constant; failing (no parent console: the
+    // command run from Explorer) leaves the process as it was.
+    let _ = unsafe { AttachConsole(ATTACH_PARENT_PROCESS) };
+}
+
+fn main() -> ExitCode {
+    let args: Vec<String> = std::env::args().collect();
+    if let Some(command) = command_line(&args) {
+        #[cfg(windows)]
+        take_console();
+        return helio_cli::main(command);
+    }
     // `Helio mcp`: this device's agent as an MCP server (stdin/stdout), for
     // Claude Code, Codex, Claude Desktop and the rest.
-    if std::env::args().nth(1).as_deref() == Some("mcp") {
-        let args: Vec<String> = std::env::args().skip(2).collect();
-        let code = helio_agent::mcp::main(&args);
-        std::process::exit(if code == std::process::ExitCode::SUCCESS {
-            0
-        } else {
-            1
-        });
+    if args.get(1).map(String::as_str) == Some("mcp") {
+        return helio_agent::mcp::main(&args[2..]);
     }
     // Linux: the stream's own process (see helio_client::linux).
     #[cfg(target_os = "linux")]
@@ -92,7 +131,7 @@ fn main() {
             Some(instance) => Some(instance),
             None => {
                 eprintln!("Helio is running already: it was asked to show itself");
-                return;
+                return ExitCode::SUCCESS;
             }
         }
     };
@@ -178,6 +217,7 @@ fn main() {
             app::open(app::Show::Window, cx);
         }
     });
+    ExitCode::SUCCESS
 }
 
 fn bind_keys(cx: &mut App) {
@@ -238,4 +278,47 @@ fn bind_keys(cx: &mut App) {
         menus::window_menu(),
         menus::help_menu("Helio"),
     ]);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn line(words: &[&str]) -> Vec<String> {
+        words.iter().map(|w| w.to_string()).collect()
+    }
+
+    #[test]
+    fn the_app_is_helio_under_that_name_or_with_cli_first() {
+        let named = line(&["/opt/homebrew/bin/helio", "host", "status"]);
+        assert_eq!(command_line(&named), Some(&named[1..]));
+        let bare = line(&["helio"]);
+        assert_eq!(command_line(&bare), Some(&bare[1..]));
+        let windows = line(&[
+            r"C:\Users\o\AppData\Local\Programs\Helio\Helio.exe",
+            "cli",
+            "hosts",
+        ]);
+        assert_eq!(command_line(&windows), Some(&windows[2..]));
+        let linux = line(&["/home/o/.local/bin/helio-app", "cli", "--help"]);
+        assert_eq!(command_line(&linux), Some(&linux[2..]));
+    }
+
+    #[test]
+    fn the_app_started_as_itself_is_the_app() {
+        for words in [
+            &["/Applications/Helio.app/Contents/MacOS/Helio"][..],
+            &[
+                "/Applications/Helio.app/Contents/MacOS/Helio",
+                "--background",
+            ],
+            &["helio-app", "mcp"],
+            &["helio-app", "--helio-stream", "KEY", "{}"],
+            &["Helio.exe", "--after-update", "1234"],
+            // `cli` later on is an argument, not the command line.
+            &["Helio", "mcp", "cli"],
+        ] {
+            assert_eq!(command_line(&line(words)), None, "{words:?}");
+        }
+    }
 }

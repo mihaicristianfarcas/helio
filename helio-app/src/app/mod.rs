@@ -258,6 +258,11 @@ pub struct HelioApp {
     pub host: Option<Entity<HostPages>>,
     /// Setup's step and what was chosen in it.
     pub setup: crate::setup::Setup,
+    /// `helio` being put on the PATH (true) or taken off, while it is
+    /// (Settings > General).
+    pub command_change: Option<bool>,
+    /// HELIO_UI_DEMO's made-up state for `helio` (`command=…`).
+    pub command_demo: Option<crate::command::State>,
     /// The sidebar's rows' focus handles, by row, and what has the
     /// keyboard as the window is drawn (its ring shows when a key moved it).
     nav_focus: std::collections::HashMap<usize, FocusHandle>,
@@ -365,6 +370,8 @@ impl HelioApp {
                 Page::Hosts
             },
             setup,
+            command_change: None,
+            command_demo: None,
         };
         app.follow_hosting(window, cx);
         app

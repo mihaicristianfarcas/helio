@@ -187,9 +187,9 @@ when it needs to be and never merged into it.
 
 | Script | Makes |
 |---|---|
-| `tools/package-macos` | `Helio-VERSION-macos-ARCH.zip`: Helio.app, with the host inside it as a helper app, `Contents/Helpers/Helio Host.app` (`tools/build-helio-app`, which signs the helper, then the app) |
-| `tools/package-windows.ps1` | `Helio-VERSION-windows-x86_64.zip`: Helio.exe beside FFmpeg's DLLs and the host's engine, `helio-host.exe`; `install.ps1`, which is `tools/install-helio.ps1`; and `Install Helio.cmd`. `install.ps1` copies itself beside the programs and lists Helio in Settings > Apps, whose **Uninstall** runs it with `-Uninstall` (hosting off first) |
-| `tools/linux/package` | `Helio-VERSION-linux-ARCH.tar.gz`: a folder with `helio-app`, `helio-host`, the host's unit `helio-host.service`, the launcher entry, its icon and `install.sh` (`tools/linux/install-release`) |
+| `tools/package-macos` | `Helio-VERSION-macos-ARCH.zip`: Helio.app, with the host inside it as a helper app, `Contents/Helpers/Helio Host.app` (`tools/build-helio-app`, which signs the helper, then the app), and `helio`, the command line: `Contents/Resources/bin/helio`, a link to the app's program, the folder Settings > General names in `/etc/paths.d/helio` |
+| `tools/package-windows.ps1` | `Helio-VERSION-windows-x86_64.zip`: Helio.exe beside FFmpeg's DLLs and the host's engine, `helio-host.exe`; `bin\helio.exe`, the `helio` command (helio-app's `helio-console`, which runs `Helio.exe cli`); `install.ps1`, which is `tools/install-helio.ps1`; and `Install Helio.cmd`. `install.ps1` copies itself beside the programs and lists Helio in Settings > Apps, whose **Uninstall** runs it with `-Uninstall` (hosting off first, and `bin` off the user's `PATH` if Settings > General put it there) |
+| `tools/linux/package` | `Helio-VERSION-linux-ARCH.tar.gz`: a folder with `helio-app`, `helio-host`, the host's unit `helio-host.service`, the launcher entry, its icon and `install.sh` (`tools/linux/install-release`; its `--uninstall` also removes the `~/.local/bin/helio` link Settings > General makes) |
 | `tools/publish-downloads DIST` | The downloads: each archive at `https://download.helio.mihaicristian.dev/latest/Helio-OS-ARCH.EXT`, then `latest/SHA256SUMS` and `latest.json` (version, commit, sizes, checksums), in the Cloudflare R2 bucket `helio-downloads`, with wrangler; last, the archives the previous `latest.json` listed and this one does not are deleted |
 
 All of them build with `HELIO_RELEASE=1`, so the programs follow

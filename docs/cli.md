@@ -5,8 +5,30 @@ and this computer as a host with `helio host`. It is the one command you
 type. `helio --help` lists every command, and `helio host --help` the
 host's. AI agents have a command of their own, [`helio-agent`](#helio-agent--ai-agents).
 
-`helio` is built with the apps: `cargo build --release -p helio-cli`
-(`target/release/helio`), and `-p helio-agent` for `helio-agent`.
+`helio` comes with Helio, inside the app: the app's own program is the
+command when it is started as `helio`. Installing Helio does not put it on
+your `PATH`. To type it in a terminal, open Helio's **Settings → General**
+and, under **Command line**, choose **Install**; **Remove** takes it off
+again. Terminals opened from then on have it.
+
+| System | Install does | Uninstalling Helio |
+|---|---|---|
+| macOS | Writes `/etc/paths.d/helio`, naming the app's own folder for the command (`Helio.app/Contents/Resources/bin`), which every login shell adds to its `PATH`; macOS asks for an administrator | `helio` goes with the app, however you remove it. The one-line `/etc/paths.d/helio` stays, naming a folder that is gone, until you install it again or remove it (`sudo rm /etc/paths.d/helio`, or `brew uninstall --zap --cask helio`) |
+| Windows | Adds Helio's `bin` folder (`%LOCALAPPDATA%\Programs\Helio\bin`, with `helio.exe` in it) to your user `PATH`; no administrator | Settings > Apps > Uninstall takes it off your `PATH`, and the folder goes with Helio |
+| Linux | Links `~/.local/bin/helio` to `helio-app`; most distributions have `~/.local/bin` on the `PATH` | `install.sh --uninstall` removes the link |
+
+Install is there only for a copy of Helio that stays where it is: on a Mac,
+one in Applications (not on the disk image, nor run from Downloads), and a
+packaged release (a build of your own from `cargo build` has no command
+beside it; `tools/build-helio-app` and `tools/build-helio-win.ps1` make
+one that does). A `~/.local/bin/helio` that is not Helio's is left as it is.
+
+The app's program also takes the command after `cli`, wherever it is:
+`/Applications/Helio.app/Contents/MacOS/Helio cli hosts` is `helio hosts`
+(`helio-app cli` on Linux, `Helio.exe cli` on Windows, though there only
+`bin\helio.exe` shows what it prints in the terminal). From a checkout,
+`cargo build --release -p helio-cli` builds `helio` on its own
+(`target/release/helio`), and `-p helio-agent` builds `helio-agent`.
 
 ## `helio`
 
@@ -154,6 +176,8 @@ run started by Helio.
 
 ## The apps
 
+- Started as `helio`, or as `Helio cli ARGS` (`helio-app cli ARGS`), the
+  app's program is the command line (above), and none of the app.
 - `Helio mcp` (or `helio-app mcp`) runs the MCP server, as `helio-agent mcp`;
   `Helio mcp install`, `uninstall` and `status` add it to other agents'
   settings, as `helio-agent mcp install` does (see

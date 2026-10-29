@@ -5,6 +5,9 @@
 #
 # - the app (helio-app) and the host's engine (helio-host) in ~/.local/bin, side by
 #   side, where the app's hosting switch finds the engine;
+# - not `helio`, the command line, on the PATH: Helio's Settings > General
+#   links ~/.local/bin/helio to helio-app (helio-app/src/command.rs), and the
+#   uninstall removes that link;
 # - the launcher entry, with its icon;
 # - the host's user unit (helio-host.service), installed but not enabled: hosting
 #   is off until the app's switch turns it on (`helio-host enable`). An update
@@ -36,6 +39,11 @@ if [[ ${1:-} == --uninstall ]]; then
     # turn it off by hand (helio-host disable).
     if [[ -x $BIN/helio-host ]]; then
         "$BIN/helio-host" disable
+    fi
+    # `helio` only if it is the link Settings made (to helio-app, wherever
+    # the home folder really is), not a program of that name.
+    if [[ -L $BIN/helio && $(readlink -f "$BIN/helio") == "$(readlink -f "$BIN/helio-app")" ]]; then
+        rm -f "$BIN/helio"
     fi
     rm -f "$UNITS/helio-host.service" "$BIN/helio-host" "$BIN/helio-app" \
         "$DATA/applications/$ID.desktop" "$DATA"/icons/hicolor/*/apps/"$ID".{png,svg}

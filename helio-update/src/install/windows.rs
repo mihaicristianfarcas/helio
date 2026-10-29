@@ -1,7 +1,8 @@
 //! Installing an update on Windows.
 //!
-//! The app replaces its files, the host's engine (`helio-host.exe`) among them,
-//! in the folder it runs from (per user, so no administrator is needed). A
+//! The app replaces its files, the host's engine (`helio-host.exe`) and the
+//! `helio` command (`bin\helio.exe`) among them, in the folder it runs from
+//! (per user, so no administrator is needed). A
 //! running program or loaded DLL cannot be written over or deleted, but it
 //! can be renamed: the old files are renamed `*.old` and the new ones
 //! copied beside them; the next start deletes the old ones. Then the
@@ -183,6 +184,11 @@ fn ours(name: &str) -> bool {
         || dll("swresample-")
 }
 
+/// The `helio` command, in a folder of its own beside the app's files, which
+/// Helio's Settings > General puts on the PATH (helio-app's command.rs):
+/// `helio.exe` cannot sit beside `Helio.exe`.
+const COMMAND: &str = r"bin\helio.exe";
+
 /// The name a file renamed aside gets: `Helio.exe.old`, or
 /// `Helio.exe.2.old` while an older one is still held.
 fn aside(path: &Path) -> PathBuf {
@@ -200,26 +206,39 @@ fn aside(path: &Path) -> PathBuf {
         .unwrap_or(first)
 }
 
-/// The archive's program files over Helio's in `dir`, all or none. FFmpeg's
+/// The archive's program files over Helio's in `dir`, all or none: those
+/// beside Helio.exe, and the command in its folder ([`COMMAND`]). FFmpeg's
 /// DLLs of an older version (another number) are renamed aside too. The
 /// archive's installer is not copied: [`register`] puts it where Helio is
 /// installed, and a copy elsewhere (Downloads) needs none.
 fn replace_files(unpacked: &Path, dir: &Path) -> Result<(), String> {
-    let new: Vec<PathBuf> = std::fs::read_dir(unpacked)
+    let mut new: Vec<(PathBuf, PathBuf)> = std::fs::read_dir(unpacked)
         .map_err(|e| e.to_string())?
         .filter_map(Result::ok)
         .map(|e| e.path())
         .filter(|p| p.is_file() && p.file_name().is_some_and(|n| ours(&n.to_string_lossy())))
+        .filter_map(|p| {
+            let to = dir.join(p.file_name()?);
+            Some((p, to))
+        })
         .collect();
     let names: Vec<String> = new
         .iter()
-        .filter_map(|p| {
+        .filter_map(|(p, _)| {
             p.file_name()
                 .map(|n| n.to_string_lossy().to_ascii_lowercase())
         })
         .collect();
     if !names.iter().any(|n| n == "helio.exe") {
         return Err("the archive has no Helio.exe".into());
+    }
+    let command = unpacked.join(COMMAND);
+    if command.is_file() {
+        let to = dir.join(COMMAND);
+        if let Some(bin) = to.parent() {
+            std::fs::create_dir_all(bin).map_err(|e| format!("{}: {e}", bin.display()))?;
+        }
+        new.push((command, to));
     }
     let stale: Vec<PathBuf> = std::fs::read_dir(dir)
         .map_err(|e| e.to_string())?
@@ -240,16 +259,14 @@ fn replace_files(unpacked: &Path, dir: &Path) -> Result<(), String> {
             std::fs::rename(old, &to).map_err(|e| format!("{}: {e}", old.display()))?;
             moved.push((old.clone(), to));
         }
-        for file in &new {
-            let name = file.file_name().ok_or("a file without a name")?;
-            let target = dir.join(name);
+        for (file, target) in &new {
             if target.exists() {
-                let to = aside(&target);
-                std::fs::rename(&target, &to).map_err(|e| format!("{}: {e}", target.display()))?;
+                let to = aside(target);
+                std::fs::rename(target, &to).map_err(|e| format!("{}: {e}", target.display()))?;
                 moved.push((target.clone(), to));
             }
-            std::fs::copy(file, &target).map_err(|e| format!("{}: {e}", target.display()))?;
-            written.push(target);
+            std::fs::copy(file, target).map_err(|e| format!("{}: {e}", target.display()))?;
+            written.push(target.clone());
         }
         Ok(())
     })();
@@ -373,8 +390,8 @@ pub(crate) fn rehearse(unpacked: &Path, folder: &Path) -> Result<(), String> {
     Ok(())
 }
 
-/// Delete what an update renamed aside in Helio's folder, now that nothing
-/// holds it.
+/// Delete what an update renamed aside in Helio's folder and the command's
+/// ([`COMMAND`]), now that nothing holds it.
 pub(crate) fn tidy() {
     let Some(dir) = std::env::current_exe()
         .ok()
@@ -382,7 +399,14 @@ pub(crate) fn tidy() {
     else {
         return;
     };
-    let Ok(entries) = std::fs::read_dir(&dir) else {
+    tidy_in(&dir);
+    if let Some(bin) = dir.join(COMMAND).parent() {
+        tidy_in(bin);
+    }
+}
+
+fn tidy_in(dir: &Path) {
+    let Ok(entries) = std::fs::read_dir(dir) else {
         return;
     };
     for path in entries.filter_map(Result::ok).map(|e| e.path()) {
@@ -484,6 +508,39 @@ mod tests {
         register(&unpacked, &folder);
         let asked = std::fs::read_to_string(unpacked.join("asked.txt")).unwrap();
         assert_eq!(asked.trim(), folder.to_string_lossy());
+    }
+
+    #[test]
+    fn an_update_replaces_the_command_in_its_folder_too() {
+        let dir = tempfile::tempdir().unwrap();
+        let (unpacked, folder) = (dir.path().join("unpacked"), dir.path().join("Helio"));
+        for (path, text) in [
+            (unpacked.join("Helio.exe"), "new app"),
+            (unpacked.join(COMMAND), "new command"),
+            (folder.join("Helio.exe"), "old app"),
+        ] {
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(path, text).unwrap();
+        }
+        // A copy from before the command: its folder is made.
+        replace_files(&unpacked, &folder).unwrap();
+        assert_eq!(
+            std::fs::read_to_string(folder.join(COMMAND)).unwrap(),
+            "new command"
+        );
+        // And the next one renames the old command aside, as it does the
+        // app (a terminal may be running it).
+        std::fs::write(unpacked.join(COMMAND), "newer command").unwrap();
+        replace_files(&unpacked, &folder).unwrap();
+        assert_eq!(
+            std::fs::read_to_string(folder.join(COMMAND)).unwrap(),
+            "newer command"
+        );
+        assert!(folder.join(r"bin\helio.exe.old").is_file());
+        assert_eq!(
+            std::fs::read_to_string(folder.join("Helio.exe")).unwrap(),
+            "new app"
+        );
     }
 
     #[test]

@@ -246,7 +246,11 @@ installation under way, or one that did not take), `install` (installs the
 latest release, for real, as **Install and Restart** does), `updates` (its
 sheet), `menus` (the menu bar and the host's icon's menu, to the log),
 `snapshot=PATH`, `close` (the window closes as its button closes it; with
-hosting on, the app stays behind its icon), `quit`.
+hosting on, the app stays behind its icon), `quit`,
+`command=on|off|elsewhere|taken|unavailable|busy` (General's Command line
+row in that state, made up: its button then changes nothing on the
+system), `command-install` and `command-remove` (its button pressed, for
+real: `helio` on or off the PATH).
 
 Setup and hosting: `setup[=welcome|use|permissions|pairing|done]` (setup
 open at that step), `hosting=off|on|starting|failed|switching|elevating`

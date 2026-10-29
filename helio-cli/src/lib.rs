@@ -6,7 +6,8 @@
 //!
 //! A library, with the `helio` bin a line over it, so that the app can be
 //! `helio` too: Helio's own program runs [`main`] when it is started as
-//! `helio`, which is how installing Helio puts the command on the PATH.
+//! `helio`, so the command comes with Helio (whose Settings > General puts
+//! it on the PATH).
 //!
 //! `HELIO_TEST_INPUT` scripts input into a stream (see `script`).
 

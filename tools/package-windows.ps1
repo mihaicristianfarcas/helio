@@ -5,11 +5,14 @@
 #
 #   powershell -NoProfile -ExecutionPolicy Bypass -File tools\package-windows.ps1 [-FFmpeg DIR]
 #     -> target\dist\Helio-VERSION-windows-x86_64.zip  (Helio.exe beside FFmpeg's DLLs,
-#                                                        helio-host.exe, install.ps1, Install Helio.cmd)
+#                                                        helio-host.exe, bin\helio.exe, install.ps1,
+#                                                        Install Helio.cmd)
 #
 # helio-host.exe sits beside Helio.exe, where the app's hosting switch finds it;
 # turning hosting on copies it to C:\Program Files\Helio Host, which the service
-# runs (helio-host/src/hosting/windows.rs). VERSION is the workspace's. -FFmpeg
+# runs (helio-host/src/hosting/windows.rs). bin\helio.exe is the `helio`
+# command (helio-app/src/bin/console.rs), in a folder of its own that
+# Helio's Settings > General puts on the PATH. VERSION is the workspace's. -FFmpeg
 # (default: FFMPEG_DIR) and LLVM are what tools\build-helio-win.ps1 needs.
 # The files sit at the archive's root, so Explorer's Extract All gives one
 # folder. The programs are not signed: SmartScreen asks before Helio.exe
@@ -66,6 +69,8 @@ try {
         param($dir)
         Copy-Item (Join-Path $release 'helio-app.exe') (Join-Path $dir 'Helio.exe')
         Copy-Item (Join-Path $release 'helio-host.exe') $dir
+        New-Item -ItemType Directory (Join-Path $dir 'bin') | Out-Null
+        Copy-Item (Join-Path $release 'helio-console.exe') (Join-Path $dir 'bin\helio.exe')
         # The DLLs tools\build-helio-win.ps1 puts beside Helio.exe: avcodec,
         # avutil, and swresample (some decoders).
         Get-ChildItem (Join-Path $FFmpeg 'bin') -Filter '*.dll' |

@@ -12,6 +12,11 @@ description = "Helio: the Helio streaming client app (host list, pairing, settin
 name = "helio-app"
 path = "src/main.rs"
 
+# `helio` on Windows: bin\helio.exe in Helio's folder (src/bin/console.rs).
+[[bin]]
+name = "helio-console"
+path = "src/bin/console.rs"
+
 [features]
 default = ["runtime-shaders"]
 # See helio-ui; the app bundles build without it when Xcode is there.
@@ -47,7 +52,13 @@ objc2-core-foundation = { version = "0.3", features = ["std", "CFBase", "CFStrin
 helio-display = { path = "../helio-display" }
 windows = { version = "0.61", features = [
     "Win32_Foundation",
+    "Win32_Security",
+    "Win32_System_Console",
+    "Win32_System_JobObjects",
     "Win32_System_Registry",
+    "Win32_System_Threading",
+    # WM_SETTINGCHANGE, when `helio` goes on or off the PATH (command.rs).
+    "Win32_UI_WindowsAndMessaging",
 ] }
 
 [dev-dependencies]
