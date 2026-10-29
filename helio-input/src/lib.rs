@@ -24,6 +24,9 @@ pub mod macos;
 pub mod evdev;
 pub mod repeat;
 pub use repeat::{KeyRepeat, RepeatRate};
+/// Which key types each keysym on a layout (pure; the X11 sink's and
+/// KWin's text).
+pub mod typing;
 #[cfg(target_os = "linux")]
 pub mod x11;
 
