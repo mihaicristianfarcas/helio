@@ -14,11 +14,19 @@
 //!
 //! The output is a monitor of its own that the desktop extends onto, placed
 //! where KWin puts it; the pointer's position on it is turned into KWin's
-//! global coordinates, which fake input takes. Text goes as keysyms (fake
-//! input 6, as KWin 6.6 has it; with an older one, keys only). The output goes when
-//! its stream is closed, or when this connection does (the host exiting).
+//! global coordinates, which fake input takes. Text goes by the key that
+//! types each character on the host's layout (KWin's keymap, its first
+//! layout), with a Shift pressed around it where that is how, as the X11
+//! sink types (`helio_input::typing`): KWin's own keysym typing sets the
+//! modifiers out of step with the key, so a capital came out small and the
+//! letter after it capital (KWin 6.6). A character the layout lacks goes as
+//! a keysym (fake input 6), which KWin types on a key of its own with no
+//! modifier. The output goes when its stream is closed, or when this
+//! connection does (the host exiting).
 
+use std::collections::HashMap;
 use std::os::fd::AsRawFd;
+use std::os::unix::fs::FileExt;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::thread::JoinHandle;
@@ -26,8 +34,8 @@ use std::time::{Duration, Instant};
 
 use helio_input::InputError;
 use parking_lot::Mutex;
-use wayland_client::protocol::{wl_output, wl_registry};
-use wayland_client::{Connection, Dispatch, EventQueue, Proxy, QueueHandle};
+use wayland_client::protocol::{wl_keyboard, wl_output, wl_registry, wl_seat};
+use wayland_client::{Connection, Dispatch, EventQueue, Proxy, QueueHandle, WEnum};
 use wayland_protocols_plasma::screencast::v1::client::{
     zkde_screencast_stream_unstable_v1::{self, ZkdeScreencastStreamUnstableV1},
     zkde_screencast_unstable_v1::{self, ZkdeScreencastUnstableV1},
@@ -59,6 +67,8 @@ const FAKE_INPUT_KEYS: u32 = 4;
 const FAKE_INPUT_KEYSYMS: u32 = 6;
 /// `wl_output.name` (4): which output is ours.
 const OUTPUT_VERSION: u32 = 4;
+/// `wl_seat`'s keyboard, for KWin's keymap.
+const SEAT_VERSION: u32 = 5;
 
 /// `pointer` 2: drawn into the picture.
 const POINTER_EMBEDDED: u32 = 2;
@@ -102,6 +112,9 @@ impl VirtualOutput {
             "Helio Host".into(),
             "streams this desktop to a device paired with it".into(),
         );
+        // The size asked for is the output's mode, in pixels, whatever the
+        // protocol calls it: KWin makes the output that size and scales it
+        // (`DrmVirtualOutput`), so its desktop is that over the scale.
         let logical = (
             (width as f64 / scale).round().max(1.0) as u32,
             (height as f64 / scale).round().max(1.0) as u32,
@@ -111,8 +124,8 @@ impl VirtualOutput {
             screencast.stream_virtual_output_with_description(
                 NAME.into(),
                 "Helio Host's display for the device streaming it".into(),
-                logical.0 as i32,
-                logical.1 as i32,
+                width as i32,
+                height as i32,
                 scale,
                 POINTER_EMBEDDED,
                 &qh,
@@ -121,8 +134,8 @@ impl VirtualOutput {
         } else {
             screencast.stream_virtual_output(
                 NAME.into(),
-                logical.0 as i32,
-                logical.1 as i32,
+                width as i32,
+                height as i32,
                 scale,
                 POINTER_EMBEDDED,
                 &qh,
@@ -189,10 +202,12 @@ impl VirtualOutput {
     pub fn sink(&self, picture: (u32, u32, u32, u32)) -> RemoteSink {
         let (conn, fake, shared) = (self.conn.clone(), self.fake.clone(), self.shared.clone());
         let deliver: Deliver = Box::new(move |ops| {
-            let origin = shared.lock().ours().map_or((0, 0), |o| o.position);
+            let state = shared.lock();
+            let origin = state.ours().map_or((0, 0), |o| o.position);
             for op in ops {
-                send(&fake, origin, op);
+                send(&fake, &state.keys, origin, op);
             }
+            drop(state);
             conn.flush().map_err(|_| InputError::Unavailable)
         });
         RemoteSink::new(deliver, picture, Some(self.logical))
@@ -210,13 +225,65 @@ impl Drop for VirtualOutput {
     }
 }
 
+/// The host's layout as fake input types it: which key types each keysym
+/// (an X key code: the Linux key code plus 8), and whether with Shift.
+#[derive(Default)]
+struct Keys {
+    typing: HashMap<u32, (u8, bool)>,
+    shift: Option<u8>,
+}
+
+impl Keys {
+    /// From KWin's keymap: its first layout's first two levels.
+    fn from_keymap(text: String) -> Option<Keys> {
+        use xkbcommon::xkb;
+        let context = xkb::Context::new(xkb::CONTEXT_NO_FLAGS);
+        let keymap = xkb::Keymap::new_from_string(
+            &context,
+            text,
+            xkb::KEYMAP_FORMAT_TEXT_V1,
+            xkb::KEYMAP_COMPILE_NO_FLAGS,
+        )?;
+        let min = keymap.min_keycode().raw().clamp(8, 255);
+        let max = keymap.max_keycode().raw().clamp(min, 255);
+        let mut keysyms = Vec::new();
+        for kc in min..=max {
+            for level in 0..2 {
+                let syms = keymap.key_get_syms_by_level(xkb::Keycode::new(kc), 0, level);
+                keysyms.push(syms.first().map_or(0, |s| s.raw()));
+            }
+        }
+        let typing = helio_input::typing::typing_map(min as u8, 2, &keysyms, &[]);
+        let shift = typing.get(&helio_input::typing::SHIFT_L).map(|k| k.0);
+        Some(Keys { typing, shift })
+    }
+}
+
 /// One op, as fake input: the pointer at `origin` (the output's place) plus
-/// its position on the output.
-fn send(fake: &OrgKdeKwinFakeInput, origin: (i32, i32), op: Op) {
+/// its position on the output; text by `keys` where the layout has it.
+fn send(fake: &OrgKdeKwinFakeInput, keys: &Keys, origin: (i32, i32), op: Op) {
     let state = |down: bool| u32::from(down);
     let v = fake.version();
+    let code = |kc: u8| kc as u32 - 8;
     match op {
         Op::Key(code, down) if v >= FAKE_INPUT_KEYS => fake.keyboard_key(code as u32, state(down)),
+        // Typed whole on the way down; nothing more on the way up.
+        Op::Keysym(sym, down)
+            if v >= FAKE_INPUT_KEYS && keys.typing.contains_key(&(sym as u32)) =>
+        {
+            let (kc, shifted) = keys.typing[&(sym as u32)];
+            let shift = if shifted { keys.shift } else { None };
+            if down {
+                if let Some(s) = shift {
+                    fake.keyboard_key(code(s), 1);
+                }
+                fake.keyboard_key(code(kc), 1);
+                fake.keyboard_key(code(kc), 0);
+                if let Some(s) = shift {
+                    fake.keyboard_key(code(s), 0);
+                }
+            }
+        }
         Op::Keysym(sym, down) if v >= FAKE_INPUT_KEYSYMS => {
             fake.keyboard_keysym(sym as u32, state(down))
         }
@@ -285,6 +352,8 @@ fn connect() -> Result<(Connection, EventQueue<State>, State), String> {
 struct State {
     screencast: Option<ZkdeScreencastUnstableV1>,
     fake: Option<OrgKdeKwinFakeInput>,
+    keyboard: Option<wl_keyboard::WlKeyboard>,
+    keys: Keys,
     outputs: Vec<Output>,
     /// How many outputs there were before ours was asked for.
     before: Option<usize>,
@@ -357,6 +426,9 @@ impl Dispatch<wl_registry::WlRegistry, ()> for State {
             "org_kde_kwin_fake_input" => {
                 state.fake = Some(registry.bind(name, version.min(FAKE_INPUT_VERSION), qh, ()));
             }
+            "wl_seat" => {
+                let _: wl_seat::WlSeat = registry.bind(name, version.min(SEAT_VERSION), qh, ());
+            }
             "wl_output" => {
                 let proxy = registry.bind(name, version.min(OUTPUT_VERSION), qh, ());
                 state.outputs.push(Output {
@@ -367,6 +439,59 @@ impl Dispatch<wl_registry::WlRegistry, ()> for State {
                 });
             }
             _ => {}
+        }
+    }
+}
+
+impl Dispatch<wl_seat::WlSeat, ()> for State {
+    fn event(
+        state: &mut Self,
+        seat: &wl_seat::WlSeat,
+        event: wl_seat::Event,
+        _: &(),
+        _: &Connection,
+        qh: &QueueHandle<Self>,
+    ) {
+        if let wl_seat::Event::Capabilities {
+            capabilities: WEnum::Value(caps),
+        } = event
+        {
+            if caps.contains(wl_seat::Capability::Keyboard) && state.keyboard.is_none() {
+                state.keyboard = Some(seat.get_keyboard(qh, ()));
+            }
+        }
+    }
+}
+
+impl Dispatch<wl_keyboard::WlKeyboard, ()> for State {
+    fn event(
+        state: &mut Self,
+        _: &wl_keyboard::WlKeyboard,
+        event: wl_keyboard::Event,
+        _: &(),
+        _: &Connection,
+        _: &QueueHandle<Self>,
+    ) {
+        let wl_keyboard::Event::Keymap {
+            format: WEnum::Value(wl_keyboard::KeymapFormat::XkbV1),
+            fd,
+            size,
+        } = event
+        else {
+            return;
+        };
+        // Read where it is, not from the file's position: KWin may hand
+        // every client the same open file.
+        let mut text = vec![0u8; size as usize];
+        let read = std::fs::File::from(fd).read_exact_at(&mut text, 0);
+        let end = text.iter().position(|&b| b == 0).unwrap_or(text.len());
+        text.truncate(end);
+        match read.ok().and_then(|()| String::from_utf8(text).ok()) {
+            Some(text) => match Keys::from_keymap(text) {
+                Some(keys) => state.keys = keys,
+                None => tracing::debug!("KWin's keymap did not compile: text goes as keysyms"),
+            },
+            None => tracing::debug!("KWin's keymap could not be read: text goes as keysyms"),
         }
     }
 }
@@ -435,5 +560,146 @@ impl Dispatch<OrgKdeKwinFakeInput, ()> for State {
         _: &Connection,
         _: &QueueHandle<Self>,
     ) {
+    }
+}
+
+/// These need a KDE Plasma session under Wayland (KWin with OpenGL), and
+/// this test program named in a desktop entry that asks KWin for the
+/// interfaces, as `install.sh` names `helio-host`; run them from a
+/// terminal in the session:
+///
+/// ```sh
+/// cargo test --release -p helio-host --no-run      # prints the test program's path
+/// printf '[Desktop Entry]\nType=Application\nName=Helio Host test\nExec=%s\nNoDisplay=true\nX-KDE-Wayland-Interfaces=zkde_screencast_unstable_v1,org_kde_kwin_fake_input\n' \
+///     "$(realpath target/release/deps/helio_host-HASH)" > ~/.local/share/applications/helio-host-test.desktop
+/// kbuildsycoca6
+/// target/release/deps/helio_host-HASH --ignored kwin
+/// ```
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use helio_capture::pipewire::PipeWireCapture;
+    use helio_capture::Grab;
+    use helio_input::InputSink;
+    use helio_proto::input::InputEvent;
+
+    /// A frame from `capture`, within a few seconds.
+    fn frame(capture: &mut PipeWireCapture) -> helio_capture::Frame {
+        let deadline = Instant::now() + Duration::from_secs(5);
+        loop {
+            if let (Ok(Grab::Frame), Some(f)) = (capture.grab(500), capture.image()) {
+                return f;
+            }
+            assert!(Instant::now() < deadline, "no frame from KWin's stream");
+        }
+    }
+
+    /// Whether the pixels around (x, y) differ between two frames.
+    fn changed_near(a: &helio_capture::Frame, b: &helio_capture::Frame, x: u32, y: u32) -> bool {
+        let (ab, bb) = (a.bytes(), b.bytes());
+        (y.saturating_sub(16)..(y + 48).min(a.height)).any(|row| {
+            let start = row as usize * a.stride + x.saturating_sub(16) as usize * 4;
+            let end = row as usize * a.stride + (x + 48).min(a.width) as usize * 4;
+            ab[start..end] != bb[start..end]
+        })
+    }
+
+    #[test]
+    #[ignore = "requires a KDE Plasma session that grants this program KWin's interfaces"]
+    fn kwin_makes_an_output_of_the_clients_size_and_takes_its_pointer() {
+        let (output, node) = VirtualOutput::open(1280, 800, 2.0).expect("a virtual output");
+        let mut capture = PipeWireCapture::new(None, node, None).expect("its stream");
+        let before = frame(&mut capture);
+        assert_eq!(
+            (before.width, before.height),
+            (1280, 800),
+            "the stream is the client's size in pixels, at its density"
+        );
+        assert!(
+            output.shared.lock().ours().is_some(),
+            "KWin lists the output"
+        );
+        // The pointer onto the output, a quarter of the way in: drawn into
+        // the picture there.
+        let mut sink = output.sink((0, 0, 1280, 800));
+        sink.inject(&[InputEvent::MouseMoveAbs { x: 320, y: 200 }])
+            .expect("input reaches KWin");
+        std::thread::sleep(Duration::from_millis(300));
+        sink.inject(&[InputEvent::MouseMoveAbs { x: 321, y: 200 }])
+            .expect("input reaches KWin");
+        let mut after = frame(&mut capture);
+        for _ in 0..10 {
+            if changed_near(&before, &after, 320, 200) {
+                break;
+            }
+            after = frame(&mut capture);
+        }
+        assert!(
+            changed_near(&before, &after, 320, 200),
+            "the pointer is drawn where it was moved"
+        );
+        drop(capture);
+        drop(output);
+        std::thread::sleep(Duration::from_millis(500));
+        let (_conn, _queue, state) = connect().expect("KWin");
+        assert!(
+            !state
+                .outputs
+                .iter()
+                .any(|o| o.name.as_deref().is_some_and(|n| n.ends_with(NAME))),
+            "the output is gone with its stream"
+        );
+    }
+
+    #[test]
+    #[ignore = "requires a KDE Plasma session that grants this program KWin's interfaces, and Konsole"]
+    fn kwin_types_keys_and_text_into_a_window_on_the_output() {
+        let (output, _node) = VirtualOutput::open(1280, 800, 1.0).expect("a virtual output");
+        let mut sink = output.sink((0, 0, 1280, 800));
+        // The pointer on the output first: KWin opens a window on the
+        // output the pointer is on.
+        sink.inject(&[InputEvent::MouseMoveAbs { x: 640, y: 400 }])
+            .expect("input reaches KWin");
+        let typed = std::env::temp_dir().join(format!("helio-kwin-typed-{}", std::process::id()));
+        let _ = std::fs::remove_file(&typed);
+        let mut konsole = std::process::Command::new("konsole")
+            .args(["--separate", "-e", "sh", "-c"])
+            .arg(format!(
+                "read -r line; printf %s \"$line\" > '{}'",
+                typed.display()
+            ))
+            .spawn()
+            .expect("Konsole");
+        std::thread::sleep(Duration::from_secs(3));
+        // Into the window, then a line: `ls` by keys, the rest as text, a
+        // capital and a shifted symbol by the layout's keys. (A letter the
+        // layout lacks, sent as a keysym, does not reach Konsole: KWin 6.6
+        // types it on a keymap of its own that Konsole does not take.)
+        let mut events = vec![
+            InputEvent::ButtonDown(helio_proto::input::Button::Left),
+            InputEvent::ButtonUp(helio_proto::input::Button::Left),
+            InputEvent::KeyDown(0x26),
+            InputEvent::KeyUp(0x26),
+            InputEvent::KeyDown(0x1F),
+            InputEvent::KeyUp(0x1F),
+        ];
+        events.extend(" from Helio!".chars().map(InputEvent::Text));
+        events.extend([InputEvent::KeyDown(0x1C), InputEvent::KeyUp(0x1C)]);
+        for e in events {
+            sink.inject(&[e]).expect("input reaches KWin");
+            std::thread::sleep(Duration::from_millis(30));
+        }
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while !typed.exists() && Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(100));
+        }
+        let _ = konsole.kill();
+        let _ = konsole.wait();
+        let line = std::fs::read_to_string(&typed).unwrap_or_default();
+        let _ = std::fs::remove_file(&typed);
+        assert_eq!(
+            line, "ls from Helio!",
+            "what reached the window on the output"
+        );
     }
 }

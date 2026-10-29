@@ -3631,6 +3631,7 @@ dependencies = [
  "windows 0.61.3",
  "windows-service",
  "x11rb",
+ "xkbcommon",
 ]
 
 [[package]]
