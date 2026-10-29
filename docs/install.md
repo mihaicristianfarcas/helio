@@ -172,6 +172,11 @@ What else each system needs:
   (`tools/linux/Dockerfile` is the authoritative list; it is what the
   project is built and tested with.)
 
+  On Fedora, whose FFmpeg leaves x264 out, a host with no hardware H.264
+  encoder encodes with OpenH264: install Cisco's library with
+  `sudo dnf install openh264` (Fedora's `noopenh264` stands in for it and
+  encodes nothing).
+
 ## Helio on macOS
 
 ```sh

@@ -1,7 +1,12 @@
 //! Encoding on Linux: FFmpeg's encoders -- VA-API (Intel, AMD), NVENC
-//! (NVIDIA), else x264 in software -- configured for streaming the way
-//! Sunshine configures them: no B-frames, an endless GOP, a VBV of about one
-//! frame, SPS/PPS with every IDR.
+//! (NVIDIA), else x264 in software, else OpenH264 -- configured for
+//! streaming the way Sunshine configures them: no B-frames, an endless GOP,
+//! a VBV of about one frame, SPS/PPS with every IDR.
+//!
+//! OpenH264 is the last resort, which Sunshine has not: Fedora's FFmpeg
+//! (`ffmpeg-free`) leaves x264 out for its patents and carries Cisco's
+//! OpenH264 instead, and Fedora's Mesa encodes no H.264 through VA-API
+//! either, so on a stock Fedora it is the one H.264 encoder there is.
 //!
 //! Images come in as BGRX or RGBX at the screen's size; swscale turns them into the
 //! encoder's 4:2:0 (BT.709, limited range) at the stream's size, scaled to
@@ -32,7 +37,10 @@ pub struct Image<'a> {
 pub enum Backend {
     Vaapi,
     Nvenc,
+    /// x264.
     Software,
+    /// Cisco's OpenH264, H.264 at 4:2:0 only.
+    OpenH264,
 }
 
 impl Backend {
@@ -47,6 +55,7 @@ impl Backend {
             (Backend::Software, Codec::H264) => c"libx264",
             (Backend::Software, Codec::Hevc) => c"libx265",
             (Backend::Software, Codec::Av1) => c"libsvtav1",
+            (Backend::OpenH264, _) => c"libopenh264",
         }
     }
 }
@@ -118,8 +127,14 @@ impl FfmpegEncoder {
 
     fn first(config: EncoderConfig) -> Result<FfmpegEncoder, EncodeError> {
         let mut last = EncodeError::Unsupported(format!("no {} encoder", config.codec.name()));
-        for backend in [Backend::Vaapi, Backend::Nvenc, Backend::Software] {
-            if backend == Backend::Software && config.codec != Codec::H264 {
+        for backend in [
+            Backend::Vaapi,
+            Backend::Nvenc,
+            Backend::Software,
+            Backend::OpenH264,
+        ] {
+            let software = matches!(backend, Backend::Software | Backend::OpenH264);
+            if software && config.codec != Codec::H264 {
                 // x265 and SVT-AV1 cannot keep up in real time on most
                 // machines; H.264 is offered instead.
                 continue;
@@ -254,6 +269,13 @@ impl FfmpegEncoder {
                     (*e.ctx).thread_count = 0;
                     format
                 }
+                (Backend::OpenH264, true) => {
+                    return Err(EncodeError::Unsupported("4:4:4 through OpenH264".into()));
+                }
+                (Backend::OpenH264, false) => {
+                    (*e.ctx).pix_fmt = ff::AVPixelFormat::AV_PIX_FMT_YUV420P;
+                    ff::AVPixelFormat::AV_PIX_FMT_YUV420P
+                }
             };
             e.set_options();
             let status = ff::avcodec_open2(e.ctx, codec, std::ptr::null_mut());
@@ -321,6 +343,12 @@ impl FfmpegEncoder {
                     self.opt(c"preset", "superfast");
                     self.opt(c"tune", "zerolatency");
                     self.opt(c"forced-idr", "1");
+                }
+                // Held to the bitrate, never skipping a frame to stay under
+                // it; an IDR when a frame is marked I (`libopenh264enc.c`).
+                Backend::OpenH264 => {
+                    self.opt(c"rc_mode", "bitrate");
+                    self.opt(c"allow_skip_frames", "0");
                 }
             }
         }
@@ -618,6 +646,56 @@ mod tests {
             .find(|w| w[..3] == [0, 0, 1] && w[3] & 0x1F == 7)
             .map(|w| w[4]);
         assert_eq!(profile, Some(244));
+    }
+
+    /// OpenH264 too, where FFmpeg has it and Cisco's library is installed
+    /// (Fedora: `dnf install openh264`); 4:2:0 only.
+    #[test]
+    fn openh264_idr_on_demand_and_no_4_4_4() {
+        let mut config = EncoderConfig {
+            codec: Codec::H264,
+            width: 640,
+            height: 360,
+            fps_mhz: 60_000,
+            bitrate_bps: 4_000_000,
+            preset: 1,
+            two_pass: false,
+            slices: 1,
+            hdr: false,
+            yuv444: true,
+        };
+        assert!(FfmpegEncoder::with(Backend::OpenH264, config).is_err());
+        config.yuv444 = false;
+        let Ok(mut e) = FfmpegEncoder::with(Backend::OpenH264, config) else {
+            eprintln!("no libopenh264 here; skipped");
+            return;
+        };
+        let (w, h) = (800u32, 600u32);
+        let mut kinds = Vec::new();
+        for i in 0..6u64 {
+            let px: Vec<u8> = (0..w * h)
+                .flat_map(|p| [(p % 256) as u8, (i * 40) as u8, 128, 0])
+                .collect();
+            e.submit(
+                &Image {
+                    data: &px,
+                    width: w,
+                    height: h,
+                    stride: w as usize * 4,
+                    rgb: false,
+                },
+                i,
+                i == 0 || i == 4,
+            )
+            .unwrap();
+            let f = e
+                .next(Duration::ZERO)
+                .expect("a frame for each picture")
+                .unwrap();
+            kinds.push(f.kind);
+        }
+        use FrameKind::*;
+        assert_eq!(kinds, [Idr, P, P, P, Idr, P]);
     }
 
     /// x264 turns a picture into an IDR, then P-frames, then an IDR on demand.
