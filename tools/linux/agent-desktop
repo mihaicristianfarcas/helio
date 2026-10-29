@@ -48,9 +48,9 @@ TOML
         (cd $OUT/home && xterm -geometry 90x24+40+60 -title Terminal >>$OUT/desktop.log 2>&1 &)
         sleep 1
         # Pair by hand: the agent (as an agent) and a person, both ways.
-        host=\$(/target/debug/helio-host identity | sed -E 's/.*= \"(.*)\"/\\1/' | paste -sd' ')
-        /target/debug/helio-host add-client 'test agent' \$(/target/debug/helio-agent identity) --agent >/dev/null
-        /target/debug/helio-host add-client 'test person' \$(/target/debug/helio identity) >/dev/null
+        host=\$(/target/debug/helio host identity | sed -E 's/.*= \"(.*)\"/\\1/' | paste -sd' ')
+        /target/debug/helio host add-client 'test agent' \$(/target/debug/helio-agent identity) --agent >/dev/null
+        /target/debug/helio host add-client 'test person' \$(/target/debug/helio identity) >/dev/null
         /target/debug/helio-agent add-host linux-desk 127.0.0.1:47820 \$host
         /target/debug/helio add-host linux-desk 127.0.0.1:47820 \$host
         (HOME=$OUT/home RUST_LOG=info,mainline=error /target/debug/helio-host host >$OUT/helio-host.log 2>&1 &)

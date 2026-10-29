@@ -1,30 +1,29 @@
 # Command line
 
-Everything the apps do can also be done from a terminal: streaming and
-pairing with `helio`, the host with `helio-host`, AI agents with `helio-agent`. The
-CLIs are built with the apps (`cargo build --release -p helio-cli -p helio-host
--p helio-agent`; the binaries land in `target/release/`).
+`helio` is Helio's command line: streaming and pairing from a terminal,
+and this computer as a host with `helio host`. It is the one command you
+type. `helio --help` lists every command, and `helio host --help` the
+host's. AI agents have a command of their own, [`helio-agent`](#helio-agent--ai-agents).
 
-## `helio` — the client
+`helio` is built with the apps: `cargo build --release -p helio-cli`
+(`target/release/helio`), and `-p helio-agent` for `helio-agent`.
 
-The same streaming code as the app, with a window of the platform's own.
+## `helio`
+
+`helio stream` is the app's streaming code, in a window of the platform's
+own.
+
+### Streaming
 
 | Command | Does |
 |---|---|
-| `helio identity` | Print this client's public keys (X25519 and ML-KEM-768) |
-| `helio discover` | List hosts on the local network, paired or not |
-| `helio pair HOST[:PORT]` | Pair with a host: shows a PIN to type on the host |
-| `helio pair-agent HOST[:PORT]` | Pair this device's AI agent (a key of its own) |
-| `helio hosts` | List paired hosts |
-| `helio add-host NAME ADDR X25519 MLKEM` | Pair by hand, with the host's keys from `helio-host identity` |
-| `helio remove-host NAME` | Forget a host |
-| `helio wake NAME` | Send Wake-on-LAN packets to a paired host |
 | `helio stream NAME [FLAGS]` | Stream a paired host |
-| `helio watch NAME [FLAGS]` | Watch the AI agent working on a host |
+| `helio watch NAME [FLAGS]` | Watch the AI agent working on a host (no sound; Ctrl+Alt+Shift+T takes over) |
+| `helio wake NAME` | Send Wake-on-LAN packets to a paired host |
 
-`helio stream` flags (the defaults come from this display, fitted to the
-nearest standard aspect ratio as in the app, at 60 fps and Moonlight's
-bitrate for the mode):
+Stream flags. The defaults come from this display, fitted to the nearest
+standard aspect ratio as in the app, at 60 fps and Moonlight's bitrate for
+the mode:
 
 | Flag | |
 |---|---|
@@ -49,33 +48,46 @@ bitrate for the mode):
 | `--wan-only` | Only the internet path (no LAN, no known addresses): to test it |
 | `--via ADDR` | Only this address (repeatable): to diagnose a path |
 
+A flag `helio` does not know, or one without its value, stops the command
+before it connects, and says which.
+
 Ctrl-C ends the stream properly, as Ctrl+Alt+Shift+Q does, so the host puts
 its displays back at once. The exit status is 1 when the stream ended for a
 reason other than you quitting.
 
-## `helio-host` — the host
+### Hosts
 
 | Command | Does |
 |---|---|
-| `helio-host` or `helio-host host` | Run the host in this session. On a Mac the host's LaunchAgent adds `--app PATH`, the app the host came with: the host follows it when it is replaced and turns hosting off when it is gone ([platforms/macos.md](platforms/macos.md#hosting-from-helio-and-its-menu-bar-icon)) |
-| `helio-host enable` | Turn hosting on: the host starts now and at every start after (see [usage.md](usage.md#hosting-on-and-off)). Windows: as administrator |
-| `helio-host disable` | Turn hosting off: the host stops and no longer starts. Windows: as administrator |
-| `helio-host status [--json]` | `off`, `starting`, `on` or `failed` (with why); for `on`, whether the host's web API answers on this computer |
-| `helio-host identity` | Print the host's public keys |
-| `helio-host clients` | List paired clients and agents, with what each may do |
-| `helio-host add-client NAME X25519 MLKEM [--agent] [--permissions LIST]` | Pair a client by hand (headless setups), with the keys from `helio identity` or `helio-agent identity`. Without `--permissions` it gets what pairing gives: everything for the first person's device, see only after it; an agent sees and acts |
-| `helio-host remove-client X25519` | Unpair a client |
-| `helio-host permissions X25519 [LIST]` | Show what a paired client may do, or set it. `LIST`: `all`, `none`, `see-only`, or names joined by commas (`view,keyboard,mouse`; the names are in [usage.md](usage.md#what-each-device-may-do)). What a client of its kind cannot have is left out |
-| `helio-host service` | Windows: the service itself (started by Windows) |
-| `helio-host clipboard-agent` | Windows: clipboard sharing as the signed-in user (started by the host for a session) |
+| `helio discover` | List hosts on the local network, paired or not |
+| `helio pair HOST[:PORT]` | Pair with a host: shows a PIN to type on the host |
+| `helio pair-agent HOST[:PORT]` | Pair this device's AI agent (a key of its own) |
+| `helio hosts` | List paired hosts |
+| `helio add-host NAME ADDR X25519 MLKEM` | Pair by hand, with the host's keys from `helio host identity` on it |
+| `helio remove-host NAME` | Forget a host |
+| `helio identity` | Print this device's public keys (X25519 and ML-KEM-768) |
 
-`helio-host enable` and `helio-host disable` exit with 0 when done, and 1 when they
-failed (with why on stderr). On Windows, run without an administrator, they
-change nothing and exit with **740** (Windows's `ERROR_ELEVATION_REQUIRED`):
-run the same command again elevated. Where the host runs from on each
-system is in [usage.md](usage.md#hosting-on-and-off).
+### `helio host` — this computer as a host
 
-`helio-host status --json` prints one line for programs (always exit 0):
+| Command | Does |
+|---|---|
+| `helio host enable` | Turn hosting on: the host starts now and at every start after (see [usage.md](usage.md#hosting-on-and-off)). Windows asks for an administrator |
+| `helio host disable` | Turn hosting off: the host stops and no longer starts. Windows asks for an administrator |
+| `helio host status [--json]` | `off`, `starting`, `on` or `failed` (with why); for `on`, whether the host's web UI answers on this computer |
+| `helio host identity` | Print the host's public keys |
+| `helio host clients` | List paired devices and agents: name, X25519 key, `person` or `agent`, and what each may do |
+| `helio host permissions X25519 [LIST]` | Show what a paired device or agent may do, or set it. `LIST`: `all`, `none`, `see-only`, or names joined by commas (`view,keyboard,mouse`; the names are in [usage.md](usage.md#what-each-device-may-do)). What a client of its kind cannot have is left out |
+| `helio host add-client NAME X25519 MLKEM [--agent] [--permissions LIST]` | Pair a device by hand (headless setups), with the keys from `helio identity` on it, or an agent's from `helio-agent identity` with `--agent`. Without `--permissions` it gets what pairing gives: everything for the first person's device, see only after it; an agent sees and acts |
+| `helio host remove-client X25519` | Unpair a device or an agent |
+
+`helio host enable` and `disable` run the host's own program, as the
+hosting switch in Helio does, and the program comes with Helio (where, on
+each system: [usage.md](usage.md#hosting-on-and-off)). On Windows, turning
+hosting on or off needs an administrator: from a terminal that is not
+elevated, `helio` asks Windows, which shows its prompt, as the switch does.
+Declined, nothing changes, and `helio` exits with 1.
+
+`helio host status --json` prints one line for programs:
 
 ```json
 {"state":"off"}
@@ -88,10 +100,23 @@ system is in [usage.md](usage.md#hosting-on-and-off).
 `https://localhost:WEB_PORT` with the certificate it made for itself. A host
 that has just started takes a moment to answer.
 
-Changes made with `add-client`, `remove-client` and `permissions` apply to
-a running host after it restarts; the window and the web UI apply theirs at
-once. On Windows the installed host's data folder is private to SYSTEM and
-Administrators, so these commands need an administrator's terminal there.
+`identity`, `clients`, `permissions`, `add-client` and `remove-client` read
+and change the host's data folder. On Windows only administrators may read
+it (`C:\ProgramData\Helio Host`, [platforms/windows.md](platforms/windows.md)),
+so run them in an administrator terminal there: from another, they change
+nothing and exit with 740 (Windows's `ERROR_ELEVATION_REQUIRED`).
+
+What `add-client`, `remove-client` and `permissions` change reaches a running
+host when it next starts (`helio host disable`, then `helio host enable`);
+Helio's This computer pages and the web UI change it at once.
+
+### Exit status
+
+| Status | Means |
+|---|---|
+| 0 | Done |
+| 1 | It failed, or the command line was not one `helio` takes; why is on stderr |
+| 740 | Windows: the host's data needs an administrator's terminal (above) |
 
 ## `helio-agent` — AI agents
 
@@ -100,7 +125,7 @@ Administrators, so these commands need an administrator's terminal there.
 | `helio-agent providers` | What can run here, and which provider is chosen |
 | `helio-agent set-key PROVIDER` | Save an API key (`anthropic`, `openai`, `openrouter`, `custom`, or `cloudflare`: the token clef's [screen checks](ai-agents.md#screen-checks-cloudflare-clef) use), read from stdin; an empty line forgets it |
 | `helio-agent check SCREEN.png --click X,Y \| --enter \| --typing N \| --personal` | What clef makes of a screenshot, as a screen check would: its answers, and whether the step would wait |
-| `helio-agent identity` | The agent's public keys (for `helio-host add-client --agent`) |
+| `helio-agent identity` | The agent's public keys (for `helio host add-client --agent`) |
 | `helio-agent hosts` | Hosts the agent is paired with |
 | `helio-agent add-host NAME ADDR X25519 MLKEM` | Pair the agent by hand |
 | `helio-agent run --host NAME [FLAGS] TASK` | Run one task, printing each action |
@@ -141,6 +166,20 @@ run started by Helio.
 - Starting the app while it runs shows the copy that runs, and adds none
   (one copy per data folder: a `HELIO_DATA_DIR` elsewhere is another app).
 
+## `helio-host`, the host's program
+
+`helio-host` is Helio Host's program, which comes with Helio: what the
+system and Helio run, not a command for you. Its hosting commands are
+`helio host`'s.
+
+| Command | Run by |
+|---|---|
+| `helio-host host` (or no command) | Hosting: the LaunchAgent on a Mac (with `--app PATH`, the app the host came with: the host follows it when it is replaced and turns hosting off when it is gone, [platforms/macos.md](platforms/macos.md#hosting-from-helio-and-its-menu-bar-icon)), the systemd user unit on Linux, the service on Windows |
+| `helio-host enable`, `disable` | Helio's hosting switch and `helio host enable`, `disable`, which on Windows run them again through UAC when they exit with 740 (`ERROR_ELEVATION_REQUIRED`): nothing was changed |
+| `helio-host status [--json]` | The switch (`--json`) and `helio host status` |
+| `helio-host service` | Windows: the service itself (`HelioHost`, started by Windows) |
+| `helio-host clipboard-agent` | Windows: clipboard sharing as the signed-in user, started by the host for a session |
+
 ## Environment variables
 
 For everyone:
@@ -149,7 +188,7 @@ For everyone:
 |---|---|---|
 | `RUST_LOG` | all | Log filter, e.g. `info,helio_client::stats=debug` |
 | `HELIO_DATA_DIR` | Helio, `helio`, `helio-agent` | Helio's data folder |
-| `HELIO_HOST_DATA_DIR` | Helio Host, Helio's This computer | Helio Host's data folder. On a Mac, `helio-host enable` hands it on to the host it starts |
+| `HELIO_HOST_DATA_DIR` | Helio Host, Helio's This computer, `helio host` | Helio Host's data folder. On a Mac, `helio host enable` hands it on to the host it starts |
 | `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `OPENROUTER_API_KEY`, `HELIO_AGENT_API_KEY` (a custom endpoint) | agents | API keys; win over saved keys |
 | `ANTHROPIC_BASE_URL`, `OPENAI_BASE_URL` | agents | Point the API loops at a gateway or proxy |
 | `CLOUDFLARE_AUTH_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` | agents | The Workers AI token and account clef's screen checks use; win over Agent setup's |

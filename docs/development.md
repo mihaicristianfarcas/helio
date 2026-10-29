@@ -117,12 +117,12 @@ tools/linux-dev tools/linux/loopback-test        # a Linux host streaming to a L
   runs `cargo build --release ARGS` there. Set `HELIO_SSH=user@host` and
   `HELIO_HOST_DIR` in the environment or in `tools/dev.env` (not
   committed).
-- `target\release\helio-host.exe enable`, on the host in an administrator
-  terminal, installs the built engine as `HelioHost` (it copies itself to
-  `C:\Program Files\Helio Host` and runs the service from there); run it again
-  after a build, and `helio-host disable` removes it. A built Helio's switch does
-  the same with the `helio-host.exe` beside it (`tools/build-helio-win.ps1` puts
-  it in `target\Helio`).
+- `target\release\helio.exe host enable`, on the host, installs the built
+  engine beside it as `HelioHost` (Windows asks for an administrator; the
+  engine copies itself to `C:\Program Files\Helio Host` and runs the service
+  from there); run it again after a build, and `helio host disable` removes
+  it. A built Helio's switch does the same with the `helio-host.exe` beside
+  it (`tools/build-helio-win.ps1` puts it in `target\Helio`).
 - `tools/host-run.ps1 -Command '…'` runs a command in the interactive
   console session and prints its output: SSH lands in session 0, where there
   is no desktop to capture and no display to configure.
@@ -157,7 +157,7 @@ normal use.
 | `HELIO_TEST_HANDSHAKE_LOSS=N` | Any endpoint drops N% of handshake datagrams (rekeys under loss) |
 | `HELIO_TEST_BLACKOUT=S:D` | Any endpoint sends and receives nothing from S seconds after it opened, for D seconds |
 | `HELIO_UI_DEMO=…` | Drive the window and save screenshots ([ui.md](ui.md#checking-it-without-clicking)) |
-| `HELIO_HOST_PROGRAM=PATH` | The `helio-host` the hosting switch runs (a test host), instead of the one beside the app |
+| `HELIO_HOST_PROGRAM=PATH` | The `helio-host` the hosting switch and `helio host` run (a test host), instead of the one beside the app |
 | `HELIO_UI_DEMO_SCREEN=PATH` | The picture the sample agent sessions show |
 | `HELIO_HOST_APP_URL`, `HELIO_HOST_APP_CERT`, `HELIO_HOST_APP_TOKEN` | Point This computer at another host's API |
 | `HELIO_UPDATE_API=URL` | The update check asks this instead of `https://api.github.com` (the paths are GitHub's) |

@@ -4,7 +4,7 @@
 
 - [install.md](install.md) — building and installing Helio, turning hosting on, and pairing devices
 - [usage.md](usage.md) — streaming, shortcuts, settings, the clipboard, Wake-on-LAN, troubleshooting
-- [cli.md](cli.md) — `helio`, `helio-host`, `helio-agent`, and environment variables
+- [cli.md](cli.md) — `helio` (`helio host` for this computer as a host), `helio-agent`, and environment variables
 - [ai-agents.md](ai-agents.md) — AI agents on your hosts (computer use, MCP)
 
 **How it works**

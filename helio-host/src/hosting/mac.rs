@@ -549,7 +549,7 @@ pub fn state() -> State {
         }
         Ok(_) if installed => State::Failed(
             "the host's LaunchAgent is there but not loaded: it starts at your next \
-                login, or now with helio-host enable"
+                login, or now with helio host enable"
                 .into(),
         ),
         Ok(_) => State::Off,

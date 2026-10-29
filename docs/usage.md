@@ -135,17 +135,21 @@ your computer: no port is open for streaming, pairing or the web UI,
 nothing is published for finding the host from the internet, and it is not
 announced on the local network. Helio, the client, opens none of these.
 
-The switch runs the host's own commands, which you can also run yourself:
+From a terminal it is `helio host`, which runs what the switch runs
+([cli.md](cli.md#helio-host--this-computer-as-a-host)):
 
 ```sh
-helio-host enable   # on: the host starts now, and every time after
-helio-host disable  # off: the host stops, and no longer starts
-helio-host status   # off, starting, on or failed (with why)
+helio host enable   # on: the host starts now, and every time after
+helio host disable  # off: the host stops, and no longer starts
+helio host status   # off, starting, on or failed (with why)
 ```
 
-| | `helio-host enable` | `helio-host disable` |
+Both run the host's own program, `helio-host`, which comes with Helio.
+Turning hosting on or off does this on each system:
+
+| | On (`helio host enable`) | Off (`helio host disable`) |
 |---|---|---|
-| macOS | Copies the app bundle `helio-host` is in (`Helio.app/Contents/Helpers/Helio Host.app`) to `~/Library/Application Support/Helio Host/Helio Host.app`, and writes the LaunchAgent `~/Library/LaunchAgents/dev.mihaicristian.helio.host.plist`, which runs the host from that copy whenever you are logged in, and starts it now. `helio-host` outside an app bundle refuses: macOS's Screen Recording and Accessibility permissions belong to that helper app, not to Helio (and for Screen Recording, only to a copy outside Helio.app: [platforms/macos.md](platforms/macos.md#hosting-from-helio-and-its-menu-bar-icon)) | Stops the host, deletes the LaunchAgent and the copy |
+| macOS | Copies the app bundle the host's program is in (`Helio.app/Contents/Helpers/Helio Host.app`) to `~/Library/Application Support/Helio Host/Helio Host.app`, and writes the LaunchAgent `~/Library/LaunchAgents/dev.mihaicristian.helio.host.plist`, which runs the host from that copy whenever you are logged in, and starts it now. The host's program outside an app bundle refuses: macOS's Screen Recording and Accessibility permissions belong to that helper app, not to Helio (and for Screen Recording, only to a copy outside Helio.app: [platforms/macos.md](platforms/macos.md#hosting-from-helio-and-its-menu-bar-icon)) | Stops the host, deletes the LaunchAgent and the copy |
 | Windows | As administrator: copies `helio-host.exe` to `C:\Program Files\Helio Host` (only administrators can change that folder), checks its signature, and runs it as **HelioHost**, which starts at boot, before anyone signs in, with Windows Firewall rules for it | As administrator: stops and deletes HelioHost, its firewall rules and the copy in `C:\Program Files\Helio Host` |
 | Linux | `systemctl --user enable --now helio-host`: the host runs in your desktop session, now and at each login (the unit comes with the install, not turned on) | `systemctl --user disable --now helio-host` |
 
@@ -153,11 +157,11 @@ On Windows the service runs as SYSTEM, the only account that can show and
 control the sign-in screen and UAC prompts. That is why it runs only from
 its own copy in Program Files, never from a folder you (or a program you
 run) can write to, and why turning hosting on or off asks for an
-administrator. Without one, `helio-host enable` and `helio-host disable` change nothing
-and exit with code 740, and Helio asks Windows to run them again elevated
-(the UAC prompt). The signature check only warns until Windows releases are signed;
-after that, `helio-host enable` refuses an engine that is unsigned or was changed
-after signing.
+administrator. Without one, the host's program changes nothing and exits
+with code 740, and Helio (the switch, or `helio host`) asks Windows to run
+it again elevated (the UAC prompt). The signature check only warns until
+Windows releases are signed; after that, turning hosting on refuses an
+engine that is unsigned or was changed after signing.
 
 On a Mac the host asks for Screen Recording and Accessibility with macOS's
 own prompts as it first starts, as **Helio Host**: System Settings lists it,
@@ -239,7 +243,7 @@ which way the clipboard goes, and more. Set them in Helio, This computer →
 **Devices** (the button beside each device) or in the web UI under
 **Clients**. A change applies at once, to a stream that is running too.
 
-| Permission | Lets the device | Name (`helio-host permissions`) |
+| Permission | Lets the device | Name (`helio host permissions`) |
 |---|---|---|
 | See the screen | Stream the screen and sound. Off: the device stays paired, but is turned away | `view` |
 | Start apps | Open an app with the stream, such as Steam Big Picture | `launch` |
@@ -280,8 +284,9 @@ What the device hears:
   read on the side that may not send them. Sharing that was off when a
   stream started comes on with the next stream.
 
-From a terminal: `helio-host permissions X25519 view,keyboard,mouse`
-([cli.md](cli.md#helio-host--the-host)).
+From a terminal: `helio host permissions X25519 view,keyboard,mouse`
+([cli.md](cli.md#helio-host--this-computer-as-a-host)); a running host takes
+that change at its next start.
 
 ## Updates
 
@@ -299,7 +304,7 @@ How each system installs it:
 |---|---|---|
 | macOS | The app is replaced where it is (Applications), the host inside it too | Sees the new app and restarts on it 15 s later |
 | macOS, installed with Homebrew | `brew upgrade --cask helio`, run for you | Sees the new app and restarts on it 15 s later |
-| Windows | The app's files, `helio-host.exe` among them, are replaced in its folder; Settings > Apps shows the new version | `helio-host enable` runs again from the new files: Windows asks for an administrator's permission, and HelioHost restarts on the new engine. Declined, the host keeps the engine it had until hosting is turned off and on |
+| Windows | The app's files, `helio-host.exe` among them, are replaced in its folder; Settings > Apps shows the new version | Hosting is turned on again from the new files: Windows asks for an administrator's permission, and HelioHost restarts on the new engine. Declined, the host keeps the engine it had until hosting is turned off and on |
 | Linux | The new release's `install.sh` (into `~/.local/bin`) | The host's user service restarts |
 
 The download is checked against the SHA-256 GitHub records for the
@@ -374,7 +379,7 @@ same.
 - **Helio finds no hosts (macOS).** Allow Helio on the local network: System
   Settings > Privacy & Security > Local Network.
 - **Windows asks about the firewall.** Allow Helio (and `helio.exe`) on private
-  networks. The host's firewall rules are added by `helio-host enable`.
+  networks. The host's firewall rules are added when hosting is turned on.
 - **"The host did not answer."** Is hosting on there (Helio's **Settings →
   Hosting** on the host; on Windows, `HelioHost` in Services)? Is this device still paired (the host's
   **Devices**)?
@@ -401,4 +406,4 @@ same.
   them, e.g. `RUST_LOG=info,helio_client::stats=debug` for a line of
   statistics a second.
 
-The command line (`helio`, `helio-host`, `helio-agent`) is in [cli.md](cli.md).
+The command line (`helio`, and `helio-agent` for AI agents) is in [cli.md](cli.md).

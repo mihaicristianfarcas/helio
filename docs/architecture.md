@@ -21,7 +21,8 @@ it is, and what was measured on the way, is in the
             This computer: the host's      ──API──▶├─ pairing (TCP, 47801) + mDNS
             pages, the hosting switch,             ├─ presence (DHT, STUN, UPnP)
             the host's icon)                       │
- helio      (CLI)                                  │
+ helio      (CLI; helio host: the switch,          │
+            the host's identity and clients)       │
    └─ helio-client ───── one UDP socket ───────────┤
         stream: net thread, input thread           └─ session: display → capture →
         platform: window, decoder, renderer           encode → FEC → pace → tunnel
@@ -55,8 +56,8 @@ it is, and what was measured on the way, is in the
 | `helio-ui` | The app's design system (GPUI), asides' look: theme, glass, motion, keyboard focus, icons, controls, Markdown; and what it needs of the desktop: menus, the tray icon, one running copy, starting at login |
 | `helio-update` | Whether a newer release, or newer commits on `main`, exist (GitHub's public API, once a day), and installing a release from the app: the archive checked against GitHub's SHA-256, then each system's way of putting it in place |
 | `helio-client` | The client: session, stream, input, statistics, the host store; per-platform window, decoder and renderer |
-| `helio-cli` | `helio`, the command line: streaming and pairing from a terminal, with the client's own code |
-| `helio-app` | The app's window (GPUI): hosts, agents, settings, setup, and This computer (the host's pages, a client of its web API on localhost; the hosting switch, which runs `helio-host enable`, `disable` and `status`; the host's tray icon); and `Helio mcp` |
+| `helio-cli` | `helio`, the command line: streaming and pairing from a terminal, with the client's own code, and this computer as a host (`helio host`: the host's switch run as the app runs it, `engine`; its identity and clients changed in helio-host-data) |
+| `helio-app` | The app's window (GPUI): hosts, agents, settings, setup, and This computer (the host's pages, a client of its web API on localhost; the hosting switch, which runs `helio-host enable`, `disable` and `status` through `helio_cli::engine`; the host's tray icon); and `Helio mcp` |
 | `helio-agent` | Computer use: a headless session, the actions, the MCP server, the agent runners; the `helio-agent` CLI |
 | `helio-host` | The host: sessions, the video and audio pipelines, pairing, presence, the web UI, the Windows service |
 | `helio-host-data` | What the host keeps on disk, for it and for whatever manages it: its data folder (private to the host on Windows), its identity, its paired clients and what each may do |
@@ -99,13 +100,14 @@ limits per system are in [platforms/](platforms/).
 `helio-host host` into the console session with a SYSTEM token: only SYSTEM can
 open the secure desktop, so only it can capture and control a UAC prompt or
 the lock screen (the model Sunshine uses); it runs only from the host's own
-copy in `C:\Program Files\Helio Host`, which `helio-host enable` makes from the
+copy in `C:\Program Files\Helio Host`, which turning hosting on makes from the
 `helio-host.exe` beside Helio. On macOS it is `Helio Host.app`, the helper app Helio
 carries, which macOS grants the host's permissions to, run from its copy in
 the host's data folder (outside Helio.app, or Screen Recording would be
 Helio's) and started at login by a LaunchAgent; on Linux a systemd user unit
 in the desktop session.
-`helio-host enable` and `helio-host disable` set each of them up or take it down: hosting
+The host's program sets each of them up or takes it down
+(`helio-host enable`, `disable`; Helio's switch and `helio host` run them): hosting
 is off until then ([usage.md](usage.md#hosting-on-and-off)). The host
 process runs:
 

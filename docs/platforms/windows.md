@@ -45,15 +45,16 @@ SYSTEM and Administrators can read it, apart from the two files Helio Host's
 window needs (`config.toml`, `web-cert.pem`). It uses the folder only if
 SYSTEM or Administrators own it; one another user made first is moved
 aside as `C:\ProgramData\Helio Host.untrusted-…` (the service's log says so) and
-the host starts afresh, so devices pair again. A `helio-host` command run without
-an administrator neither creates nor moves it.
+the host starts afresh, so devices pair again. A `helio host` command run
+without an administrator neither creates nor moves it: those that read it
+say they need an administrator's terminal, and exit with 740.
 
 `helio-host status` reports `failed` while HelioHost runs but its host does not
 (the host exited; the service starts it again 3 s later), as it does for a
 LaunchAgent or a unit that keeps restarting.
-The engine comes with Helio, `helio-host.exe` beside `Helio.exe`; `helio-host enable`,
-from the app's switch or an administrator's terminal, installs it as the
-service ([../install.md](../install.md#hosting-on-windows)).
+The engine comes with Helio, `helio-host.exe` beside `Helio.exe`; turning
+hosting on, with the app's switch or `helio host enable`, installs it as
+the service ([../install.md](../install.md#hosting-on-windows)).
 
 ### Hosting from Helio, and its icon in the notification area
 
@@ -61,7 +62,8 @@ Helio's hosting switch runs `helio-host.exe enable` (or `disable`) from beside
 Helio or from `C:\Program Files\Helio Host`. Run as you, it needs an
 administrator and exits with 740 having changed nothing; Helio then runs it
 again through UAC (`ShellExecuteEx` with `runas`), says it waits for
-Windows meanwhile, and that nothing changed if you choose No. Its Hosting
+Windows meanwhile, and that nothing changed if you choose No. `helio host
+enable` and `disable` do the same from a terminal. Its Hosting
 page says whether there are NVIDIA graphics (NVENC; else H.264 in software,
 Media Foundation) and SudoVDA (a virtual display; else the main display,
 scaled).

@@ -39,7 +39,7 @@ line of its standard output. That process is `helio_client::linux`:
   own, and GNOME shows it only with an extension), so with hosting on Helio
   is still an ordinary app: closing it quits, and the host runs on as its
   user unit. The hosting switch runs `helio-host enable` (`systemctl --user`),
-  which asks for nothing.
+  as `helio host enable` does, which asks for nothing.
 
 ## Hosting: Helio Host
 
@@ -91,8 +91,9 @@ environment does not make it clear.
 Helio Host runs in the desktop session, as the user: `tools/linux/helio-host.service` is
 a systemd user unit for that, which Helio's `install.sh` installs beside the
 app without turning it on ([../install.md](../install.md#hosting-on-linux)),
-and which `helio-host enable` and `helio-host disable` turn on and off (`systemctl
---user enable|disable --now helio-host`; no root).
+and which turning hosting on and off (the switch, or `helio host enable` and
+`disable`) enables and disables (`systemctl --user enable|disable --now
+helio-host`; no root).
 Data and logs are in `~/.config/helio-host`.
 
 ## Measured (in the container)

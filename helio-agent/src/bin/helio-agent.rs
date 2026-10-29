@@ -4,9 +4,9 @@
 //!   helio-agent mcp install APP ... | --all      the MCP server in other agents' settings
 //!   helio-agent mcp uninstall APP ... | --all    (claude-code, codex, opencode, ...)
 //!   helio-agent mcp status
-//!   helio-agent identity                         the agent's public keys (for `helio-host add-client --agent`)
+//!   helio-agent identity                         the agent's public keys (for `helio host add-client --agent`)
 //!   helio-agent hosts                            hosts the agent is paired with
-//!   helio-agent add-host NAME ADDR X25519 MLKEM  pair the agent by hand (see `helio-host identity`)
+//!   helio-agent add-host NAME ADDR X25519 MLKEM  pair the agent by hand (see `helio host identity`)
 //!   helio-agent run --host NAME [--provider P] [--model M] [--effort E] [--max-actions N]
 //!                  [--max-minutes N] [--base-url URL] [--approvals off|risky|every] [--confirm] [--yes] TASK
 //!   helio-agent converse --host NAME [--provider P] [--model M] [--approvals A] [--answer yes|no]

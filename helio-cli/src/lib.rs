@@ -1,23 +1,18 @@
-//! `helio`: the command-line client. The same streaming code as the app.
+//! `helio`: the command line. Streaming and pairing with the client's own
+//! code, the app's (`helio stream` opens a window of the platform's own,
+//! not the app's), and this computer as a host (`helio host`, `host`).
+//! `helio --help` lists every command (`args::HELP`), and docs/cli.md says
+//! more of each.
 //!
-//!   helio identity                              this client's public keys
-//!   helio discover                              hosts on the local network
-//!   helio pair HOST[:PORT]                      pair (shows a PIN to type on the host)
-//!   helio pair-agent HOST[:PORT]                pair this device's AI agent (its own key)
-//!   helio watch NAME [stream flags]             watch the AI agent working on NAME
-//!   helio hosts                                 paired hosts
-//!   helio add-host NAME ADDR X25519 MLKEM       pair by hand (see `helio-host identity`)
-//!   helio remove-host NAME
-//!   helio wake NAME                             Wake-on-LAN
-//!   helio stream NAME [--size WxH] [--fps N] [--mbps N] [--codec h264|hevc|av1]
-//!                    [--windowed] [--no-vsync] [--frame-pacing] [--stats] [--cmd-is-win]
-//!                    [--mute-in-background] [--audio-channels 2|6|8] [--steam]
-//!                    [--no-audio] [--host-audio] [--wan-only] [--keep-host-displays]
-//!                    [--via ADDR] [--no-clipboard] [--hdr] [--yuv444]
+//! A library, with the `helio` bin a line over it, so that the app can be
+//! `helio` too: Helio's own program runs [`main`] when it is started as
+//! `helio`, which is how installing Helio puts the command on the PATH.
 //!
 //! `HELIO_TEST_INPUT` scripts input into a stream (see `script`).
 
+mod args;
 pub mod engine;
+mod host;
 #[cfg(any(target_os = "macos", windows, target_os = "linux"))]
 mod script;
 #[cfg(any(target_os = "macos", windows, target_os = "linux"))]
@@ -26,22 +21,14 @@ mod stream;
 use std::path::Path;
 use std::process::ExitCode;
 
-fn usage() -> ExitCode {
-    eprintln!(
-        "usage: helio identity | discover | pair HOST[:PORT] | pair-agent HOST[:PORT] | hosts | remove-host NAME | wake NAME\n\
-            \x20      helio watch NAME [stream flags]\n\
-            \x20      helio add-host NAME ADDR X25519 MLKEM\n\
-            \x20      helio stream NAME [--size WxH] [--fps N] [--mbps N] [--codec h264|hevc|av1]\n\
-            \x20                       [--windowed] [--no-vsync] [--frame-pacing] [--stats] [--cmd-is-win]\n\
-            \x20                       [--mute-in-background] [--audio-channels 2|6|8] [--steam]\n\
-            \x20                       [--no-audio] [--host-audio] [--wan-only] [--keep-host-displays] [--via ADDR]\n\
-            \x20                       [--no-clipboard] [--hdr] [--yuv444]"
-    );
-    ExitCode::FAILURE
-}
+use args::{Command, Usage};
 
 /// Run the command `args` (without the program's name) and say how it went.
 pub fn main(args: &[String]) -> ExitCode {
+    let command = match args::parse(args) {
+        Ok(command) => command,
+        Err(usage) => return misread(usage),
+    };
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| {
@@ -51,53 +38,63 @@ pub fn main(args: &[String]) -> ExitCode {
         )
         .init();
     let dir = helio_client::store::data_dir();
-    match args.first().map(String::as_str) {
-        Some("identity") => identity(&dir),
-        Some("discover") => discover(&dir),
-        Some("pair") => match args.get(1) {
-            Some(spec) => pair(&dir, spec),
-            None => usage(),
-        },
-        Some("pair-agent") => match args.get(1) {
-            Some(spec) => pair_agent(&dir, spec),
-            None => usage(),
-        },
-        Some("hosts") => {
+    match command {
+        Command::Help { host } => {
+            print!("{}", if host { args::HOST_HELP } else { args::HELP });
+            ExitCode::SUCCESS
+        }
+        Command::Identity => identity(&dir),
+        Command::Discover => discover(&dir),
+        Command::Pair { address } => pair(&dir, &address),
+        Command::PairAgent { address } => pair_agent(&dir, &address),
+        Command::Hosts => {
             for h in helio_client::store::Hosts::load(&dir).list() {
                 println!("{}\t{}", h.name, h.address);
             }
             ExitCode::SUCCESS
         }
-        Some("add-host") => add_host(&dir, args),
-        Some("wake") => match args.get(1) {
-            Some(name) => wake(&dir, name),
-            None => usage(),
-        },
-        Some("remove-host") => match args
-            .get(1)
-            .map(|n| helio_client::store::Hosts::load(&dir).remove(n))
-        {
-            Some(Ok(true)) => ExitCode::SUCCESS,
-            Some(Ok(false)) => fail("no such host"),
-            Some(Err(e)) => fail(e),
-            None => usage(),
-        },
-        #[cfg(any(target_os = "macos", windows, target_os = "linux"))]
-        Some("stream") => match args.get(1) {
-            Some(name) => stream::run(name, &args[2..]),
-            None => usage(),
-        },
-        #[cfg(any(target_os = "macos", windows, target_os = "linux"))]
-        Some("watch") => match args.get(1) {
-            Some(name) => {
-                let mut flags = args[2..].to_vec();
-                flags.push("--watch".into());
-                stream::run(name, &flags)
+        Command::AddHost {
+            name,
+            address,
+            x25519,
+            mlkem,
+        } => add_host(&dir, &name, &address, &x25519, &mlkem),
+        Command::RemoveHost { name } => {
+            match helio_client::store::Hosts::load(&dir).remove(&name) {
+                Ok(true) => ExitCode::SUCCESS,
+                Ok(false) => fail(format!("no paired host named {name}; see `helio hosts`")),
+                Err(e) => fail(e),
             }
-            None => usage(),
-        },
-        _ => usage(),
+        }
+        Command::Wake { name } => wake(&dir, &name),
+        #[cfg(any(target_os = "macos", windows, target_os = "linux"))]
+        Command::Stream { name, flags, watch } => stream::run(&name, &flags, watch),
+        #[cfg(not(any(target_os = "macos", windows, target_os = "linux")))]
+        Command::Stream { .. } => fail("streams need macOS, Windows or Linux"),
+        Command::Host(command) => host::run(command),
     }
+}
+
+/// A command line `helio` does not take: why, and the help (on stderr: it
+/// is not the output asked for).
+fn misread(usage: Usage) -> ExitCode {
+    let help = if usage.host {
+        "helio host --help"
+    } else {
+        "helio --help"
+    };
+    match usage.why {
+        Some(why) => eprintln!("{why}\n(`{help}` lists the commands)"),
+        None => eprint!(
+            "{}",
+            if usage.host {
+                args::HOST_HELP
+            } else {
+                args::HELP
+            }
+        ),
+    }
+    ExitCode::FAILURE
 }
 
 /// Print `e` and fail.
@@ -190,16 +187,11 @@ fn pair_agent(dir: &Path, spec: &str) -> ExitCode {
     }
 }
 
-fn add_host(dir: &Path, args: &[String]) -> ExitCode {
-    let (Some(name), Some(addr), Some(x), Some(m)) =
-        (args.get(1), args.get(2), args.get(3), args.get(4))
-    else {
-        return usage();
-    };
-    if helio_transport::PublicIdentity::from_b64(x, m).is_err() {
+fn add_host(dir: &Path, name: &str, address: &str, x25519: &str, mlkem: &str) -> ExitCode {
+    if helio_transport::PublicIdentity::from_b64(x25519, mlkem).is_err() {
         return fail("malformed host keys");
     }
-    let host = helio_client::store::KnownHost::by_hand(name, addr, x, m);
+    let host = helio_client::store::KnownHost::by_hand(name, address, x25519, mlkem);
     match helio_client::store::Hosts::load(dir).upsert(host) {
         Ok(()) => ExitCode::SUCCESS,
         Err(e) => fail(e),

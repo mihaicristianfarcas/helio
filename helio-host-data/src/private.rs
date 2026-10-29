@@ -22,7 +22,8 @@
 //! private a moment later, when something could already be in it); and a
 //! folder someone else made is moved aside, whole, for a person to look at,
 //! and the host starts afresh. Only an administrator (or the host, as
-//! SYSTEM) creates or moves it: anyone else's `helio-host` command leaves it be.
+//! SYSTEM) creates or moves it: anyone else's `helio host` command leaves it
+//! be (and does not run: helio-cli's `host`).
 //! A data folder chosen with `HELIO_HOST_DATA_DIR` is its chooser's business, and
 //! is only made private.
 //!

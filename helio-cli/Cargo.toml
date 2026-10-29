@@ -10,6 +10,7 @@ description = "Helio: the `helio` command line (streaming, pairing, the host)"
 
 [dependencies]
 helio-client = { path = "../helio-client" }
+helio-host-data = { path = "../helio-host-data" }
 helio-pairing = { path = "../helio-pairing" }
 helio-proto = { path = "../helio-proto" }
 helio-transport = { path = "../helio-transport" }
