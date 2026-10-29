@@ -16,6 +16,10 @@
 //!   helio-host service               the service itself (started by Windows)
 //!   helio-host clipboard-agent       clipboard sharing as the signed-in user
 //!                                    (started by the host for a session)
+//!   helio-host update-engine PID ENGINE
+//!                                    Helio's update, as an administrator:
+//!                                    once its installer (PID) is done, the
+//!                                    new ENGINE's `enable`
 //!
 //! On Windows, DLLs come only from System32 and from beside `helio-host.exe`
 //! (`restrict_dll_search`).
@@ -180,6 +184,9 @@ fn main() -> ExitCode {
         "host" => run_host(dir, &args, opened_by_hand, secured),
         #[cfg(windows)]
         "service" => run_service(&dir, secured),
+        // Helio's update, while hosting is on (Windows).
+        #[cfg(windows)]
+        "update-engine" => std::process::exit(hosting::update_engine(&args)),
         "enable" => hosting::switch(true),
         "disable" => hosting::switch(false),
         "status" => hosting::print_status(&dir, args.iter().any(|a| a == "--json")),
