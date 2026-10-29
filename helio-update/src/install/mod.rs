@@ -1,37 +1,41 @@
 //! Installing a newer release from the app itself: "Install and Restart" in
 //! the update sheet.
 //!
-//! The release's own archive for this system is downloaded from GitHub (the
+//! The release's own package for this system is downloaded from GitHub (the
 //! file the website and the Homebrew cask hand out too), and its SHA-256
 //! checked against the one GitHub keeps for it (the API's `digest`, worked
-//! out by GitHub when the file was uploaded). On a Mac the new app must also
-//! carry a Developer ID signature of the same team as the app that installs
-//! it. The archive is the whole app, the host it runs when hosting is on
-//! included, so an update brings both. Then each system puts it in place
-//! its own way:
+//! out by GitHub when the file was uploaded). The package is the whole app,
+//! the host it runs when hosting is on included, so an update brings both,
+//! and hosting stays as it was. Then each system checks who made it and
+//! puts it in place its own way:
 //!
-//! - **Windows**: the app's files are replaced where it runs (a running
-//!   program cannot be overwritten, but it can be renamed aside). While
-//!   hosting is on, `helio-host enable` runs again as an administrator (Windows
-//!   asks): the service runs the engine's own copy in Program Files, which
-//!   only that replaces.
-//! - **macOS**: the app bundle is swapped for the new one; a copy Homebrew
-//!   installed is upgraded by Homebrew (`brew upgrade --cask`), so that
-//!   Homebrew's record stays true. Either way the host, which runs from a
-//!   copy of the helper inside the app, sees the app replaced and restarts
-//!   on its new helper (`helio-host/src/hosting/mac.rs`).
+//! - **Windows**: the package is the installer (`setup.exe`), which must
+//!   carry an Authenticode signature by Helio's publisher. Once the app has
+//!   quit, it runs silently for this user, then the app opens again. While
+//!   hosting is on, the host's engine in Program Files is updated after it,
+//!   by the new engine's own `enable`, as an administrator: Windows asks
+//!   when the update starts, while the app's window is in front.
+//! - **macOS**: the app bundle is swapped for the new one, once it is known
+//!   to carry a Developer ID signature of the same team as the app that
+//!   installs it; a copy Homebrew installed is upgraded by Homebrew (`brew
+//!   upgrade --cask`), so that Homebrew's record stays true. Either way the
+//!   host is then restarted, while hosting is on, and starts on the new
+//!   app's helper (`helio-host/src/hosting/mac.rs`).
 //! - **Linux**: the archive's `install.sh`, as when it was installed; it
-//!   restarts a host that runs.
+//!   restarts the host while hosting is on.
 //!
-//! The app then quits, and its new copy starts with `--after-update PID`:
-//! it waits for the old one to be gone ([`after_update`]) before it claims
-//! being the one copy that runs. A note in the app's data folder
-//! (`update-pending.toml`) says which version was being installed: the next
-//! start says whether it was ([`finish`]).
+//! The app then quits, and its new copy starts with `--after-update PID`
+//! (or, on Windows, once the installer is done): it waits for the old one
+//! to be gone ([`after_update`]) before it claims being the one copy that
+//! runs. A note in the app's data folder (`update-pending.toml`) says which
+//! version was being installed: the next start says whether it was
+//! ([`finish`]).
 //!
 //! Only a packaged release installs updates: a build from a checkout is
 //! updated the way it was made.
 
+#[cfg(windows)]
+mod authenticode;
 #[cfg(target_os = "linux")]
 #[path = "linux.rs"]
 mod platform;
@@ -54,20 +58,26 @@ use sha2::{Digest, Sha256};
 use crate::github::{self, Asset, Fetch};
 use crate::{Build, Status, Version, REPOSITORY};
 
-/// The release archive of `version` for this system, as the packaging
-/// scripts name it: `Helio-0.9.0-windows-x86_64.zip`.
-pub fn archive(version: &str) -> String {
-    archive_name(version, std::env::consts::OS, std::env::consts::ARCH)
+/// The release's package of `version` for this system, as the packaging
+/// scripts name it: `Helio-0.9.0-macos-arm64.zip`,
+/// `Helio-0.9.0-linux-x86_64.tar.gz`, and on Windows the installer,
+/// `Helio-0.9.0-windows-x86_64-setup.exe`.
+pub fn package(version: &str) -> String {
+    package_name(version, std::env::consts::OS, std::env::consts::ARCH)
 }
 
-fn archive_name(version: &str, os: &str, arch: &str) -> String {
+fn package_name(version: &str, os: &str, arch: &str) -> String {
     // tools/package-macos names Apple silicon as `uname -m` does.
     let arch = match (os, arch) {
         ("macos", "aarch64") => "arm64",
         (_, arch) => arch,
     };
-    let ext = if os == "linux" { "tar.gz" } else { "zip" };
-    format!("{}-{version}-{os}-{arch}.{ext}", crate::APP)
+    let ext = match os {
+        "linux" => ".tar.gz",
+        "windows" => "-setup.exe",
+        _ => ".zip",
+    };
+    format!("{}-{version}-{os}-{arch}{ext}", crate::APP)
 }
 
 /// How far an installation has come, for the window to show.
@@ -151,7 +161,7 @@ pub(crate) fn log_path(dir: &Path) -> PathBuf {
 }
 
 /// Where an update is downloaded and unpacked, apart from the app's data
-/// (on Windows that is the roaming profile, no place for an archive).
+/// (on Windows that is the roaming profile, no place for a package).
 fn staging(version: &str) -> PathBuf {
     std::env::temp_dir()
         .join("helio-update")
@@ -162,8 +172,6 @@ fn staging(version: &str) -> PathBuf {
 /// none was pending; otherwise what to show if it was not. The staging
 /// folder goes either way.
 pub(crate) fn finish(build: &Build, dir: &Path) -> Option<Install> {
-    platform::tidy();
-    platform::keep_listed(build.version);
     let pending = Pending::take(dir)?;
     let _ = std::fs::remove_dir_all(staging(&pending.version));
     let (Some(wanted), Some(mine)) = (
@@ -196,8 +204,8 @@ fn last_words(log: &str) -> &str {
         .unwrap_or("")
 }
 
-/// The longest archive taken (Helio for Windows, with FFmpeg, is ~50 MB).
-const MAX_ARCHIVE: u64 = 1024 * 1024 * 1024;
+/// The longest package taken (Helio for Windows, with FFmpeg, is ~50 MB).
+const MAX_PACKAGE: u64 = 1024 * 1024 * 1024;
 
 /// Write `from` to `to` while hashing it, and keep it only if it is the
 /// file the release lists: its size and SHA-256. `progress` hears the bytes
@@ -287,9 +295,33 @@ fn install(
     available(build)?;
     let method = platform::method()?;
     let api = github::Api::new(build);
+    let offer = offer(&api, build)?;
+    let stage = staging(&offer.version);
+    let _ = std::fs::remove_dir_all(&stage);
+    std::fs::create_dir_all(&stage).map_err(|e| format!("{}: {e}", stage.display()))?;
+    if !platform::needs_package(&method) {
+        // A package manager's upgrade: it fetches and checks its own.
+        installing();
+        return place(&method, &offer.version, &stage, &stage, dir);
+    }
+    let package = download(&api, &offer, &stage, downloading)?;
+    installing();
+    let opened = platform::open(&package, &stage)?;
+    place(&method, &offer.version, &opened, &stage, dir)
+}
+
+/// What the latest release offers this system.
+struct Offer {
+    version: String,
+    /// Its package for this system ([`package`]), if it lists one with a
+    /// checksum.
+    package: Option<Asset>,
+}
+
+/// The latest release, when it is newer than `build`.
+fn offer(fetch: &dyn Fetch, build: &Build) -> Result<Offer, String> {
     let slug = github::slug(REPOSITORY).ok_or("this build does not know its repository")?;
-    let (latest, _) =
-        github::latest(&api as &dyn Fetch, slug)?.ok_or("GitHub lists no release to install")?;
+    let (latest, _) = github::latest(fetch, slug)?.ok_or("GitHub lists no release to install")?;
     let mine = Version::parse(build.version).ok_or("this build's version is not a version")?;
     if latest.version <= mine {
         return Err(format!(
@@ -299,44 +331,50 @@ fn install(
         ));
     }
     let version = latest.version.to_string();
-    let stage = staging(&version);
-    let _ = std::fs::remove_dir_all(&stage);
-    std::fs::create_dir_all(&stage).map_err(|e| format!("{}: {e}", stage.display()))?;
-    if !platform::needs_archive(&method) {
-        // A package manager's upgrade: it fetches and checks its own.
-        installing();
-        return place(&method, &version, &stage, &stage, dir);
-    }
-    let name = archive(&version);
-    let asset = latest
-        .assets
-        .iter()
-        .find(|a| a.name == name)
-        .ok_or_else(|| format!("release {version} has no {name} with a checksum"))?;
-    if asset.size > MAX_ARCHIVE {
-        return Err(format!("{name} is larger than any release should be"));
-    }
+    let name = package(&version);
+    Ok(Offer {
+        package: latest.assets.into_iter().find(|a| a.name == name),
+        version,
+    })
+}
 
-    let archive = stage.join(&asset.name);
-    tracing::info!(version, archive = %asset.name, "downloading the update");
+/// The offered package, downloaded into `stage` and kept only if it is the
+/// file the release lists ([`save_verified`]). `downloading` hears the
+/// bytes so far, of how many.
+fn download(
+    api: &github::Api,
+    offer: &Offer,
+    stage: &Path,
+    downloading: &dyn Fn(u64, u64),
+) -> Result<PathBuf, String> {
+    let asset = offer.package.as_ref().ok_or_else(|| {
+        format!(
+            "release {} has no {} with a checksum",
+            offer.version,
+            package(&offer.version)
+        )
+    })?;
+    if asset.size > MAX_PACKAGE {
+        return Err(format!(
+            "{} is larger than any release should be",
+            asset.name
+        ));
+    }
+    let path = stage.join(&asset.name);
+    tracing::info!(version = offer.version, package = %asset.name, "downloading the update");
     downloading(0, asset.size);
     let body = api.download(&asset.url, asset.size)?;
     // Said at each whole percent: a read is as small as a TLS record, and
     // each saying redraws the window.
     let said = std::cell::Cell::new(0u64);
-    save_verified(body, &archive, asset, &|done| {
+    save_verified(body, &path, asset, &|done| {
         let percent = done * 100 / asset.size.max(1);
         if percent != said.get() || done == asset.size {
             said.set(percent);
             downloading(done, asset.size);
         }
     })?;
-
-    installing();
-    let unpacked = stage.join("unpacked");
-    std::fs::create_dir_all(&unpacked).map_err(|e| e.to_string())?;
-    platform::unpack(&archive, &unpacked)?;
-    place(&method, &version, &unpacked, &stage, dir)
+    Ok(path)
 }
 
 /// The last step, which may hand over to an installer that outlives the
@@ -344,7 +382,7 @@ fn install(
 fn place(
     method: &platform::Method,
     version: &str,
-    unpacked: &Path,
+    opened: &Path,
     stage: &Path,
     dir: &Path,
 ) -> Result<(), String> {
@@ -354,7 +392,7 @@ fn place(
     }
     .save(dir)
     .map_err(|e| format!("the update's note could not be written: {e}"))?;
-    let placed = platform::place(method, unpacked, stage, dir);
+    let placed = platform::place(method, opened, stage, dir);
     if placed.is_err() {
         let _ = Pending::take(dir);
     }
@@ -362,41 +400,35 @@ fn place(
 }
 
 /// A check of the installer that leaves the installed app alone
-/// (`examples/install.rs`): the latest release's archive for this system,
-/// downloaded and checked as an update is, unpacked, and put in `folder`
-/// the way the app would put it in its own (macOS: the bundle swapped,
-/// signed by the team that signed the one already in `folder`; Windows: the
-/// app's files replaced; Linux: only unpacked, as install.sh would restart
-/// the user's own host). Nothing quits or opens, and no host restarts.
-/// Returns the version.
-pub fn rehearse(folder: &Path, progress: &dyn Fn(u64, u64)) -> Result<String, String> {
-    let build = Build::this();
-    let api = github::Api::new(&build);
-    let slug = github::slug(REPOSITORY).ok_or("this build does not know its repository")?;
-    let (latest, _) =
-        github::latest(&api as &dyn Fetch, slug)?.ok_or("GitHub lists no release to install")?;
-    let version = latest.version.to_string();
-    let name = archive(&version);
-    let asset = latest
-        .assets
-        .iter()
-        .find(|a| a.name == name)
-        .ok_or_else(|| format!("release {version} has no {name} with a checksum"))?;
+/// (`examples/install.rs`, `tests/fake_release.rs`): the latest release,
+/// when it is newer than `build`, its package for this system downloaded
+/// and checked as an update's is, and put in `folder` the way the app would
+/// put it in place (macOS: the bundle swapped, signed by the team that
+/// signed the one already in `folder`; Windows: the installer, its
+/// signature checked, copied there, not run; Linux: the archive unpacked
+/// there, its install.sh not run, as it would restart the user's own
+/// host). Nothing quits or opens, and no host restarts. Returns the
+/// version.
+pub fn rehearse(
+    build: &Build,
+    folder: &Path,
+    progress: &dyn Fn(u64, u64),
+) -> Result<String, String> {
+    let api = github::Api::new(build);
+    let offer = offer(&api, build)?;
     let stage = std::env::temp_dir()
         .join("helio-update-rehearsal")
-        .join(format!("{}-{version}", crate::APP));
+        .join(format!("{}-{}", crate::APP, offer.version));
     let _ = std::fs::remove_dir_all(&stage);
     std::fs::create_dir_all(&stage).map_err(|e| e.to_string())?;
-    let archive = stage.join(&asset.name);
-    let body = api.download(&asset.url, asset.size)?;
-    save_verified(body, &archive, asset, &|done| progress(done, asset.size))?;
-    let unpacked = stage.join("unpacked");
-    std::fs::create_dir_all(&unpacked).map_err(|e| e.to_string())?;
-    platform::unpack(&archive, &unpacked)?;
-    std::fs::create_dir_all(folder).map_err(|e| e.to_string())?;
-    platform::rehearse(&unpacked, folder)?;
+    let rehearsed = download(&api, &offer, &stage, progress)
+        .and_then(|package| platform::open(&package, &stage))
+        .and_then(|opened| {
+            std::fs::create_dir_all(folder).map_err(|e| e.to_string())?;
+            platform::rehearse(&opened, folder)
+        });
     let _ = std::fs::remove_dir_all(&stage);
-    Ok(version)
+    rehearsed.map(|()| offer.version)
 }
 
 /// Run `command`, its output to the update log; an error says how it
@@ -471,21 +503,22 @@ mod tests {
     }
 
     #[test]
-    fn each_system_gets_the_archive_its_packaging_script_makes() {
+    fn each_system_gets_the_package_its_packaging_script_makes() {
+        // tools/package-windows.ps1's installer, not its zip.
         assert_eq!(
-            archive_name("0.10.0", "windows", "x86_64"),
-            "Helio-0.10.0-windows-x86_64.zip"
+            package_name("0.10.0", "windows", "x86_64"),
+            "Helio-0.10.0-windows-x86_64-setup.exe"
         );
         assert_eq!(
-            archive_name("0.10.0", "macos", "aarch64"),
+            package_name("0.10.0", "macos", "aarch64"),
             "Helio-0.10.0-macos-arm64.zip"
         );
         assert_eq!(
-            archive_name("0.10.0", "macos", "x86_64"),
+            package_name("0.10.0", "macos", "x86_64"),
             "Helio-0.10.0-macos-x86_64.zip"
         );
         assert_eq!(
-            archive_name("0.10.0", "linux", "x86_64"),
+            package_name("0.10.0", "linux", "x86_64"),
             "Helio-0.10.0-linux-x86_64.tar.gz"
         );
     }

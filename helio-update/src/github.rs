@@ -19,11 +19,19 @@ const SITE: &str = "https://github.com/";
 /// One GET: the status and the body, or why nothing came back.
 pub(crate) trait Fetch {
     fn get(&self, path: &str, accept: &str) -> Result<(u16, String), String>;
+
+    /// Where the repository's pages and release downloads are: GitHub's
+    /// site, or, for an API pointed elsewhere, that server.
+    fn site(&self) -> &str {
+        SITE
+    }
 }
 
 /// GitHub's API over HTTPS.
 pub(crate) struct Api {
     base: String,
+    /// `SITE`, or the overriding server with a `/` after it.
+    site: String,
     http: ureq::Agent,
     user_agent: String,
 }
@@ -37,12 +45,19 @@ const DOWNLOAD_TIMEOUT: Duration = Duration::from_secs(30 * 60);
 const MAX_BODY: u64 = 16 * 1024 * 1024;
 
 impl Api {
-    /// `HELIO_UPDATE_API` points it elsewhere (tests).
+    /// `HELIO_UPDATE_API` points it elsewhere (a mirror, a test's fake
+    /// release): the API's paths, and the release downloads too, are then
+    /// that server's (`/OWNER/NAME/releases/download/…`, as GitHub's site
+    /// serves them).
     pub(crate) fn new(build: &Build) -> Api {
-        let base = std::env::var("HELIO_UPDATE_API")
+        let elsewhere = std::env::var("HELIO_UPDATE_API")
             .ok()
-            .filter(|b| !b.is_empty())
-            .unwrap_or_else(|| "https://api.github.com".into());
+            .map(|b| b.trim_end_matches('/').to_string())
+            .filter(|b| !b.is_empty());
+        let (base, site) = match elsewhere {
+            Some(base) => (base.clone(), format!("{base}/")),
+            None => ("https://api.github.com".into(), SITE.into()),
+        };
         let http: ureq::Agent = ureq::Agent::config_builder()
             .timeout_global(Some(Duration::from_secs(20)))
             .timeout_connect(Some(Duration::from_secs(8)))
@@ -50,7 +65,8 @@ impl Api {
             .build()
             .into();
         Api {
-            base: base.trim_end_matches('/').to_string(),
+            base,
+            site,
             http,
             // GitHub refuses requests without one.
             user_agent: format!("helio/{}", build.version),
@@ -107,6 +123,10 @@ impl Fetch for Api {
             .read_to_string()
             .map_err(|e| e.to_string())?;
         Ok((status, body))
+    }
+
+    fn site(&self) -> &str {
+        &self.site
     }
 }
 
@@ -169,10 +189,10 @@ pub(crate) struct Latest {
 const MAX_ASSETS: usize = 64;
 
 /// The files of a release that can be installed: named plainly, served
-/// from the repository's releases, with a SHA-256. Anything else is left
-/// out.
-fn assets_of(release: &[ReleaseAsset], slug: &str) -> Vec<Asset> {
-    let downloads = format!("{SITE}{slug}/releases/download/");
+/// from the repository's releases on `site` ([`Fetch::site`]), with a
+/// SHA-256. Anything else is left out.
+fn assets_of(release: &[ReleaseAsset], site: &str, slug: &str) -> Vec<Asset> {
+    let downloads = format!("{site}{slug}/releases/download/");
     release
         .iter()
         .take(MAX_ASSETS)
@@ -213,7 +233,7 @@ pub(crate) fn latest(fetch: &dyn Fetch, slug: &str) -> Result<Option<(Latest, St
     let Some(version) = Version::parse(&release.tag_name) else {
         return Ok(None);
     };
-    let assets = assets_of(&release.assets, slug);
+    let assets = assets_of(&release.assets, fetch.site(), slug);
     Ok(Some((Latest { version, assets }, release.html_url)))
 }
 
@@ -577,6 +597,35 @@ mod tests {
                 sha256: "ab".repeat(32),
             }]
         );
+    }
+
+    #[test]
+    fn an_api_pointed_elsewhere_takes_downloads_only_from_that_server() {
+        /// `HELIO_UPDATE_API=http://127.0.0.1:8080`, as `Api::new` takes it.
+        struct Elsewhere(Fake);
+        impl Fetch for Elsewhere {
+            fn get(&self, path: &str, accept: &str) -> Result<(u16, String), String> {
+                self.0.get(path, accept)
+            }
+            fn site(&self) -> &str {
+                "http://127.0.0.1:8080/"
+            }
+        }
+        let sum = "ab".repeat(32);
+        let body = format!(
+            r#"{{"tag_name": "v1.0.1", "assets": [
+                {{"name": "Helio-1.0.1-linux-x86_64.tar.gz", "size": 7,
+                  "browser_download_url": "http://127.0.0.1:8080/example/helio/releases/download/v1.0.1/Helio-1.0.1-linux-x86_64.tar.gz",
+                  "digest": "sha256:{sum}"}},
+                {{"name": "Helio-1.0.1-macos-arm64.zip", "size": 7,
+                  "browser_download_url": "https://github.com/example/helio/releases/download/v1.0.1/Helio-1.0.1-macos-arm64.zip",
+                  "digest": "sha256:{sum}"}}
+            ]}}"#
+        );
+        let fake = Elsewhere(Fake::new(&[("releases/latest", 200, &body)]));
+        let (latest, _) = latest(&fake, "example/helio").unwrap().unwrap();
+        let names: Vec<&str> = latest.assets.iter().map(|a| a.name.as_str()).collect();
+        assert_eq!(names, ["Helio-1.0.1-linux-x86_64.tar.gz"]);
     }
 
     #[test]

@@ -225,7 +225,7 @@ For everyone:
 | `CLOUDFLARE_AUTH_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` | agents | The Workers AI token and account clef's screen checks use; win over Agent setup's |
 | `HELIO_APPEARANCE` | the apps | `light` or `dark`, whatever the system says |
 | `NO_COLOR`, `CLICOLOR_FORCE` | `helio` | No colour in a terminal; colour even where the output is not one ([no-color.org](https://no-color.org), [bixense.com/clicolors](https://bixense.com/clicolors/)) |
-| `HELIO_UPDATE_API` | the apps | Where the update check asks instead of `https://api.github.com` (a mirror, or a test) |
+| `HELIO_UPDATE_API` | the apps | Where the update check asks instead of `https://api.github.com`, and where an update's files are downloaded from (a mirror, or a test) |
 | `HELIO_SOFTWARE_DECODE` | Helio on Linux | Decode in software even where VA-API is available |
 | `HELIO_HOST_CAPTURE` | Helio Host on Linux | `x11` or `portal`, where the session type is not clear |
 

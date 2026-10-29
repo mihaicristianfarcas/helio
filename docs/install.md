@@ -35,8 +35,8 @@ for scripts, under `https://download.helio.mihaicristian.dev/latest/`:
 
 `latest/SHA256SUMS` has their checksums, and `latest.json` says which
 version and commit they are. On Windows, `Helio-windows-x86_64.zip` holds
-the same programs as the installer, unpacked: it is what Helio's own
-update downloads.
+the same programs as the installer, unpacked; a copy run from it does not
+update itself (Helio's own update runs the installer).
 
 ### On macOS
 
@@ -127,8 +127,9 @@ Host**, the host inside Helio, the first time (see
 `brew upgrade --cask helio` (or a plain `brew upgrade`) updates it, and so
 does **Install and Restart** in Helio, which runs that command for you
 ([usage.md](usage.md#updates)). Either way hosting stays as it was: the
-host sees the new app and restarts on it 15 s later. The app is signed
-with a Developer ID and notarized by Apple.
+host restarts on the new app (15 s after a `brew upgrade` you run
+yourself, when it sees the app replaced). The app is signed with a
+Developer ID and notarized by Apple.
 
 ## Building from source
 
@@ -255,9 +256,9 @@ helio host enable    # or target\Helio\bin\helio.exe host enable from a build
 Turning hosting on copies the host's engine to `C:\Program Files\Helio Host`,
 and installs and starts **HelioHost** from there (it starts at boot, before
 anyone signs in, and adds Windows Firewall rules for Helio Host). Helio's own
-updates do it again while hosting is on; after a build of your own, turn
-hosting off and on (or run `helio host enable` again) to put the new engine
-in place. Turning it off (`helio host disable`) removes the service, its
+updates put the new engine there while hosting is on; after a build of your
+own, turn hosting off and on (or run `helio host enable` again) to put the
+new engine in place. Turning it off (`helio host disable`) removes the service, its
 firewall rules and the host's copy in `C:\Program Files\Helio Host`.
 
 Helio Host's settings and state are in `C:\ProgramData\Helio Host`. Details:

@@ -121,7 +121,7 @@ request named Helio and the grant was kept under Helio's identifier; from
 outside, it is Helio Host's. Accessibility was the helper's either way
 (macOS 26.5). `helio-host enable` from a `helio-host` outside an app bundle
 refuses (`helio-host/src/hosting/mac.rs`). An update of Helio copies the new
-helper and restarts the host while hosting is on.
+helper and restarts the host on it while hosting is on.
 
 The copy has to follow the app. So the LaunchAgent names the app the copy
 came from (`helio-host host --app PATH`), and the host watches it: kqueue says
@@ -131,7 +131,11 @@ when the app is moved, renamed or deleted, or what is in it changes
 within a few seconds).
 
 - **Replaced** (Homebrew's upgrade, the app's own update, a new download
-  dragged over it): the host checks the new app's helper meets the
+  dragged over it): Helio's own update, and the `brew upgrade` it runs,
+  do not wait for that. Once the new app is in place they stop the host
+  (`launchctl kill SIGTERM` on its agent, which ends a session properly),
+  launchd starts it again at once, and it makes the same checks at its
+  start. Either way the host checks the new app's helper meets the
   running copy's designated requirement (its code-signing identity, by
   which macOS keeps the permissions it granted) and, when the app is
   still marked as downloaded, that Gatekeeper accepts it (`spctl

@@ -1,5 +1,6 @@
 # Install Helio with its installer, turn hosting on, install it again over
-# itself, uninstall it, and check after each step that it did what it says
+# itself (as a person does, then as Helio's own update does), uninstall it,
+# and check after each step that it did what it says
 # and, at the end, that nothing of it is left but the data Helio keeps on
 # purpose. The release workflow runs it on each Windows package; it runs
 # the same on a PC or a VM of your own.
@@ -52,8 +53,8 @@ function Invoke-Program([string]$exe, [string[]]$arguments) {
 # Run an Inno Setup program silently and wait for it to be done. The
 # uninstaller copies itself to the temporary folder and the copy does the
 # work: waiting for the first one is not enough.
-function Invoke-Silently([string]$exe) {
-    $process = Start-Process -FilePath $exe -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART' -PassThru
+function Invoke-Silently([string]$exe, [string[]]$more = @()) {
+    $process = Start-Process -FilePath $exe -ArgumentList (@('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART') + $more) -PassThru
     # Held from the start: without the handle, a process that has exited
     # has no exit code to give.
     $null = $process.Handle
@@ -173,8 +174,17 @@ try {
     Check (Hosting-On) 'hosting stays on'
     Check ((Get-Item $engine).LastWriteTimeUtc -gt $copied) "the host's engine is copied again"
 
+    # Run by Helio's own update (/HELIOUPDATE), it leaves the host to Helio,
+    # which updates it with the administrator's permission it asked for
+    # (helio-update/src/install/windows.rs).
+    $copied = (Get-Item $engine).LastWriteTimeUtc
+    Start-Sleep -Seconds 2
+    Check ((Invoke-Silently $Setup @('/HELIOUPDATE')) -eq 0) 'the installer, run by Helio''s update, exits with 0'
+    Check (Hosting-On) 'hosting stays on'
+    Check ((Get-Item $engine).LastWriteTimeUtc -eq $copied) "the host's engine is left to Helio's update"
+
     # What Helio makes beside its files: Settings > General's PATH entry
-    # and start at login, and what an update renames aside or brings.
+    # and start at login.
     Set-UserPath ((@($pathBefore -split ';' | Where-Object { $_ }) + (Join-Path $app 'bin')) -join ';')
     # A new profile may have no Run key yet: Helio creates it as this does
     # (helio-ui/src/login.rs).
@@ -182,9 +192,6 @@ try {
     if (-not (Test-Path $run)) { New-Item $run -Force | Out-Null }
     New-ItemProperty $run -Name Helio -Value ('"{0}" --background' -f (Join-Path $app 'Helio.exe')) `
         -PropertyType String -Force | Out-Null
-    foreach ($left in 'Helio.exe.old', 'bin\helio.exe.2.old', 'avcodec-1.dll') {
-        Set-Content -LiteralPath (Join-Path $app $left) -Value 'left by an update'
-    }
 
     # Uninstalled with hosting on: hosting goes first, then the rest. What
     # unins000.exe exits with says nothing: it hands the work to a copy of

@@ -273,17 +273,45 @@ key
 whose **Uninstall** runs `unins000.exe`. A Helio that runs is closed
 first (Restart Manager). Installed over a Helio whose hosting is on, it
 runs `helio-host enable` again from the new files (Windows asks), so the
-service runs the new engine. Helio's own update replaces the files
-without the installer, and the new Helio, when it starts, brings the
-entry's version up to date. Uninstalling turns hosting off first, while
+service runs the new engine. Uninstalling turns hosting off first, while
 it is on (`helio-host disable`, as an administrator: Windows asks, and a
-refusal leaves Helio installed), then takes `bin` off the user's `PATH`,
-removes Helio's start at login (the `Helio` value under `HKCU\...\Run`)
-and the files an update renamed aside or brought. Helio's **Settings →
+refusal leaves Helio installed), then takes `bin` off the user's `PATH`
+and removes Helio's start at login (the `Helio` value under
+`HKCU\...\Run`). Helio's **Settings →
 General → Command line** puts `bin` on the `PATH` (`HKCU\Environment`,
 written as the `REG_EXPAND_SZ` Windows keeps it as, then
 `WM_SETTINGCHANGE` so that what Explorer starts has it); no installer
 does.
+
+Helio's own update (**Install and Restart**,
+`helio-update/src/install/windows.rs`) is that installer, run again:
+
+1. The release's `Helio-VERSION-windows-x86_64-setup.exe` is downloaded,
+   checked against the SHA-256 GitHub records for it, and its
+   Authenticode signature checked (`WinVerifyTrust`): a release build
+   given the certificate's subject (`HELIO_HOST_WINDOWS_PUBLISHER`, as the
+   engine is) refuses an installer that is unsigned, changed after
+   signing, signed by anyone else or by a certificate the PC does not
+   trust. Only a Helio the installer put in place updates itself (its
+   folder is the entry's `InstallLocation`).
+2. While hosting is on, Windows asks for an administrator then, while
+   Helio's window is in front: asked later, by a program with no window
+   in front, the prompt would only flash in the taskbar. Allowed, it
+   starts `helio-host update-engine` from the service's engine in
+   Program Files; declined, the update stops and nothing has changed. A
+   PC that does not host is never asked.
+3. Helio quits, and a Windows PowerShell with no window runs the
+   installer for the user (`/VERYSILENT /SUPPRESSMSGBOXES /NORESTART
+   /NOCANCEL /HELIOUPDATE`, its log in `update-setup.log` in Helio's data
+   folder), then opens Helio again: the new one, or, if the installer
+   failed (it then puts back what it changed), the one there was, which
+   says why.
+4. `update-engine` waits for that run, and once it has ended well, runs
+   the new engine's `enable`, which checks and copies it into Program
+   Files and restarts HelioHost on it (its log:
+   `C:\ProgramData\Helio Host\logs\update-engine.log`). `/HELIOUPDATE`
+   tells the installer to leave the host to this, rather than ask
+   Windows itself.
 
 Building it needs an FFmpeg 8 shared build and LLVM (for the FFmpeg
 bindings): see [../install.md](../install.md#helio-on-windows).

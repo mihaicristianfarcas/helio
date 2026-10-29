@@ -1,7 +1,9 @@
 //! Installing an update on Linux: the release archive's `install.sh`, as
-//! the first install ran it. It puts the app and the host's engine in
-//! `~/.local/bin` (over running ones: `install` replaces a file rather than
-//! writing into it) and restarts the host's user service if it runs.
+//! the first install ran it (`tools/linux/install-release`). It puts the
+//! app and the host's engine in `~/.local/bin` (over running ones:
+//! `install` replaces a file rather than writing into it) and, while
+//! hosting is on (the host's user unit is enabled), restarts the host on
+//! the new engine.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -31,20 +33,23 @@ pub(crate) fn method() -> Result<Method, String> {
     Ok(Method { bin })
 }
 
-pub(crate) fn needs_archive(_method: &Method) -> bool {
+pub(crate) fn needs_package(_method: &Method) -> bool {
     true
 }
 
-pub(crate) fn unpack(archive: &Path, into: &Path) -> Result<(), String> {
+/// The archive unpacked in `stage` (its `unpacked` folder, returned).
+pub(crate) fn open(archive: &Path, stage: &Path) -> Result<PathBuf, String> {
+    let into = stage.join("unpacked");
+    std::fs::create_dir_all(&into).map_err(|e| format!("{}: {e}", into.display()))?;
     let out = Command::new("tar")
         .arg("-xzf")
         .arg(archive)
         .arg("-C")
-        .arg(into)
+        .arg(&into)
         .output()
         .map_err(|e| format!("tar did not run: {e}"))?;
     if out.status.success() {
-        Ok(())
+        Ok(into)
     } else {
         Err(format!(
             "the archive did not unpack: {}",
@@ -53,7 +58,8 @@ pub(crate) fn unpack(archive: &Path, into: &Path) -> Result<(), String> {
     }
 }
 
-/// Run the archive's install.sh, then start the new copy.
+/// Run the archive's install.sh, then start the new copy, with this copy's
+/// environment but for a UI demo's steps, which were for this copy.
 pub(crate) fn place(
     method: &Method,
     unpacked: &Path,
@@ -73,6 +79,7 @@ pub(crate) fn place(
     let new = method.bin.join(APP_PROGRAM);
     Command::new(&new)
         .args(["--after-update", &std::process::id().to_string()])
+        .env_remove("HELIO_UI_DEMO")
         .spawn()
         .map(drop)
         .map_err(|e| format!("{} did not start: {e}", new.display()))
@@ -93,13 +100,6 @@ pub(crate) fn rehearse(unpacked: &Path, folder: &Path) -> Result<(), String> {
         Err(String::from_utf8_lossy(&out.stderr).trim().to_string())
     }
 }
-
-/// Nothing is left behind: install.sh replaces the programs in place.
-pub(crate) fn tidy() {}
-
-/// The launcher lists the entries install.sh writes, which name no
-/// version: there is nothing to keep.
-pub(crate) fn keep_listed(_version: &str) {}
 
 /// Wait until process `pid` has exited, or `timeout`.
 pub(crate) fn wait_for_exit(pid: u32, timeout: Duration) {

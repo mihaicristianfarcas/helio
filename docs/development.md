@@ -160,8 +160,8 @@ normal use.
 | `HELIO_HOST_PROGRAM=PATH` | The `helio-host` the hosting switch and `helio host` run (a test host), instead of the one beside the app |
 | `HELIO_UI_DEMO_SCREEN=PATH` | The picture the sample agent sessions show |
 | `HELIO_HOST_APP_URL`, `HELIO_HOST_APP_CERT`, `HELIO_HOST_APP_TOKEN` | Point This computer at another host's API |
-| `HELIO_UPDATE_API=URL` | The update check asks this instead of `https://api.github.com` (the paths are GitHub's) |
-| `HELIO_COMMIT=SHA`, `HELIO_RELEASE=1` | At build time: the commit the update check compares with `main` (else the checkout's), and a release build (follows releases only). `cargo run -p helio-update --example check [releases\|main]` asks GitHub as the apps would; `--example install -- FOLDER` installs the latest release into FOLDER as an update would (on a Mac, over an older release's app there), leaving the installed app and its host alone |
+| `HELIO_UPDATE_API=URL` | The update check, and **Install and Restart**, ask this instead of `https://api.github.com`, and take a release's files only from it (the paths are GitHub's: `/repos/OWNER/NAME/releases/latest`, `/OWNER/NAME/releases/download/vVERSION/FILE`); see [Checking an update](#checking-an-update) |
+| `HELIO_COMMIT=SHA`, `HELIO_RELEASE=1` | At build time: the commit the update check compares with `main` (else the checkout's), and a release build (follows releases only, and installs them). `cargo run -p helio-update --example check [releases\|main]` asks GitHub as the apps would; `--example install -- FOLDER` installs the latest release into FOLDER as an update would (on a Mac, over an older release's app there; on Windows, the installer checked and copied there, not run), leaving the installed app and its host alone |
 | `HELIO_HOST_NO_PROMPTS=1` | A bundled Mac host does not ask for permissions at start |
 | `HELIO_HOST_TEST_TAP_ONLY=PID[,PID]` | A Mac host's surround capture hears only these processes (a test signal's player): a client streaming the Mac to itself would otherwise send its own playback round again |
 | `HELIO_AGENT_MCP="CMD … mcp"` | Agent runs start this MCP server instead of their own (e.g. one inside the Linux container) |
@@ -188,8 +188,8 @@ when it needs to be and never merged into it.
 | Script | Makes |
 |---|---|
 | `tools/package-macos` | `Helio-VERSION-macos-ARCH.zip`: Helio.app, with the host inside it as a helper app, `Contents/Helpers/Helio Host.app` (`tools/build-helio-app`, which signs the helper, then the app), and `helio`, the command line: `Contents/Resources/bin/helio`, a link to the app's program, the folder Settings > General names in `/etc/paths.d/helio` |
-| `tools/package-windows.ps1` | `Helio-VERSION-windows-x86_64-setup.exe`, the installer (`tools/windows/helio.iss`, Inno Setup 6.6 or newer): per user, no administrator, Helio in the Start menu and Settings > Apps, whose **Uninstall** turns hosting off first and takes `bin` off the user's `PATH` if Settings > General put it there. And `Helio-VERSION-windows-x86_64.zip`, the same files, which Helio's own update unpacks: Helio.exe beside FFmpeg's DLLs and license and the host's engine, `helio-host.exe`; `bin\helio.exe`, the `helio` command (helio-app's `helio-console`, which runs `Helio.exe cli`). `-Sign` signs them all (below) |
-| `tools/windows/test-install.ps1 -Setup FILE` | Not a package: installs the installer silently, turns hosting on, installs again, uninstalls, and checks each step and that nothing is left; `-Signed` also verifies every signature, and `-UnsignedEngine` that the engine refuses an unsigned and a changed copy. As an administrator, for a user without Helio. CI runs it on each pull request, the release workflow on each package |
+| `tools/package-windows.ps1` | `Helio-VERSION-windows-x86_64-setup.exe`, the installer (`tools/windows/helio.iss`, Inno Setup 6.6 or newer): per user, no administrator, Helio in the Start menu and Settings > Apps, whose **Uninstall** turns hosting off first and takes `bin` off the user's `PATH` if Settings > General put it there; Helio's own update runs it again, silently. And `Helio-VERSION-windows-x86_64.zip`, the same files, unpacked: Helio.exe beside FFmpeg's DLLs and license and the host's engine, `helio-host.exe`; `bin\helio.exe`, the `helio` command (helio-app's `helio-console`, which runs `Helio.exe cli`). `-Sign` signs them all (below) |
+| `tools/windows/test-install.ps1 -Setup FILE` | Not a package: installs the installer silently, turns hosting on, installs again (as a person does, then as Helio's update does, `/HELIOUPDATE`, which leaves the host's engine alone), uninstalls, and checks each step and that nothing is left; `-Signed` also verifies every signature, and `-UnsignedEngine` that the engine refuses an unsigned and a changed copy. As an administrator, for a user without Helio. CI runs it on each pull request, the release workflow on each package |
 | `tools/linux/package` | `Helio-VERSION-linux-ARCH.tar.gz`: a folder with `helio-app`, `helio-host`, the host's unit `helio-host.service`, the launcher entry, its icon and `install.sh` (`tools/linux/install-release`; its `--uninstall` also removes the `~/.local/bin/helio` link Settings > General makes) |
 | `tools/publish-downloads DIST` | The downloads: each archive at `https://download.helio.mihaicristian.dev/latest/Helio-OS-ARCH.EXT`, then `latest/SHA256SUMS` and `latest.json` (version, commit, sizes, checksums), in the Cloudflare R2 bucket `helio-downloads`, with wrangler; last, the archives the previous `latest.json` listed and this one does not are deleted |
 
@@ -313,6 +313,58 @@ VM's `Root` and `TrustedPublisher` stores, a build with
 command line (`-n NAME -u URL FILES`) and signs with `signtool sign /sm
 /sha1 THUMBPRINT /fd sha256 /tr TIMESTAMP_URL /td sha256`. Then
 `test-install.ps1 -Signed -UnsignedEngine` with the engine as built.
+
+The same variable makes Helio's own update require it
+(`helio-update/src/install/authenticode.rs`): a build given
+`HELIO_HOST_WINDOWS_PUBLISHER` runs a newer release's installer only if it
+carries a valid signature by that subject, so the first signed release
+is the one from which every Windows update is checked for its publisher;
+the releases before it check the SHA-256 alone.
+
+### Checking an update
+
+`cargo test -p helio-update --test fake_release` serves a fake latest
+release from this computer through `HELIO_UPDATE_API`, with this system's
+package, and has a 1.0.0 build download, check and put it in place in a
+folder of the test's (`install::rehearse`); a changed package, one served
+from another server and the release the build already is, are refused.
+On a Mac, with a Developer ID identity in the keychain,
+`HELIO_TEST_DEVELOPER_ID="Developer ID Application: …" cargo test -p
+helio-update --test fake_release -- --ignored` also installs one signed by
+the same team and refuses one signed ad hoc.
+
+By hand, on each system, an installed release updates to a fake newer
+one:
+
+1. Build twice with `HELIO_RELEASE=1`, the workspace's version set to,
+   say, 1.0.0 and then 1.0.1 (put it back after): `tools/build-helio-app`
+   with `HELIO_SIGN_IDENTITY` a Developer ID (macOS; zip the second with
+   `ditto -c -k --keepParent`), `tools/package-windows.ps1`,
+   `tools/linux/package` (`HELIO_PROFILE=dev` is quicker).
+2. Install the first as the downloads install it, turn hosting on, pair
+   something.
+3. Lay out the second as a release, and serve it:
+   `tools/fake-release http://ADDRESS:8080 DIR 1.0.1 PACKAGE`, then
+   `python3 -m http.server 8080 --bind ADDRESS --directory DIR`.
+4. Start the installed Helio with `HELIO_UPDATE_API=http://ADDRESS:8080`
+   and `HELIO_UI_DEMO=install` (as **Install and Restart**). It opens
+   again as 1.0.1; the host, while hosting is on, restarts on the new
+   engine; pairings and settings stay. To see a refusal, change the
+   package in DIR after `fake-release` listed it, or serve one signed by
+   someone else.
+
+On Windows, the installer's signature is checked without Certum the way
+the engine's is above: build with `HELIO_HOST_WINDOWS_PUBLISHER='CN=Helio
+Test Signing'` and `-RequireSignature` (`-StageOnly`), sign every program
+in the stage folder and, after Inno Setup, the installer with the test
+certificate (`Set-AuthenticodeSignature -TimestampServer
+http://timestamp.digicert.com`), in a VM that trusts it. A second
+self-signed certificate, trusted as well, signs the installer that must be
+refused for its publisher; an unsigned one and a signed one changed after
+signing (a byte of its DOS stub) are refused too. With hosting on, Windows
+asks when the update starts; answering in a VM from a Mac:
+`osascript -e 'tell application "UTM" to input keystroke (virtual machine
+"NAME") text "y" with modifiers {option}'` (Alt+Y; Alt+N for No).
 
 ## Benchmarks and fuzzing
 
