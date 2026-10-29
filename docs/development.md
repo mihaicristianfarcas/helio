@@ -10,7 +10,8 @@ changes themselves — code style, comments, docs, commits — are in
 ```
 Cargo.toml            the workspace (every crate below but spikes/ and tools/rawinput-probe)
 helio-app/            the app's window (GPUI), This computer   ─┐
-helio-client/         the client: stream, platforms, `helio`   │ the app
+helio-client/         the client: session, stream, platforms   │ the app
+helio-cli/            `helio`, the command line                │
 helio-agent/          AI agents: MCP server, runners           ─┘
 helio-host/           the host: sessions, pipelines, web UI    ─┐ the host
 helio-host-data/      its data folder, identity, clients       ─┘
@@ -87,7 +88,7 @@ colima). The tree is mounted at `/src`; the build, the registry and git
 checkouts live in named volumes, so rebuilds are incremental.
 
 ```sh
-tools/linux-dev                                  # cargo build -p helio-app -p helio-client
+tools/linux-dev                                  # cargo build -p helio-app -p helio-cli
 tools/linux-dev cargo test -p helio-host
 tools/linux-dev cargo test --workspace --exclude helio-host -j 1
 tools/linux-dev tools/linux/loopback-test        # a Linux host streaming to a Linux client
@@ -149,7 +150,7 @@ normal use.
 
 | Variable | Does |
 |---|---|
-| `HELIO_TEST_INPUT="wait 3000; key 1e; click; text Hé!; quit"` | Scripted input once a stream is up (the steps are listed in `helio-client/src/bin/helio/script.rs`) |
+| `HELIO_TEST_INPUT="wait 3000; key 1e; click; text Hé!; quit"` | Scripted input once a stream is up (the steps are listed in `helio-cli/src/script.rs`) |
 | `HELIO_TEST_SNAPSHOT=PATH[@FRAMES]` | The Windows and Linux client save what is on screen as a PNG after that many frames |
 | `HELIO_TEST_LOSS=N[:B]` | The client drops N% of incoming media datagrams, in bursts of B (after decryption) |
 | `HELIO_TEST_WIRE_LOSS=N[:B]` | Any endpoint drops N% of all tunnel datagrams, in bursts of B (before decryption; handshakes included) |

@@ -22,7 +22,7 @@ inside() { docker exec -i -e DISPLAY=:1 -e HELIO_HOST_DATA_DIR=$OUT/helio-host -
 case "${1:-}" in
 start)
     docker build -q -t helio-linux "$REPO/tools/linux" >/dev/null
-    "$REPO/tools/linux-dev" cargo build -q -p helio-host -p helio-agent -p helio-client --bin helio-host --bin helio-agent --bin helio
+    "$REPO/tools/linux-dev" cargo build -q -p helio-host -p helio-agent -p helio-cli --bin helio-host --bin helio-agent --bin helio
     docker rm -f "$NAME" >/dev/null 2>&1 || true
     docker run -d --name "$NAME" \
         -v "$REPO":/src -w /src \

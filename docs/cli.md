@@ -2,7 +2,7 @@
 
 Everything the apps do can also be done from a terminal: streaming and
 pairing with `helio`, the host with `helio-host`, AI agents with `helio-agent`. The
-CLIs are built with the apps (`cargo build --release -p helio-client -p helio-host
+CLIs are built with the apps (`cargo build --release -p helio-cli -p helio-host
 -p helio-agent`; the binaries land in `target/release/`).
 
 ## `helio` — the client
