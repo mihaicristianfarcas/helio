@@ -1,0 +1,59 @@
+[package]
+name = "helio-app"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "Helio: the Helio streaming client app (host list, pairing, settings) for macOS, Windows and Linux"
+
+[[bin]]
+name = "helio-app"
+path = "src/main.rs"
+
+[features]
+default = ["runtime-shaders"]
+# See helio-ui; the app bundles build without it when Xcode is there.
+runtime-shaders = ["helio-ui/runtime-shaders"]
+
+[dependencies]
+helio-client = { path = "../helio-client" }
+helio-agent = { path = "../helio-agent" }
+serde_json = "1"
+helio-pairing = { path = "../helio-pairing" }
+helio-proto = { path = "../helio-proto" }
+crossbeam-channel = "0.5"
+futures = "0.3"
+gpui.workspace = true
+gpui_platform.workspace = true
+helio-ui = { path = "../helio-ui", default-features = false }
+helio-update = { path = "../helio-update" }
+serde = { version = "1", features = ["derive"] }
+toml = "0.8"
+tracing = "0.1"
+ureq = { version = "3", features = ["json"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+block2 = "0.6"
+objc2 = "0.6"
+objc2-foundation = { version = "0.3", features = ["std", "NSString", "NSArray", "NSSet", "NSError", "NSBundle"] }
+objc2-user-notifications = { version = "0.3", default-features = false, features = ["std", "block2", "bitflags", "UNUserNotificationCenter", "UNNotification", "UNNotificationAction", "UNNotificationCategory", "UNNotificationContent", "UNNotificationRequest", "UNNotificationResponse", "UNNotificationSound", "UNNotificationTrigger"] }
+objc2-core-foundation = { version = "0.3", features = ["std", "CFBase", "CFString", "CFNumber", "CFPreferences", "CFPropertyList"] }
+
+[target.'cfg(windows)'.dependencies]
+# SudoVDA's presence, for the Hosting page's check.
+helio-display = { path = "../helio-display" }
+windows = { version = "0.61", features = [
+    "Win32_Foundation",
+    "Win32_System_Registry",
+    "Win32_System_Threading",
+    "Win32_UI_Shell",
+    "Win32_UI_WindowsAndMessaging",
+] }
+
+[dev-dependencies]
+tiny-skia = "0.12"
+
+[build-dependencies]
+winresource = "0.1"

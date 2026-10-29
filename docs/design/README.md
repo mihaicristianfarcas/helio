@@ -1,5 +1,9 @@
 # Design history
 
+The project was called pingpong, its client Ping and its host Pong, until
+it was renamed Helio, with Helio Host as its host, in October 2026. These
+documents keep the old names.
+
 pingpong was built in phases, each with a design written before the code and
 measurements taken after it. These documents are that record. They explain
 *why* the code is the way it is — most decisions here were measured, and the

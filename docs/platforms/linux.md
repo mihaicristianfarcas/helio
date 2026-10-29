@@ -1,23 +1,23 @@
 # Linux
 
-Ping and Pong both run on Linux, under X11 and Wayland. Linux support is the
+Helio and Helio Host both run on Linux, under X11 and Wayland. Linux support is the
 youngest: it is developed and tested in a container (Ubuntu 24.04, Xvfb,
 Mesa's software renderer), and has not yet been tried on much real hardware
 (see "Not verified yet" below).
 
-## Ping, the client
+## Helio, the client
 
 The same app as on the other systems. Because winit allows one event loop
 per process and the app's window has it, a stream runs in a second process
-of the app (`ping-app --ping-stream`), which tells the app how it ended on a
-line of its standard output. That process is `ping_core::linux`:
+of the app (`helio-app --helio-stream`), which tells the app how it ended on a
+line of its standard output. That process is `helio_client::linux`:
 
 - **Window and input.** A winit window (X11 or Wayland). Keys go as
   scancodes through the shared keyboard handling (Moonlight's
   Ctrl+Alt+Shift chords); the pointer is captured by locking or confining
   the cursor.
 - **Decode.** FFmpeg, with VA-API where the machine has it, else four slice
-  threads in software. `PING_SOFTWARE_DECODE=1` skips VA-API. A 4:4:4
+  threads in software. `HELIO_SOFTWARE_DECODE=1` skips VA-API. A 4:4:4
   stream (**YUV 4:4:4**, which a Linux client asks for when set) decodes in
   software where VA-API does not take it.
 - **Present.** wgpu (Vulkan or GL), drawing the planes (NV12, I420 or I444)
@@ -25,8 +25,8 @@ line of its standard output. That process is `ping_core::linux`:
 - **Controllers.** gilrs (evdev), rumble included.
 - **Sound.** cpal (ALSA; PipeWire and PulseAudio through it).
 - **In the launcher.** `tools/linux/install-apps` (from a checkout) and the
-  download's `install.sh` install Ping for the user with a desktop entry
-  and an icon, named after the window's app id (`dev.pingpong.Ping`), so
+  download's `install.sh` install Helio for the user with a desktop entry
+  and an icon, named after the window's app id (`dev.mihaicristian.helio`), so
   the dock and the task switcher show it under its own icon, under Wayland
   and X11.
 - **The window's glass.** GPUI blurs behind a window only under Wayland,
@@ -36,15 +36,15 @@ line of its standard output. That process is `ping_core::linux`:
   ([../ui.md](../ui.md#the-glass-on-each-system)).
 - **No tray icon for hosting.** There is no one tray on Linux (the
   StatusNotifier protocol needs a D-Bus service and a menu protocol of its
-  own, and GNOME shows it only with an extension), so with hosting on Ping
+  own, and GNOME shows it only with an extension), so with hosting on Helio
   is still an ordinary app: closing it quits, and the host runs on as its
-  user unit. The hosting switch runs `pong enable` (`systemctl --user`),
+  user unit. The hosting switch runs `helio-host enable` (`systemctl --user`),
   which asks for nothing.
 
-## Pong, the host
+## Hosting: Helio Host
 
 The same host — sessions, pairing, the web UI, the bitrate controller, the
-internet path — with `pong/src/linux/` where Windows and macOS have theirs.
+internet path — with `helio-host/src/linux/` where Windows and macOS have theirs.
 It streams the screen as it is: there is no virtual display, so the picture
 is scaled to the client's size (letterboxed when the shapes differ, the
 pointer mapped to match).
@@ -53,17 +53,17 @@ pointer mapped to match).
 
 - **Capture.** MIT-SHM into memory shared with the X server, XDamage to
   know when the screen changed, the pointer drawn in from XFixes
-  (`pingpong-capture/src/x11.rs`; x11rb, no C libraries).
+  (`helio-capture/src/x11.rs`; x11rb, no C libraries).
 - **Encode.** FFmpeg, trying VA-API (Intel, AMD), then NVENC, then x264
   (H.264 only, in software), set up as Sunshine sets them up: no B-frames,
   an endless GOP, a VBV of about a frame, an IDR on a loss (none of these
   encoders invalidates references). swscale converts to BT.709 4:2:0 and
-  scales (`pingpong-encode/src/ffmpeg.rs`); to 4:4:4 for a client that asks
+  scales (`helio-encode/src/ffmpeg.rs`); to 4:4:4 for a client that asks
   for it, where NVENC or x264 encodes (VA-API takes 4:2:0 only). No HDR:
   the X server and the portal share SDR pictures.
 - **Input.** XTest: keys by position, text by the layout's own keys (spare
   key codes remapped only for characters the layout lacks), the wheel as
-  buttons 4–7 (`pingpong-input/src/x11.rs`).
+  buttons 4–7 (`helio-input/src/x11.rs`).
 - **Sound.** The default output's monitor through libpulse-simple, which
   PipeWire serves too; stereo.
 - The screensaver and DPMS are held off during a session.
@@ -71,29 +71,29 @@ pointer mapped to match).
 ### Under Wayland
 
 The screen and the input go through the desktop portal, the way desktop
-sharing is meant to work there (`pong/src/linux/portal.rs`): a RemoteDesktop
+sharing is meant to work there (`helio-host/src/linux/portal.rs`): a RemoteDesktop
 session with a screen cast in it (GNOME, KDE), or a ScreenCast session alone
 where the desktop has no RemoteDesktop portal (wlroots: sway, Hyprland — no
 input from the client there). Frames come over PipeWire with the pointer
 drawn in by the compositor; keys go as Linux key codes, text as keysyms,
 the pointer as the portal's motion and buttons.
 
-The first time, the desktop asks whoever is at the host — Pong asks as it
+The first time, the desktop asks whoever is at the host — Helio Host asks as it
 starts, not when a client connects. On GNOME, switch on **Allow Remote
 Interaction** in that dialog for the keyboard and mouse. The portal then
-gives a restore token (kept as `portal-token` in Pong's data folder), and
+gives a restore token (kept as `portal-token` in Helio Host's data folder), and
 later sessions start without asking. The screen is kept on through the
-Inhibit portal. `PONG_CAPTURE=x11|portal` overrides the choice where the
+Inhibit portal. `HELIO_HOST_CAPTURE=x11|portal` overrides the choice where the
 environment does not make it clear.
 
 ### Running it
 
-Pong runs in the desktop session, as the user: `tools/linux/pong.service` is
-a systemd user unit for that, which Ping's `install.sh` installs beside the
+Helio Host runs in the desktop session, as the user: `tools/linux/helio-host.service` is
+a systemd user unit for that, which Helio's `install.sh` installs beside the
 app without turning it on ([../install.md](../install.md#hosting-on-linux)),
-and which `pong enable` and `pong disable` turn on and off (`systemctl
---user enable|disable --now pong`; no root).
-Data and logs are in `~/.config/pong`.
+and which `helio-host enable` and `helio-host disable` turn on and off (`systemctl
+--user enable|disable --now helio-host`; no root).
+Data and logs are in `~/.config/helio-host`.
 
 ## Measured (in the container)
 
@@ -103,7 +103,7 @@ Data and logs are in `~/.config/pong`.
 | The same at 4:4:4 (`--yuv444`: x264 High 4:4:4 Predictive) | 60 fps; 5.7 ms capture to encoded; client decode 0.34 ms in software; 10.4 ms capture to screen; no loss |
 | The same through the Wayland portal (GNOME 46, nested, software rendering) | frames at the 42 fps the nested compositor draws; 4.7 ms capture to encoded; 10–11 ms capture to screen; input arrives; later sessions start from the restore token without asking |
 | Linux client streaming a Windows host over a VPN, 1280x720@60 | H.264 and HEVC; 60 fps received, decoded and presented; 1 ms decode (software); 14–20 ms capture to screen |
-| Offscreen decode and present of the 600-frame test stream (`ping-core/examples/linux-render-check.rs`) | every colour bar matches FFmpeg's own BT.709 conversion exactly |
+| Offscreen decode and present of the 600-frame test stream (`helio-client/examples/linux-render-check.rs`) | every colour bar matches FFmpeg's own BT.709 conversion exactly |
 
 `tools/linux/loopback-test` repeats the first row; see
 [../development.md](../development.md#linux).

@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
-# Write the Homebrew cask (Casks/ping.rb) for a release, from the archives
+# Write the Homebrew cask (Casks/helio.rb) for a release, from the archives
 # tools/package-macos made: the version, and each archive's SHA-256. This
 # repository is its own tap:
 #
-#   brew tap mihaicristianfarcas/pingpong https://github.com/mihaicristianfarcas/pingpong
-#   brew install --cask ping
+#   brew tap mihaicristianfarcas/helio https://github.com/mihaicristianfarcas/helio
+#   brew install --cask helio
 #
 #   tools/update-casks VERSION DIST_DIR [BASE_URL]
 #
-# DIST_DIR holds Ping-VERSION-macos-ARCH.zip for arm64, x86_64 or both. One
+# DIST_DIR holds Helio-VERSION-macos-ARCH.zip for arm64, x86_64 or both. One
 # cask installs everything: the app, and inside it the host it runs while
-# hosting is on (Contents/Helpers/Pong Host.app). BASE_URL is where the
+# hosting is on (Contents/Helpers/Helio Host.app). BASE_URL is where the
 # archives are downloaded from (the release's, by default; a file:// one to
 # try the cask locally). The release workflow runs this after publishing
 # the release, and opens a pull request with the result.
@@ -18,12 +18,12 @@ set -euo pipefail
 REPO=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 VERSION=${1:?usage: update-casks VERSION DIST_DIR [BASE_URL]}
 DIST=${2:?usage: update-casks VERSION DIST_DIR [BASE_URL]}
-HOMEPAGE=https://github.com/mihaicristianfarcas/pingpong
+HOMEPAGE=https://github.com/mihaicristianfarcas/helio
 BASE=${3:-"$HOMEPAGE/releases/download/v#{version}"}
 OUT=${CASKS_DIR:-$REPO/Casks}
 
 sha() {
-    local zip="$DIST/Ping-$VERSION-macos-$1.zip"
+    local zip="$DIST/Helio-$VERSION-macos-$1.zip"
     [[ -f $zip ]] && shasum -a 256 "$zip" | cut -d' ' -f1
 }
 ARM=$(sha arm64 || true)
@@ -40,7 +40,7 @@ if [[ -n $ARM && -n $INTEL ]]; then
   sha256 arm:   "$ARM",
          intel: "$INTEL"
 
-  url "$BASE/Ping-#{version}-macos-#{arch}.zip"
+  url "$BASE/Helio-#{version}-macos-#{arch}.zip"
 CASK
     )
     LIMIT=
@@ -52,11 +52,11 @@ elif [[ -n $ARM || -n $INTEL ]]; then
   version "$VERSION"
   sha256 "$SUM"
 
-  url "$BASE/Ping-#{version}-macos-$ONLY.zip"
+  url "$BASE/Helio-#{version}-macos-$ONLY.zip"
 CASK
     )
 else
-    echo "no Ping archive for $VERSION in $DIST" >&2
+    echo "no Helio archive for $VERSION in $DIST" >&2
     exit 1
 fi
 
@@ -66,21 +66,21 @@ mkdir -p "$OUT"
 # run in a sandbox with a home folder of its own (Homebrew 7: postflight is
 # deprecated, and postflight_steps cannot reach ~/Library). So the cask does
 # nothing to the host, and the host follows its app itself
-# (pong/src/hosting/mac.rs): replaced by an upgrade (which keeps the app
+# (helio-host/src/hosting/mac.rs): replaced by an upgrade (which keeps the app
 # folder and replaces what is in it), it checks the new app's helper is
 # signed as it is and that Gatekeeper accepts the app, copies the helper and
 # restarts on it; gone after an uninstall, it turns hosting off 15 s later.
 # The uninstall quits the app (and an upgrade opens it again). zap, which
 # only an explicit brew uninstall --zap runs, stops the host at once and
 # removes the rest: the host's LaunchAgent and the app's own (which opens it
-# at login, pingpong-ui's login.rs), the app's data and logs, the host's
+# at login, helio-ui's login.rs), the app's data and logs, the host's
 # identity, pairings, logs and copy.
-cat > "$OUT/ping.rb" <<CASK
+cat > "$OUT/helio.rb" <<CASK
 # Written by tools/update-casks for each release: change that script, not
 # this file.
-cask "ping" do
+cask "helio" do
 $DOWNLOAD
-  name "Ping"
+  name "Helio"
   desc "Desktop and game streaming, client and host, post-quantum encrypted"
   homepage "$HOMEPAGE"
 
@@ -92,28 +92,28 @@ $DOWNLOAD
 $LIMIT
   depends_on macos: :sonoma
 
-  app "Ping.app"
+  app "Helio.app"
 
-  uninstall quit: "dev.pingpong.Ping"
+  uninstall quit: "dev.mihaicristian.helio"
 
-  zap launchctl: "dev.pingpong.Pong",
+  zap launchctl: "dev.mihaicristian.helio.host",
       trash:     [
-        "~/Library/Application Support/Ping",
-        "~/Library/Application Support/Pong",
-        "~/Library/LaunchAgents/dev.pingpong.Ping.plist",
-        "~/Library/LaunchAgents/dev.pingpong.Pong.plist",
-        "~/Library/Logs/Ping",
-        "~/Library/Preferences/dev.pingpong.Ping.plist",
+        "~/Library/Application Support/Helio",
+        "~/Library/Application Support/Helio Host",
+        "~/Library/LaunchAgents/dev.mihaicristian.helio.plist",
+        "~/Library/LaunchAgents/dev.mihaicristian.helio.host.plist",
+        "~/Library/Logs/Helio",
+        "~/Library/Preferences/dev.mihaicristian.helio.plist",
       ]
 
   caveats <<~EOS
-    Hosting is off until you turn it on in Ping (Settings > Hosting). macOS
-    then asks for Screen Recording and Accessibility for Pong Host, the host
-    inside Ping.
+    Hosting is off until you turn it on in Helio (Settings > Hosting). macOS
+    then asks for Screen Recording and Accessibility for Helio Host
+    inside Helio.
   EOS
 end
 CASK
 # An empty line where no architecture limit applies is one too many.
-awk 'NF || !blank { print } { blank = !NF }' "$OUT/ping.rb" > "$OUT/ping.rb.tmp"
-mv "$OUT/ping.rb.tmp" "$OUT/ping.rb"
-echo "wrote $OUT/ping.rb for $VERSION"
+awk 'NF || !blank { print } { blank = !NF }' "$OUT/helio.rb" > "$OUT/helio.rb.tmp"
+mv "$OUT/helio.rb.tmp" "$OUT/helio.rb"
+echo "wrote $OUT/helio.rb for $VERSION"

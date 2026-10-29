@@ -6,18 +6,18 @@
 #   tools/dev-sync            sync only
 #   tools/dev-sync build ARGS sync, then `cargo build --release ARGS` on the host
 #
-# Where to: PINGPONG_SSH (user@host; the host's shell is PowerShell) and
-# PINGPONG_HOST_DIR (default: pingpong, in that user's home). Either can be
+# Where to: HELIO_SSH (user@host; the host's shell is PowerShell) and
+# HELIO_HOST_DIR (default: Helio, in that user's home). Either can be
 # set in the environment or in tools/dev.env, which is not committed:
 #
-#   PINGPONG_SSH=me@gaming-pc
-#   PINGPONG_HOST_DIR=C:/Users/me/src/pingpong
+#   HELIO_SSH=me@gaming-pc
+#   HELIO_HOST_DIR=C:/Users/me/src/helio
 set -euo pipefail
 REPO=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 # shellcheck source=/dev/null
 [[ -f $REPO/tools/dev.env ]] && source "$REPO/tools/dev.env"
-HOST_SSH=${PINGPONG_SSH:?set PINGPONG_SSH=user@host (or put it in tools/dev.env)}
-HOST_DIR=${PINGPONG_HOST_DIR:-pingpong}
+HOST_SSH=${HELIO_SSH:?set HELIO_SSH=user@host (or put it in tools/dev.env)}
+HOST_DIR=${HELIO_HOST_DIR:-helio}
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
 

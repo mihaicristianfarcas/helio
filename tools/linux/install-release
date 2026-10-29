@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# Install Ping for this user from a release archive (made by
+# Install Helio for this user from a release archive (made by
 # tools/linux/package, where this script is install.sh); tools/linux/
 # install-apps runs it on a checkout's build, laid out the same way:
 #
-# - the app (ping-app) and the host's engine (pong) in ~/.local/bin, side by
+# - the app (helio-app) and the host's engine (helio-host) in ~/.local/bin, side by
 #   side, where the app's hosting switch finds the engine;
 # - the launcher entry, with its icon;
-# - the host's user unit (pong.service), installed but not enabled: hosting
-#   is off until the app's switch turns it on (`pong enable`). An update
+# - the host's user unit (helio-host.service), installed but not enabled: hosting
+#   is off until the app's switch turns it on (`helio-host enable`). An update
 #   over a host that runs restarts it on the new engine; one that is off
 #   stays off.
 #
@@ -22,7 +22,7 @@ UNITS=$CONFIG/systemd/user
 # The launcher entry and its icon, named after the window's app id, so the
 # desktop groups the window under the entry (Wayland's app_id, X11's
 # WM_CLASS).
-ID=dev.pingpong.Ping
+ID=dev.mihaicristian.helio
 
 # Menus and docks pick the entry up (or drop it) without logging out.
 refresh_launcher() {
@@ -33,21 +33,21 @@ refresh_launcher() {
 if [[ ${1:-} == --uninstall ]]; then
     # Hosting off first: the host stopped, and no longer started at login.
     # A failure stops the uninstall here, with everything still in place to
-    # turn it off by hand (pong disable).
-    if [[ -x $BIN/pong ]]; then
-        "$BIN/pong" disable
+    # turn it off by hand (helio-host disable).
+    if [[ -x $BIN/helio-host ]]; then
+        "$BIN/helio-host" disable
     fi
-    rm -f "$UNITS/pong.service" "$BIN/pong" "$BIN/ping-app" \
+    rm -f "$UNITS/helio-host.service" "$BIN/helio-host" "$BIN/helio-app" \
         "$DATA/applications/$ID.desktop" "$DATA/icons/hicolor/256x256/apps/$ID.png"
     systemctl --user daemon-reload 2>/dev/null || true
     refresh_launcher
-    echo "uninstalled; your hosts, pairings and settings stay in $CONFIG/ping and $CONFIG/pong"
+    echo "uninstalled; your hosts, pairings and settings stay in $CONFIG/helio and $CONFIG/helio-host"
     exit 0
 fi
 
 # A library the system lacks shows here, not as a program that will not
 # start from the launcher.
-missing=$(for program in ping-app pong; do
+missing=$(for program in helio-app helio-host; do
     ldd "$HERE/$program" | awk '/not found/ { print $1 }'
 done | sort -u)
 if [[ -n $missing ]]; then
@@ -73,8 +73,8 @@ if [[ -n $missing ]]; then
     exit 1
 fi
 
-install -Dm755 "$HERE/ping-app" "$BIN/ping-app"
-install -Dm755 "$HERE/pong" "$BIN/pong"
+install -Dm755 "$HERE/helio-app" "$BIN/helio-app"
+install -Dm755 "$HERE/helio-host" "$BIN/helio-host"
 
 # The launcher entry and the unit name the programs by where they are now:
 # a ~/.local/bin made just now is in the session's PATH only from the next
@@ -83,7 +83,7 @@ install -Dm755 "$HERE/pong" "$BIN/pong"
 mkdir -p "$DATA/applications" "$UNITS"
 while IFS= read -r line; do
     case $line in
-        Exec=*) printf 'Exec="%s/ping-app"\n' "${BIN//%/%%}" ;;
+        Exec=*) printf 'Exec="%s/helio-app"\n' "${BIN//%/%%}" ;;
         *) printf '%s\n' "$line" ;;
     esac
 done < "$HERE/$ID.desktop" > "$DATA/applications/$ID.desktop"
@@ -91,27 +91,27 @@ install -Dm644 "$HERE/$ID.png" "$DATA/icons/hicolor/256x256/apps/$ID.png"
 refresh_launcher
 while IFS= read -r line; do
     case $line in
-        ExecStart=*) printf 'ExecStart="%s/pong" host\n' "${BIN//%/%%}" ;;
+        ExecStart=*) printf 'ExecStart="%s/helio-host" host\n' "${BIN//%/%%}" ;;
         *) printf '%s\n' "$line" ;;
     esac
-done < "$HERE/pong.service" > "$UNITS/pong.service"
-echo "installed ping-app and pong in $BIN"
+done < "$HERE/helio-host.service" > "$UNITS/helio-host.service"
+echo "installed helio-app and helio-host in $BIN"
 
 # The unit known to systemd, not enabled; a host that runs (hosting on)
 # restarted on the new engine. Without a systemd user instance (some
 # distributions, a session without one) the app works, but cannot host.
 if systemctl --user daemon-reload 2>/dev/null; then
-    systemctl --user try-restart pong.service
-    if systemctl --user is-enabled --quiet pong.service 2>/dev/null; then
-        echo "hosting is on: the host runs the new engine (systemctl --user status pong)"
+    systemctl --user try-restart helio-host.service
+    if systemctl --user is-enabled --quiet helio-host.service 2>/dev/null; then
+        echo "hosting is on: the host runs the new engine (systemctl --user status helio-host)"
     else
-        echo "hosting is off: turn it on in Ping (Settings > Hosting)"
+        echo "hosting is off: turn it on in Helio (Settings > Hosting)"
     fi
 else
-    echo "note: systemd's user instance did not answer: Ping works, but cannot host until it does"
+    echo "note: systemd's user instance did not answer: Helio works, but cannot host until it does"
 fi
 
 case ":$PATH:" in
     *":$BIN:"*) ;;
-    *) echo "note: $BIN is not in PATH yet (it is after you log in again, on most desktops): until then, start Ping from the launcher" ;;
+    *) echo "note: $BIN is not in PATH yet (it is after you log in again, on most desktops): until then, start Helio from the launcher" ;;
 esac

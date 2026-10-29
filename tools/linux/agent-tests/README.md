@@ -11,11 +11,11 @@ Helpers for `tools/linux/agent-desktop` (run them inside it with
   taking over after 6 s and handing back 4.5 s later.
 - `person.sh [SECS]`: a person streaming the desktop (an agent must not take
   it over; it takes over from an agent).
-- `web.sh get|post PATH [JSON]`: Pong's web API, signed in as a test admin.
+- `web.sh get|post PATH [JSON]`: Helio Host's web API, signed in as a test admin.
 - `mock-llm.py`: scripted Anthropic Messages, OpenAI Responses and
   OpenAI-compatible chat APIs on 127.0.0.1:8900 that check every request's
   shape (problems go to `target/linux-out/agent/mock-llm.report`); run
-  `ping-agent run` with `ANTHROPIC_BASE_URL=http://127.0.0.1:8900`,
+  `helio-agent run` with `ANTHROPIC_BASE_URL=http://127.0.0.1:8900`,
   `OPENAI_BASE_URL=http://127.0.0.1:8900/v1` or `--provider custom
   --base-url http://127.0.0.1:8900/v1`, any key.
 

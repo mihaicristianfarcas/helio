@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- The host, as a helper inside Helio.app (Contents/Helpers/Helio Host.app,
+	     tools/build-helio-app). System Settings lists it by this name. -->
+	<key>CFBundleName</key>
+	<string>Helio Host</string>
+	<key>CFBundleDisplayName</key>
+	<string>Helio Host</string>
+	<!-- Screen Recording, Accessibility and System Audio Recording are
+	     granted to this identity, not to Helio's (dev.mihaicristian.helio), so the
+	     app never needs them, and they follow the host rather than whichever
+	     terminal started it. -->
+	<key>CFBundleIdentifier</key>
+	<string>dev.mihaicristian.helio.host</string>
+	<key>CFBundleExecutable</key>
+	<string>helio-host</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<!-- Both versions are set to the workspace's by tools/build-helio-app. -->
+	<key>CFBundleShortVersionString</key>
+	<string>0.0.0</string>
+	<key>CFBundleVersion</key>
+	<string>0.0.0</string>
+	<!-- The Privacy & Security lists and Login Items show it. -->
+	<key>CFBundleIconFile</key>
+	<string>Helio Host</string>
+	<key>NSHumanReadableCopyright</key>
+	<string>© 2026 Mihai-Cristian Farcaș. GPL-3.0 License.</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>14.0</string>
+	<!-- A background host: no Dock icon, no menu bar (Helio shows its icon). -->
+	<key>LSUIElement</key>
+	<true/>
+	<!-- Asked the first time a client wants sound in surround: a Core
+	     Audio tap of the output device (helio-host/src/mac/sound.rs). -->
+	<key>NSAudioCaptureUsageDescription</key>
+	<string>While hosting is on in Helio, Helio Host streams this Mac's sound in surround to the device you stream to.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>While hosting is on in Helio, Helio Host streams this Mac to the devices you pair with it on your network.</string>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_helio._udp</string>
+	</array>
+</dict>
+</plist>

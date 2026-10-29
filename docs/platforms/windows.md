@@ -1,79 +1,79 @@
 # Windows
 
-Pong on Windows is the host pingpong was built around: what Sunshine is to
-Moonlight, with Apollo's virtual display. Ping also runs on Windows 10 and 11.
+Helio Host on Windows is the host Helio was built around: what Sunshine is to
+Moonlight, with Apollo's virtual display. Helio also runs on Windows 10 and 11.
 
-## Pong, the host
+## Hosting: Helio Host
 
 ### What it needs
 
 | | Why |
 |---|---|
 | Windows 10 or 11, 64-bit | |
-| An NVIDIA GPU with NVENC, and its driver | Encoding. NVENC is loaded from the driver (`nvEncodeAPI64.dll`) at runtime: no CUDA toolkit or Video Codec SDK is needed to build or run. Without it, Pong encodes H.264 in software ([below](#without-nvenc-or-sudovda)) |
-| [SudoVDA](https://github.com/SudoMaker/SudoVDA) (SudoMaker Virtual Display Adapter) | A virtual display at each client's mode. Apollo installs it; it can also be installed on its own. Pong and Apollo cannot stream at the same time (they share the driver). Without it, Pong streams the host's main display ([below](#without-nvenc-or-sudovda)) |
+| An NVIDIA GPU with NVENC, and its driver | Encoding. NVENC is loaded from the driver (`nvEncodeAPI64.dll`) at runtime: no CUDA toolkit or Video Codec SDK is needed to build or run. Without it, Helio Host encodes H.264 in software ([below](#without-nvenc-or-sudovda)) |
+| [SudoVDA](https://github.com/SudoMaker/SudoVDA) (SudoMaker Virtual Display Adapter) | A virtual display at each client's mode. Apollo installs it; it can also be installed on its own. Helio Host and Apollo cannot stream at the same time (they share the driver). Without it, Helio Host streams the host's main display ([below](#without-nvenc-or-sudovda)) |
 | [ViGEmBus](https://github.com/nefarius/ViGEmBus) (optional) | Controllers: each of the client's pads becomes a virtual Xbox 360 pad |
 | Steam's **Steam Streaming Speakers** (optional) | Sound only on the client: during a session the host's default output moves to this virtual device, so the host's speakers stay quiet (Sunshine's approach, its `virtual_sink`). Without it, the sound plays on the host too |
 
 ### How it runs
 
-`PongService` (LocalSystem, automatic start) launches `pong host` into the
+`HelioHost` (LocalSystem, automatic start) launches `helio-host host` into the
 active console session with a copy of its SYSTEM token, and relaunches it
 when the console session changes (sign-out, fast user switching, a reboot to
 the sign-in screen) or the host exits. Only SYSTEM can open the secure
 desktop, so only a host running this way can capture and control UAC
 prompts, the lock screen and the sign-in screen — the model Sunshine uses
-(`pong/src/service.rs`).
+(`helio-host/src/service.rs`).
 
 Because it runs as SYSTEM, the service runs only from the host's own copy in
-`C:\Program Files\Pong`, which `pong enable` makes (as administrator): it
-copies `pong.exe` there, sets the folder so that only SYSTEM and
+`C:\Program Files\Helio Host`, which `helio-host enable` makes (as administrator): it
+copies `helio-host.exe` there, sets the folder so that only SYSTEM and
 Administrators can change it, checks the copy's Authenticode signature, and
-registers the service, quoted, on the copy (`pong/src/hosting/windows.rs`).
+registers the service, quoted, on the copy (`helio-host/src/hosting/windows.rs`).
 The service, and the host when it starts the clipboard helper as the
-signed-in user, launch nothing else. Pong loads DLLs only from System32 and
-from beside `pong.exe`, never from `PATH`; the DLLs `pong.exe` imports,
-loaded before it runs, from System32 alone (`pong/build.rs`), so a
-`dwmapi.dll` put beside a `pong.exe` in a user's folder is ignored even when
-`pong enable` runs there elevated. `pong disable` removes the service, its
+signed-in user, launch nothing else. Helio Host loads DLLs only from System32 and
+from beside `helio-host.exe`, never from `PATH`; the DLLs `helio-host.exe` imports,
+loaded before it runs, from System32 alone (`helio-host/build.rs`), so a
+`dwmapi.dll` put beside a `helio-host.exe` in a user's folder is ignored even when
+`helio-host enable` runs there elevated. `helio-host disable` removes the service, its
 firewall rules and the copy.
 
-State lives in `C:\ProgramData\Pong\`: `config.toml`, the host's identity,
+State lives in `C:\ProgramData\Helio Host\`: `config.toml`, the host's identity,
 paired clients, the web UI's certificate and accounts, and `logs\`. The host
-makes that folder private when it starts (`pong/src/private.rs`): only
-SYSTEM and Administrators can read it, apart from the two files Pong's
+makes that folder private when it starts (`helio-host/src/private.rs`): only
+SYSTEM and Administrators can read it, apart from the two files Helio Host's
 window needs (`config.toml`, `web-cert.pem`). It uses the folder only if
 SYSTEM or Administrators own it; one another user made first is moved
-aside as `C:\ProgramData\Pong.untrusted-…` (the service's log says so) and
-the host starts afresh, so devices pair again. A `pong` command run without
+aside as `C:\ProgramData\Helio Host.untrusted-…` (the service's log says so) and
+the host starts afresh, so devices pair again. A `helio-host` command run without
 an administrator neither creates nor moves it.
 
-`pong status` reports `failed` while PongService runs but its host does not
+`helio-host status` reports `failed` while HelioHost runs but its host does not
 (the host exited; the service starts it again 3 s later), as it does for a
 LaunchAgent or a unit that keeps restarting.
-The engine comes with Ping, `pong.exe` beside `Ping.exe`; `pong enable`,
+The engine comes with Helio, `helio-host.exe` beside `Helio.exe`; `helio-host enable`,
 from the app's switch or an administrator's terminal, installs it as the
 service ([../install.md](../install.md#hosting-on-windows)).
 
-### Hosting from Ping, and its icon in the notification area
+### Hosting from Helio, and its icon in the notification area
 
-Ping's hosting switch runs `pong.exe enable` (or `disable`) from beside
-Ping or from `C:\Program Files\Pong`. Run as you, it needs an
-administrator and exits with 740 having changed nothing; Ping then runs it
+Helio's hosting switch runs `helio-host.exe enable` (or `disable`) from beside
+Helio or from `C:\Program Files\Helio Host`. Run as you, it needs an
+administrator and exits with 740 having changed nothing; Helio then runs it
 again through UAC (`ShellExecuteEx` with `runas`), says it waits for
 Windows meanwhile, and that nothing changed if you choose No. Its Hosting
 page says whether there are NVIDIA graphics (NVENC; else H.264 in software,
 Media Foundation) and SudoVDA (a virtual display; else the main display,
 scaled).
 
-While hosting is on, Ping is also the host's icon in the taskbar's
+While hosting is on, Helio is also the host's icon in the taskbar's
 notification area, as Sunshine's is: it runs as the signed-in user, not as
 the service, so what its menu opens opens on that user's desktop. A click
 on the icon opens the window; the right button has the menu (what the host
-does, a device asking to pair, the window, an update, **Quit Ping**). A
+does, a device asking to pair, the window, an update, **Quit Helio**). A
 device asking to pair is also a Windows notification. **Open at login** in
-General starts Ping at sign-in as the icon only, from the user's `Run`
-key (`Ping.exe --background`). If Explorer restarts, the icon comes back
+General starts Helio at sign-in as the icon only, from the user's `Run`
+key (`Helio.exe --background`). If Explorer restarts, the icon comes back
 with it (the app listens for `TaskbarCreated`).
 
 ### A session, on Windows
@@ -89,12 +89,12 @@ with it (the app listens for `TaskbarCreated`).
   exists only during a session, so a game that makes Windows apply its
   saved arrangement (resetting the display mode, as starting Cyberpunk 2077
   most likely did) gets the session's, and your own arrangement is
-  untouched. Pong also looks four times a second
+  untouched. Helio Host also looks four times a second
   whether something put the host's monitors back, and takes them out again.
   A keepalive thread
-  pings the driver every second: SudoVDA removes a monitor ~3 s after the
-  last ping. At the end the virtual display goes first, then the host's
-  arrangement comes back. `pingpong-display/src/windows.rs` explains each of
+  calls the driver every second: SudoVDA removes a monitor ~3 s after the
+  last one. At the end the virtual display goes first, then the host's
+  arrangement comes back. `helio-display/src/windows.rs` explains each of
   these, and why the obvious alternatives fail.
 - **Capture.** DXGI Desktop Duplication, re-attached to the input desktop
   whenever duplication is lost, so the secure desktop is captured too. The
@@ -129,13 +129,13 @@ with it (the app listens for `TaskbarCreated`).
   WinUI text fields garble faster Unicode keystrokes.
 - **The pointer.** Desktop Duplication reports the pointer beside the
   desktop image, never in it: its place, whether it shows, and its shape.
-  Pong draws it into a copy of the desktop on the GPU, as Sunshine does, so
+  Helio Host draws it into a copy of the desktop on the GPU, as Sunshine does, so
   the client sees the pointer the host's screen shows, hidden whenever a
   game hides it. A pointer that moves over a still desktop makes a new
   frame.
 - **Controllers.** ViGEm pads, one per client pad, with rumble sent back.
 - **Clipboard.** A helper runs as the signed-in user for the session
-  (`pong clipboard-agent`): SYSTEM sees only part of the user's clipboard,
+  (`helio-host clipboard-agent`): SYSTEM sees only part of the user's clipboard,
   and must not read files on the user's behalf.
 - **Awake.** The display and system are kept awake for the session: Windows
   powering the display off at its idle timeout would stop the capture.
@@ -146,12 +146,12 @@ with it (the app listens for `TaskbarCreated`).
   and Mouse Keys on when the host has no mouse attached, so Windows shows a
   pointer to draw. All put back when the session ends.
 - **The NVIDIA driver**, as Sunshine sets it, through NVAPI's driver
-  settings: a profile of Pong's own for `pong.exe` prefers maximum
+  settings: a profile of Helio Host's own for `helio-host.exe` prefers maximum
   performance (the driver's adaptive clocks otherwise slow the encoder
-  between frames), and OpenGL and Vulkan present through DXGI while Pong
+  between frames), and OpenGL and Vulkan present through DXGI while Helio Host
   runs, so Desktop Duplication captures full-screen OpenGL and Vulkan games
   at their full frame rate. The second is the driver's global setting:
-  Pong keeps what it was in `nvidia-undo.toml` and puts it back when it
+  Helio Host keeps what it was in `nvidia-undo.toml` and puts it back when it
   stops (or, after a crash, when it next starts). Both are settings, on by
   default.
 
@@ -188,24 +188,24 @@ is built for x64 only) still hosts, with less:
   sees the session, and an agent's session holds its input while someone
   uses the host rather than ending.
 - **A GPU without D3D11 video support** (Microsoft's Basic Render Driver,
-  in a virtual machine) is opened without it: nothing Pong does needs it.
+  in a virtual machine) is opened without it: nothing Helio Host does needs it.
 
 Measured in a Windows 11 24H2 Arm virtual machine (UTM on an M4 Pro, 6
-cores, the Basic Render Driver; Pong, an x64 program, under Windows'
+cores, the Basic Render Driver; Helio Host, an x64 program, under Windows'
 emulation): a still desktop at 1024x768 and 30 fps took 8.8 ms from capture
 to encoded at the median (15.5 ms p95) and 30-35 ms from the host's capture
 to the Mac's screen, with no loss; `grab_encode` (in
-`pingpong-encode/examples`) converted and encoded the same desktop in 12 ms
+`helio-encode/examples`) converted and encoded the same desktop in 12 ms
 at the median, 69 ms p95. Motion at a full 30 fps was not measured.
 
 ### Limits and known issues
 
 - **Network priority (QoS).** Sunshine marks its traffic for Wi-Fi's video
-  queue with qWAVE; qWAVE will not take Pong's dual-stack socket. It would
+  queue with qWAVE; qWAVE will not take Helio Host's dual-stack socket. It would
   take an IPv4 socket of its own, or a system QoS policy on the host.
 - **Keeping the host's monitors on, with its monitor asleep or switched
   off.** With **Keep this PC's monitors on while streaming** (or
-  `ping stream --keep-host-displays`) the host's own monitor stays part of
+  `helio stream --keep-host-displays`) the host's own monitor stays part of
   the desktop, so Windows brings it up before the session starts: 12 to 38 s
   measured with the monitor switched off at its button, against about a
   second with it awake. The client waits up to 45 s for a session to start.
@@ -221,18 +221,18 @@ at the median, 69 ms p95. Motion at a full 30 fps was not measured.
   Windows 3.8 s, later ones 25 ms (Windows 11 25H2, RTX 3070 Ti): a client
   that changes between HDR and SDR sessions starts 3.8 s later unless the
   previous session's display is still kept (for a minute after it ends).
-- **Not code-signed.** Pong and Ping for Windows are not signed:
+- **Not code-signed.** Helio Host and Helio for Windows are not signed:
   SmartScreen asks before each first start, and Smart App Control, where
   it is on, blocks them ([../install.md](../install.md#on-windows)).
 
-## Ping, the client
+## Helio, the client
 
 As Moonlight does it on Windows:
 
 - **Decode.** FFmpeg's decoders with the D3D11VA hwaccel, on the same
   Direct3D 11 device that presents, on a thread of their own. Each picture
   is copied out of the decoder's texture array into one of five textures of
-  Ping's at once, so the decoder's pool is never held by the screen.
+  Helio's at once, so the decoder's pool is never held by the screen.
 - **Present.** A flip-model swap chain with frame latency one: the newest
   frame, never a queue. Full screen is a borderless window over the monitor,
   which Windows flips straight to the display. Frame pacing draws one frame
@@ -252,20 +252,20 @@ As Moonlight does it on Windows:
   changes.
 - **Timers.** 1 ms timer resolution while streaming.
 
-**Install Ping.cmd** (`tools/install-ping.ps1`, the download's
-`install.ps1`) installs Ping for the user who runs it, with no
-administrator: Ping and the host's engine in
-`%LOCALAPPDATA%\Programs\Ping` with the script beside it, in the Start
+**Install Helio.cmd** (`tools/install-helio.ps1`, the download's
+`install.ps1`) installs Helio for the user who runs it, with no
+administrator: Helio and the host's engine in
+`%LOCALAPPDATA%\Programs\Helio` with the script beside it, in the Start
 menu, and in Settings > Apps (the key
-`HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\dev.pingpong.Ping`),
-whose **Uninstall** runs the script with `-Uninstall`. When Ping starts
+`HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\dev.mihaicristian.helio`),
+whose **Uninstall** runs the script with `-Uninstall`. When Helio starts
 from that folder and its entry is missing or names another version, as
 after an update installed by 0.9.4 or older, the script beside it writes
 the entry again. Uninstalling turns hosting off first, while it is on
-(`pong disable`, as an administrator: Windows asks).
+(`helio-host disable`, as an administrator: Windows asks).
 
 Building it needs an FFmpeg 8 shared build and LLVM (for the FFmpeg
-bindings): see [../install.md](../install.md#ping-on-windows).
+bindings): see [../install.md](../install.md#helio-on-windows).
 
 Not verified yet: keyboard, mouse and controllers streaming another machine
 (tests so far streamed the same PC, which feeds input back into itself), and

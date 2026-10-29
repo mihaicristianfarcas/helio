@@ -14,10 +14,10 @@ param(
     [int]$TimeoutSec = 120,
     [switch]$NoWait,
     [switch]$Limited,
-    [string]$Name = 'pingpong-dev-run'
+    [string]$Name = 'helio-dev-run'
 )
 $ErrorActionPreference = 'Stop'
-$dir = Join-Path $env:LOCALAPPDATA 'pingpong-dev'
+$dir = Join-Path $env:LOCALAPPDATA 'helio-dev'
 New-Item -ItemType Directory -Force -Path $dir | Out-Null
 $log = Join-Path $dir "$Name.log"
 $cmdFile = Join-Path $dir "$Name.cmd"

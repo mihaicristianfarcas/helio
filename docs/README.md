@@ -1,10 +1,10 @@
 # Documentation
 
-**Using pingpong**
+**Using Helio**
 
-- [install.md](install.md) — building and installing Ping and Pong, and pairing them
+- [install.md](install.md) — building and installing Helio, turning hosting on, and pairing devices
 - [usage.md](usage.md) — streaming, shortcuts, settings, the clipboard, Wake-on-LAN, troubleshooting
-- [cli.md](cli.md) — `ping`, `pong`, `ping-agent`, and environment variables
+- [cli.md](cli.md) — `helio`, `helio-host`, `helio-agent`, and environment variables
 - [ai-agents.md](ai-agents.md) — AI agents on your hosts (computer use, MCP)
 
 **How it works**
@@ -17,7 +17,7 @@
 - [parity.md](parity.md) — against Moonlight + Sunshine/Apollo, feature by feature
 - [design/](design/README.md) — the design history
 
-**Changing pingpong**
+**Changing Helio**
 
 - [development.md](development.md) — building, testing, tools and test hooks
 - [../AGENTS.md](../AGENTS.md) — rules for code, comments, docs and commits

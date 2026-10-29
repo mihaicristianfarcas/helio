@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# A stable code-signing identity for development builds of Ping.app and the
+# A stable code-signing identity for development builds of Helio.app and the
 # host's helper inside it. Ad hoc signatures change with every build, and
 # macOS ties the permissions it grants (Screen Recording, Accessibility) to
 # the signature, so each rebuild lost them. Signed with one self-signed certificate, an app
@@ -12,7 +12,7 @@
 #   tools/dev-signing-identity           create if missing; print the hash
 #   tools/dev-signing-identity --check   print the hash, or nothing
 set -euo pipefail
-NAME="pingpong dev"
+NAME="helio dev"
 
 hash() {
     security find-certificate -a -c "$NAME" -Z 2>/dev/null | awk '/SHA-1 hash:/ { print $3; exit }'

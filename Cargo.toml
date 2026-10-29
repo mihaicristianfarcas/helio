@@ -1,23 +1,23 @@
 [workspace]
 resolver = "2"
 members = [
-    "pingpong-audio",
-    "pingpong-capture",
-    "pingpong-clipboard",
-    "pingpong-decode",
-    "pingpong-display",
-    "pingpong-encode",
-    "pingpong-input",
-    "pingpong-nat",
-    "pingpong-pairing",
-    "pingpong-proto",
-    "pong",
-    "ping-core",
-    "ping-agent",
-    "ping-app",
-    "pingpong-transport",
-    "pingpong-ui",
-    "pingpong-update",
+    "helio-audio",
+    "helio-capture",
+    "helio-clipboard",
+    "helio-decode",
+    "helio-display",
+    "helio-encode",
+    "helio-input",
+    "helio-nat",
+    "helio-pairing",
+    "helio-proto",
+    "helio-host",
+    "helio-client",
+    "helio-agent",
+    "helio-app",
+    "helio-transport",
+    "helio-ui",
+    "helio-update",
 ]
 # spikes/* are deliberately NOT members -- a throwaway probe must never gate a
 # workspace-wide `cargo test`. Each spike also carries its own empty
@@ -26,18 +26,18 @@ exclude = ["spikes", "tools/rawinput-probe"]
 
 [workspace.package]
 # The project's version: every program built from the workspace has it
-# (Ping, Pong, their windows and command lines), so one release tag names
+# (Helio, Helio Host, their windows and command lines), so one release tag names
 # them all and the update check has one number to compare. The libraries
 # keep versions of their own.
 version = "0.9.7"
 edition = "2021"
 rust-version = "1.96"
-repository = "https://github.com/mihaicristianfarcas/pingpong"
+repository = "https://github.com/mihaicristianfarcas/helio"
 license = "GPL-3.0-only"
 # Applications and their private libraries, not crates for crates.io.
 publish = false
 
-# GPUI (Zed's UI framework) draws Ping's and Pong's windows, pinned to one Zed
+# GPUI (Zed's UI framework) draws Helio's and Helio Host's windows, pinned to one Zed
 # revision: zed#62743 or later, whose line wrapping keeps closing punctuation
 # with its word (before it, a paragraph could end on a line holding only
 # ")."). Its Metal shaders are compiled ahead by Xcode's Metal toolchain, or when the

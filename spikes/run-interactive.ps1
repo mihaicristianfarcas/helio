@@ -6,7 +6,7 @@
 # This wraps the command in a scheduled task registered with `/it`
 # (interactive), which runs it in the logged-on user's session instead.
 #
-# Anything touching WGC -- the cuda-interop spike, pingpong-capture, the server
+# Anything touching WGC -- the cuda-interop spike, helio-capture, the server
 # binary -- must be launched this way when driven remotely.
 #
 # Usage:
@@ -18,7 +18,7 @@ param(
     [Parameter(Mandatory = $true)][string]$Exe,
     [string]$Arguments = "",
     [int]$TimeoutSec = 120,
-    [string]$TaskName = "pingpong-interactive-run"
+    [string]$TaskName = "helio-interactive-run"
 )
 
 $ErrorActionPreference = "Stop"

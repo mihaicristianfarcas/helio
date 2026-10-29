@@ -3353,6 +3353,375 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2304e00983f87ffb38b55b444b5e3b60a884b5d30c0fca7d82fe33449bbe55ea"
 
 [[package]]
+name = "helio-agent"
+version = "0.9.7"
+dependencies = [
+ "base64 0.22.1",
+ "crossbeam-channel",
+ "ctrlc",
+ "getrandom 0.3.4",
+ "helio-client",
+ "helio-decode",
+ "helio-proto",
+ "helio-transport",
+ "image",
+ "objc2-core-video",
+ "parking_lot",
+ "png 0.18.1",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "toml 0.8.23",
+ "toml_edit 0.22.27",
+ "tracing",
+ "tracing-subscriber",
+ "ureq",
+]
+
+[[package]]
+name = "helio-app"
+version = "0.9.7"
+dependencies = [
+ "block2 0.6.2",
+ "crossbeam-channel",
+ "futures",
+ "gpui",
+ "gpui_platform",
+ "helio-agent",
+ "helio-client",
+ "helio-display",
+ "helio-pairing",
+ "helio-proto",
+ "helio-ui",
+ "helio-update",
+ "objc2 0.6.4",
+ "objc2-core-foundation",
+ "objc2-foundation 0.3.2",
+ "objc2-user-notifications 0.3.2",
+ "serde",
+ "serde_json",
+ "tiny-skia 0.12.0",
+ "toml 0.8.23",
+ "tracing",
+ "ureq",
+ "windows 0.61.3",
+ "winresource",
+]
+
+[[package]]
+name = "helio-audio"
+version = "0.1.0"
+dependencies = [
+ "cpal",
+ "crossbeam-channel",
+ "helio-proto",
+ "objc2 0.6.4",
+ "objc2-core-audio",
+ "objc2-core-audio-types",
+ "objc2-core-foundation",
+ "objc2-foundation 0.3.2",
+ "rtrb",
+ "tracing",
+ "tracing-subscriber",
+ "unsafe-libopus",
+ "windows 0.61.3",
+ "windows-core 0.61.2",
+]
+
+[[package]]
+name = "helio-capture"
+version = "0.1.0"
+dependencies = [
+ "block2 0.6.2",
+ "dispatch2",
+ "helio-display",
+ "libc",
+ "libpulse-binding",
+ "libpulse-simple-binding",
+ "objc2 0.6.4",
+ "objc2-core-audio-types",
+ "objc2-core-foundation",
+ "objc2-core-graphics",
+ "objc2-core-media",
+ "objc2-core-video",
+ "objc2-foundation 0.3.2",
+ "objc2-screen-capture-kit",
+ "parking_lot",
+ "pipewire",
+ "png 0.18.1",
+ "tracing",
+ "tracing-subscriber",
+ "windows 0.61.3",
+ "x11rb",
+]
+
+[[package]]
+name = "helio-client"
+version = "0.9.7"
+dependencies = [
+ "ab_glyph",
+ "arboard",
+ "block2 0.6.2",
+ "crossbeam-channel",
+ "ctrlc",
+ "dispatch2",
+ "epaint_default_fonts",
+ "gilrs",
+ "helio-audio",
+ "helio-clipboard",
+ "helio-decode",
+ "helio-nat",
+ "helio-pairing",
+ "helio-proto",
+ "helio-transport",
+ "if-addrs",
+ "libc",
+ "objc2 0.6.4",
+ "objc2-app-kit 0.3.2",
+ "objc2-core-foundation",
+ "objc2-core-graphics",
+ "objc2-core-haptics",
+ "objc2-core-text",
+ "objc2-core-video",
+ "objc2-foundation 0.3.2",
+ "objc2-game-controller",
+ "objc2-metal 0.3.2",
+ "objc2-quartz-core 0.3.2",
+ "parking_lot",
+ "png 0.18.1",
+ "pollster 1.0.1",
+ "rand_core 0.6.4",
+ "serde",
+ "serde_json",
+ "toml 0.8.23",
+ "tracing",
+ "tracing-subscriber",
+ "wgpu 30.0.1",
+ "windows 0.61.3",
+ "winit",
+]
+
+[[package]]
+name = "helio-clipboard"
+version = "0.1.0"
+dependencies = [
+ "arboard",
+ "crossbeam-channel",
+ "helio-proto",
+ "objc2 0.6.4",
+ "objc2-app-kit 0.3.2",
+ "objc2-foundation 0.3.2",
+ "png 0.18.1",
+ "rand_core 0.6.4",
+ "tempfile",
+ "tracing",
+ "windows 0.61.3",
+]
+
+[[package]]
+name = "helio-decode"
+version = "0.1.0"
+dependencies = [
+ "criterion",
+ "ffmpeg-sys-next",
+ "helio-proto",
+ "objc2-core-foundation",
+ "objc2-core-media",
+ "objc2-core-video",
+ "objc2-video-toolbox",
+ "parking_lot",
+ "tracing",
+ "windows 0.61.3",
+]
+
+[[package]]
+name = "helio-display"
+version = "0.1.0"
+dependencies = [
+ "dispatch2",
+ "helio-capture",
+ "objc2 0.6.4",
+ "objc2-core-foundation",
+ "objc2-core-graphics",
+ "objc2-foundation 0.3.2",
+ "serde",
+ "toml 0.8.23",
+ "tracing",
+ "windows 0.61.3",
+]
+
+[[package]]
+name = "helio-encode"
+version = "0.1.0"
+dependencies = [
+ "ffmpeg-sys-next",
+ "helio-capture",
+ "helio-proto",
+ "objc2-core-foundation",
+ "objc2-core-media",
+ "objc2-core-video",
+ "objc2-video-toolbox",
+ "tracing",
+ "tracing-subscriber",
+ "windows 0.61.3",
+]
+
+[[package]]
+name = "helio-host"
+version = "0.9.7"
+dependencies = [
+ "argon2",
+ "ashpd",
+ "axum",
+ "axum-server",
+ "block2 0.6.2",
+ "crossbeam-channel",
+ "ctrlc",
+ "enumflags2",
+ "helio-audio",
+ "helio-capture",
+ "helio-clipboard",
+ "helio-display",
+ "helio-encode",
+ "helio-input",
+ "helio-nat",
+ "helio-pairing",
+ "helio-proto",
+ "helio-transport",
+ "libc",
+ "objc2-core-foundation",
+ "parking_lot",
+ "rand_core 0.6.4",
+ "rcgen",
+ "rustls",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "tempfile",
+ "tokio",
+ "toml 0.8.23",
+ "tracing",
+ "tracing-appender",
+ "tracing-subscriber",
+ "vigem-client",
+ "windows 0.61.3",
+ "windows-service",
+ "x11rb",
+]
+
+[[package]]
+name = "helio-input"
+version = "0.1.0"
+dependencies = [
+ "helio-proto",
+ "objc2 0.6.4",
+ "objc2-app-kit 0.3.2",
+ "objc2-core-foundation",
+ "objc2-core-graphics",
+ "objc2-foundation 0.3.2",
+ "tracing",
+ "windows 0.61.3",
+ "x11rb",
+]
+
+[[package]]
+name = "helio-nat"
+version = "0.1.0"
+dependencies = [
+ "chacha20poly1305",
+ "if-addrs",
+ "mainline",
+ "rand_core 0.6.4",
+ "tracing",
+]
+
+[[package]]
+name = "helio-pairing"
+version = "0.1.0"
+dependencies = [
+ "base64 0.22.1",
+ "chacha20poly1305",
+ "helio-transport",
+ "hkdf",
+ "hmac",
+ "mdns-sd",
+ "ml-kem",
+ "rand_core 0.6.4",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "spake2",
+ "tracing",
+]
+
+[[package]]
+name = "helio-proto"
+version = "0.1.0"
+dependencies = [
+ "criterion",
+ "memchr",
+ "proptest",
+ "reed-solomon-simd",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "helio-transport"
+version = "0.1.0"
+dependencies = [
+ "base64 0.22.1",
+ "boringtun",
+ "criterion",
+ "libc",
+ "parking_lot",
+ "quinn-udp",
+ "rand_core 0.6.4",
+ "serde",
+ "socket2 0.5.10",
+ "tempfile",
+ "toml 0.8.23",
+ "tracing",
+ "x25519-dalek",
+]
+
+[[package]]
+name = "helio-ui"
+version = "0.1.0"
+dependencies = [
+ "futures",
+ "gpui",
+ "gpui_platform",
+ "helio-update",
+ "objc2 0.6.4",
+ "objc2-app-kit 0.3.2",
+ "objc2-foundation 0.3.2",
+ "pulldown-cmark",
+ "raw-window-handle",
+ "tracing",
+ "unicode-segmentation",
+ "wayland-client",
+ "windows 0.61.3",
+]
+
+[[package]]
+name = "helio-update"
+version = "0.9.7"
+dependencies = [
+ "crossbeam-channel",
+ "libc",
+ "parking_lot",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "tempfile",
+ "toml 0.8.23",
+ "tracing",
+ "ureq",
+ "windows 0.61.3",
+]
+
+[[package]]
 name = "hermit-abi"
 version = "0.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5747,332 +6116,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a89322df9ebe1c1578d689c92318e070967d1042b512afbe49518723f4e6d5cd"
 
 [[package]]
-name = "ping-agent"
-version = "0.9.7"
-dependencies = [
- "base64 0.22.1",
- "crossbeam-channel",
- "ctrlc",
- "getrandom 0.3.4",
- "image",
- "objc2-core-video",
- "parking_lot",
- "ping-core",
- "pingpong-decode",
- "pingpong-proto",
- "pingpong-transport",
- "png 0.18.1",
- "serde",
- "serde_json",
- "tempfile",
- "toml 0.8.23",
- "toml_edit 0.22.27",
- "tracing",
- "tracing-subscriber",
- "ureq",
-]
-
-[[package]]
-name = "ping-app"
-version = "0.9.7"
-dependencies = [
- "block2 0.6.2",
- "crossbeam-channel",
- "futures",
- "gpui",
- "gpui_platform",
- "objc2 0.6.4",
- "objc2-core-foundation",
- "objc2-foundation 0.3.2",
- "objc2-user-notifications 0.3.2",
- "ping-agent",
- "ping-core",
- "pingpong-display",
- "pingpong-pairing",
- "pingpong-proto",
- "pingpong-ui",
- "pingpong-update",
- "serde",
- "serde_json",
- "tiny-skia 0.12.0",
- "toml 0.8.23",
- "tracing",
- "ureq",
- "windows 0.61.3",
- "winresource",
-]
-
-[[package]]
-name = "ping-core"
-version = "0.9.7"
-dependencies = [
- "ab_glyph",
- "arboard",
- "block2 0.6.2",
- "crossbeam-channel",
- "ctrlc",
- "dispatch2",
- "epaint_default_fonts",
- "gilrs",
- "if-addrs",
- "libc",
- "objc2 0.6.4",
- "objc2-app-kit 0.3.2",
- "objc2-core-foundation",
- "objc2-core-graphics",
- "objc2-core-haptics",
- "objc2-core-text",
- "objc2-core-video",
- "objc2-foundation 0.3.2",
- "objc2-game-controller",
- "objc2-metal 0.3.2",
- "objc2-quartz-core 0.3.2",
- "parking_lot",
- "pingpong-audio",
- "pingpong-clipboard",
- "pingpong-decode",
- "pingpong-nat",
- "pingpong-pairing",
- "pingpong-proto",
- "pingpong-transport",
- "png 0.18.1",
- "pollster 1.0.1",
- "rand_core 0.6.4",
- "serde",
- "serde_json",
- "toml 0.8.23",
- "tracing",
- "tracing-subscriber",
- "wgpu 30.0.1",
- "windows 0.61.3",
- "winit",
-]
-
-[[package]]
-name = "pingpong-audio"
-version = "0.1.0"
-dependencies = [
- "cpal",
- "crossbeam-channel",
- "objc2 0.6.4",
- "objc2-core-audio",
- "objc2-core-audio-types",
- "objc2-core-foundation",
- "objc2-foundation 0.3.2",
- "pingpong-proto",
- "rtrb",
- "tracing",
- "tracing-subscriber",
- "unsafe-libopus",
- "windows 0.61.3",
- "windows-core 0.61.2",
-]
-
-[[package]]
-name = "pingpong-capture"
-version = "0.1.0"
-dependencies = [
- "block2 0.6.2",
- "dispatch2",
- "libc",
- "libpulse-binding",
- "libpulse-simple-binding",
- "objc2 0.6.4",
- "objc2-core-audio-types",
- "objc2-core-foundation",
- "objc2-core-graphics",
- "objc2-core-media",
- "objc2-core-video",
- "objc2-foundation 0.3.2",
- "objc2-screen-capture-kit",
- "parking_lot",
- "pingpong-display",
- "pipewire",
- "png 0.18.1",
- "tracing",
- "tracing-subscriber",
- "windows 0.61.3",
- "x11rb",
-]
-
-[[package]]
-name = "pingpong-clipboard"
-version = "0.1.0"
-dependencies = [
- "arboard",
- "crossbeam-channel",
- "objc2 0.6.4",
- "objc2-app-kit 0.3.2",
- "objc2-foundation 0.3.2",
- "pingpong-proto",
- "png 0.18.1",
- "rand_core 0.6.4",
- "tempfile",
- "tracing",
- "windows 0.61.3",
-]
-
-[[package]]
-name = "pingpong-decode"
-version = "0.1.0"
-dependencies = [
- "criterion",
- "ffmpeg-sys-next",
- "objc2-core-foundation",
- "objc2-core-media",
- "objc2-core-video",
- "objc2-video-toolbox",
- "parking_lot",
- "pingpong-proto",
- "tracing",
- "windows 0.61.3",
-]
-
-[[package]]
-name = "pingpong-display"
-version = "0.1.0"
-dependencies = [
- "dispatch2",
- "objc2 0.6.4",
- "objc2-core-foundation",
- "objc2-core-graphics",
- "objc2-foundation 0.3.2",
- "pingpong-capture",
- "serde",
- "toml 0.8.23",
- "tracing",
- "windows 0.61.3",
-]
-
-[[package]]
-name = "pingpong-encode"
-version = "0.1.0"
-dependencies = [
- "ffmpeg-sys-next",
- "objc2-core-foundation",
- "objc2-core-media",
- "objc2-core-video",
- "objc2-video-toolbox",
- "pingpong-capture",
- "pingpong-proto",
- "tracing",
- "tracing-subscriber",
- "windows 0.61.3",
-]
-
-[[package]]
-name = "pingpong-input"
-version = "0.1.0"
-dependencies = [
- "objc2 0.6.4",
- "objc2-app-kit 0.3.2",
- "objc2-core-foundation",
- "objc2-core-graphics",
- "objc2-foundation 0.3.2",
- "pingpong-proto",
- "tracing",
- "windows 0.61.3",
- "x11rb",
-]
-
-[[package]]
-name = "pingpong-nat"
-version = "0.1.0"
-dependencies = [
- "chacha20poly1305",
- "if-addrs",
- "mainline",
- "rand_core 0.6.4",
- "tracing",
-]
-
-[[package]]
-name = "pingpong-pairing"
-version = "0.1.0"
-dependencies = [
- "base64 0.22.1",
- "chacha20poly1305",
- "hkdf",
- "hmac",
- "mdns-sd",
- "ml-kem",
- "pingpong-transport",
- "rand_core 0.6.4",
- "serde",
- "serde_json",
- "sha2 0.10.9",
- "spake2",
- "tracing",
-]
-
-[[package]]
-name = "pingpong-proto"
-version = "0.1.0"
-dependencies = [
- "criterion",
- "memchr",
- "proptest",
- "reed-solomon-simd",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "pingpong-transport"
-version = "0.1.0"
-dependencies = [
- "base64 0.22.1",
- "boringtun",
- "criterion",
- "libc",
- "parking_lot",
- "quinn-udp",
- "rand_core 0.6.4",
- "serde",
- "socket2 0.5.10",
- "tempfile",
- "toml 0.8.23",
- "tracing",
- "x25519-dalek",
-]
-
-[[package]]
-name = "pingpong-ui"
-version = "0.1.0"
-dependencies = [
- "futures",
- "gpui",
- "gpui_platform",
- "objc2 0.6.4",
- "objc2-app-kit 0.3.2",
- "objc2-foundation 0.3.2",
- "pingpong-update",
- "pulldown-cmark",
- "raw-window-handle",
- "tracing",
- "unicode-segmentation",
- "wayland-client",
- "windows 0.61.3",
-]
-
-[[package]]
-name = "pingpong-update"
-version = "0.9.7"
-dependencies = [
- "crossbeam-channel",
- "libc",
- "parking_lot",
- "serde",
- "serde_json",
- "sha2 0.10.9",
- "tempfile",
- "toml 0.8.23",
- "tracing",
- "ureq",
- "windows 0.61.3",
-]
-
-[[package]]
 name = "piper"
 version = "0.2.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6206,49 +6249,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "50596ddc09eb5ad5f75cacd40209568e66df71baf86e1499a0e99c4cff12a5a6"
 dependencies = [
  "arrayvec",
-]
-
-[[package]]
-name = "pong"
-version = "0.9.7"
-dependencies = [
- "argon2",
- "ashpd",
- "axum",
- "axum-server",
- "block2 0.6.2",
- "crossbeam-channel",
- "ctrlc",
- "enumflags2",
- "libc",
- "objc2-core-foundation",
- "parking_lot",
- "pingpong-audio",
- "pingpong-capture",
- "pingpong-clipboard",
- "pingpong-display",
- "pingpong-encode",
- "pingpong-input",
- "pingpong-nat",
- "pingpong-pairing",
- "pingpong-proto",
- "pingpong-transport",
- "rand_core 0.6.4",
- "rcgen",
- "rustls",
- "serde",
- "serde_json",
- "sha2 0.10.9",
- "tempfile",
- "tokio",
- "toml 0.8.23",
- "tracing",
- "tracing-appender",
- "tracing-subscriber",
- "vigem-client",
- "windows 0.61.3",
- "windows-service",
- "x11rb",
 ]
 
 [[package]]

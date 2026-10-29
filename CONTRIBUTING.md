@@ -1,6 +1,6 @@
 # Contributing
 
-Thank you for helping. pingpong is a small project with a high bar for the
+Thank you for helping. Helio is a small project with a high bar for the
 data path — it is a real-time system, and most of its decisions were
 measured — so the best contributions come with a reason and a way to check
 them.
@@ -14,7 +14,7 @@ Open an issue with:
   they are connected (LAN, Wi-Fi, over the internet);
 - the logs from both sides around the time it happened (where they are:
   [docs/ui.md](docs/ui.md#logs)); with the statistics on
-  (`RUST_LOG=info,ping_core::stats=debug`) for anything about smoothness or
+  (`RUST_LOG=info,helio_client::stats=debug`) for anything about smoothness or
   latency. Logs never contain PINs, passwords or keys, but they do contain
   host names and addresses: edit them out if you like.
 
@@ -48,6 +48,6 @@ if you had written it.
 
 Contributions are accepted under the project's license, the
 [GPL-3.0](LICENSE). Do not include code copied or translated from
-Moonlight, Sunshine or Apollo: pingpong follows their behaviour, not their
+Moonlight, Sunshine or Apollo: Helio follows their behaviour, not their
 source. Code from elsewhere comes only under a license compatible with the
 GPL-3.0, with its notice.
