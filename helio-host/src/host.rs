@@ -1,7 +1,7 @@
 //! The host process: one tunnel endpoint for every paired client, a receive
 //! loop that dispatches control and input, and the session thread.
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -68,9 +68,7 @@ pub struct Host {
     stop: AtomicBool,
 }
 
-pub fn identity_path(dir: &Path) -> PathBuf {
-    dir.join("identity.toml")
-}
+pub use helio_host_data::identity_path;
 
 impl Host {
     pub fn open(data_dir: PathBuf) -> Result<Arc<Host>, String> {

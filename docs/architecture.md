@@ -58,6 +58,7 @@ it is, and what was measured on the way, is in the
 | `helio-app` | The app's window (GPUI): hosts, agents, settings, setup, and This computer (the host's pages, a client of its web API on localhost; the hosting switch, which runs `helio-host enable`, `disable` and `status`; the host's tray icon); and `Helio mcp` |
 | `helio-agent` | Computer use: a headless session, the actions, the MCP server, the agent runners; the `helio-agent` CLI |
 | `helio-host` | The host: sessions, the video and audio pipelines, pairing, presence, the web UI, the Windows service |
+| `helio-host-data` | What the host keeps on disk, for it and for whatever manages it: its data folder (private to the host on Windows), its identity, its paired clients and what each may do |
 
 `vendor/` holds two tiny no-op crates GPUI names but does not use (see the
 workspace `Cargo.toml`); `spikes/` holds the early experiments

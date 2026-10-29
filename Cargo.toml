@@ -12,6 +12,7 @@ members = [
     "helio-pairing",
     "helio-proto",
     "helio-host",
+    "helio-host-data",
     "helio-client",
     "helio-agent",
     "helio-app",
