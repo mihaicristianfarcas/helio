@@ -1,16 +1,15 @@
-//! Helio Host: the Helio streaming host.
+//! Helio Host's program: what the system and Helio run. People do not type
+//! it: `helio host` (helio-cli) is the command for this computer as a host,
+//! and runs `enable`, `disable` and `status` here, as the app's hosting
+//! switch does.
 //!
-//!   helio-host [host]                run the host in this session
+//!   helio-host [host]                run the host in this session (what
+//!                                    hosting starts: the LaunchAgent, the
+//!                                    systemd unit, the service)
 //!   helio-host enable | disable      hosting on (the host runs at every start,
 //!                                    from now) or off (see `hosting`)
 //!   helio-host status [--json]       off, starting, on or failed; for on,
 //!                                    whether the web API answers
-//!   helio-host identity              print this host's public keys
-//!   helio-host clients               list paired clients and what each may do
-//!   helio-host add-client NAME X25519 MLKEM [--agent] [--permissions LIST]
-//!                                    pair a client by hand (headless setups)
-//!   helio-host remove-client X25519       unpair a client
-//!   helio-host permissions X25519 [LIST]  what a paired client may do: show, or set
 //!
 //! On Windows, also:
 //!
@@ -89,8 +88,6 @@ use std::process::ExitCode;
 
 // The host's data, shared with `helio host` (helio-host-data).
 use helio_host_data::{clients, private};
-use helio_proto::permission::Permissions;
-use helio_transport::PublicIdentity;
 
 fn init_logging(dir: &std::path::Path) -> tracing_appender::non_blocking::WorkerGuard {
     init_logging_named(dir, "helio-host.log")
@@ -165,20 +162,17 @@ fn main() -> ExitCode {
         Some(c) => c.as_str(),
         None => "host",
     };
-    // On Windows the data folder is the host's alone (see `private`). Not
-    // from the clipboard helper, which runs as the signed-in user; nor from
-    // the hosting switch and its status, which the app runs, unelevated for
+    // On Windows the data folder is the host's alone (see `private`): made
+    // so by the host and the service, which log what that did. Not by the
+    // clipboard helper, which runs as the signed-in user; nor by the
+    // hosting switch and its status, which the app runs, unelevated for
     // status and often before the host ever ran: a folder this created
     // would be that user's own.
-    let secured = if !matches!(command, "clipboard-agent" | "enable" | "disable" | "status") {
+    let secured = if matches!(command, "host" | "service") {
         private::secure_data_dir(&dir)
     } else {
         None
     };
-    // The host and the service log it; any other command says it now.
-    if let (Some(said), false) = (&secured, matches!(command, "host" | "service")) {
-        eprintln!("{said}");
-    }
     match command {
         // Clipboard sharing as the signed-in user, for the host (Windows).
         #[cfg(windows)]
@@ -189,26 +183,15 @@ fn main() -> ExitCode {
         "enable" => hosting::switch(true),
         "disable" => hosting::switch(false),
         "status" => hosting::print_status(&dir, args.iter().any(|a| a == "--json")),
-        "identity" => print_identity(&dir),
-        "clients" => list_clients(&dir),
-        "permissions" => permissions(&dir, &args),
-        "add-client" => add_client(&dir, &args),
-        "remove-client" => remove_client(&dir, &args),
         other => {
             eprintln!(
-                "unknown command {other}\n\nusage: helio-host \
-                    [host|enable|disable|status [--json]|identity|clients|add-client|\
-                    remove-client|permissions]"
+                "helio-host: no command {other:?}. helio-host is what the system and Helio run \
+                    (host, enable, disable, status); this computer's hosting is `helio host` \
+                    (helio host --help)."
             );
             ExitCode::FAILURE
         }
     }
-}
-
-/// Print `e` and fail.
-fn fail(e: impl std::fmt::Display) -> ExitCode {
-    eprintln!("{e}");
-    ExitCode::FAILURE
 }
 
 /// `helio-host host`: run the host in this session until it is asked to stop.
@@ -294,130 +277,8 @@ fn run_service(dir: &std::path::Path, secured: Option<String>) -> ExitCode {
     match service::run() {
         Ok(()) => ExitCode::SUCCESS,
         Err(e) => {
-            eprintln!("{e}\n(`helio-host service` is started by Windows; use `helio-host enable`)");
+            eprintln!("{e}\n(`helio-host service` is started by Windows; use `helio host enable`)");
             ExitCode::FAILURE
         }
-    }
-}
-
-fn print_identity(dir: &std::path::Path) -> ExitCode {
-    match helio_transport::Identity::load_or_create(&host::identity_path(dir)) {
-        Ok(id) => {
-            let (x, m) = id.public().to_b64();
-            println!("x25519 = \"{x}\"\nmlkem = \"{m}\"");
-            ExitCode::SUCCESS
-        }
-        Err(e) => fail(e),
-    }
-}
-
-/// A set of permissions as the CLI prints it.
-fn spoken(p: Permissions) -> String {
-    if p == Permissions::NONE {
-        "none".into()
-    } else {
-        p.names().join(",")
-    }
-}
-
-fn list_clients(dir: &std::path::Path) -> ExitCode {
-    for c in clients::Clients::load(dir).list() {
-        let role = if c.agent { "agent" } else { "person" };
-        println!(
-            "{}\t{}\t{role}\t{}",
-            c.name,
-            c.x25519,
-            spoken(c.permissions)
-        );
-    }
-    ExitCode::SUCCESS
-}
-
-/// Set a client's permissions in the file; a running host reads them at
-/// its next start.
-fn save_permissions(dir: &std::path::Path, x: &str, p: Permissions) -> ExitCode {
-    match clients::Clients::load(dir).set_permissions(x, p) {
-        Ok(Some(now)) => {
-            println!(
-                "{}; restart the host for it to apply to a running host (Helio Host's window \
-                    and web UI change it at once)",
-                spoken(now)
-            );
-            ExitCode::SUCCESS
-        }
-        Ok(None) => fail("no such client"),
-        Err(e) => fail(e),
-    }
-}
-
-fn permissions(dir: &std::path::Path, args: &[String]) -> ExitCode {
-    const USAGE: &str = "usage: helio-host permissions X25519 [all|none|see-only|NAME,NAME…]\n\
-        names: view, keyboard, mouse, controller, clipboard_read, clipboard_write, launch, \
-        take_over, watch (people); view, keyboard, mouse, unwatched (agents)";
-    let Some(x) = args.get(1) else {
-        eprintln!("{USAGE}");
-        return ExitCode::FAILURE;
-    };
-    let Some(list) = args.get(2) else {
-        return match clients::Clients::load(dir)
-            .list()
-            .iter()
-            .find(|c| &c.x25519 == x)
-        {
-            Some(c) => {
-                println!("{}", spoken(c.permissions));
-                ExitCode::SUCCESS
-            }
-            None => fail("no such client"),
-        };
-    };
-    match Permissions::parse(list) {
-        Ok(p) => save_permissions(dir, x, p),
-        Err(e) => fail(format!("{e}\n{USAGE}")),
-    }
-}
-
-fn add_client(dir: &std::path::Path, args: &[String]) -> ExitCode {
-    let (Some(name), Some(x), Some(m)) = (args.get(1), args.get(2), args.get(3)) else {
-        eprintln!("usage: helio-host add-client NAME X25519 MLKEM [--agent] [--permissions LIST]");
-        return ExitCode::FAILURE;
-    };
-    let agent = args.iter().any(|a| a == "--agent");
-    let chosen = match args.iter().position(|a| a == "--permissions") {
-        Some(i) => match args.get(i + 1).map(|l| Permissions::parse(l)) {
-            Some(Ok(p)) => Some(p),
-            Some(Err(e)) => return fail(e),
-            None => return fail("--permissions needs a list (all, see-only, view,keyboard,…)"),
-        },
-        None => None,
-    };
-    let public = match PublicIdentity::from_b64(x, m) {
-        Ok(p) => p,
-        Err(e) => return fail(e),
-    };
-    match clients::Clients::load(dir).add(name, &public, None, agent, chosen) {
-        Ok(c) => {
-            println!(
-                "paired {name} ({}); restart the host to admit it",
-                spoken(c.permissions)
-            );
-            ExitCode::SUCCESS
-        }
-        Err(e) => fail(e),
-    }
-}
-
-fn remove_client(dir: &std::path::Path, args: &[String]) -> ExitCode {
-    let Some(x) = args.get(1) else {
-        eprintln!("usage: helio-host remove-client X25519");
-        return ExitCode::FAILURE;
-    };
-    match clients::Clients::load(dir).remove(x) {
-        Ok(Some(c)) => {
-            println!("removed {}", c.name);
-            ExitCode::SUCCESS
-        }
-        Ok(None) => fail("no such client"),
-        Err(e) => fail(e),
     }
 }

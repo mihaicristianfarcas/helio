@@ -1,7 +1,7 @@
 //! The host's program, `helio-host`, as Helio runs it: where it is, and its
 //! hosting switch, `enable` and `disable`, run again through UAC on Windows
 //! when it needs an administrator. The app's hosting switch
-//! (helio-app's `host::switch`) runs it so.
+//! (helio-app's `host::switch`) and `helio host` run it so.
 
 use std::path::{Path, PathBuf};
 
@@ -32,14 +32,14 @@ impl std::fmt::Display for Switched {
     }
 }
 
-/// `program enable` or `program disable`.
-pub fn switch(program: &Path, on: bool) -> Result<(), Switched> {
+/// `program enable` or `program disable`, and what it said it did.
+pub fn switch(program: &Path, on: bool) -> Result<String, Switched> {
     let out = command(program)
         .arg(if on { "enable" } else { "disable" })
         .output()
         .map_err(|e| Switched::Failed(format!("{}: {e}", program.display())))?;
     match out.status.code() {
-        Some(0) => Ok(()),
+        Some(0) => Ok(String::from_utf8_lossy(&out.stdout).trim().to_string()),
         Some(NEEDS_ELEVATION) => Err(Switched::NeedsElevation),
         _ => Err(Switched::Failed(said(&out.stderr, &out.stdout))),
     }
@@ -184,12 +184,12 @@ pub fn switch_elevated(program: &Path, on: bool) -> Result<(), Switched> {
         let got = GetExitCodeProcess(process, &mut code);
         let _ = CloseHandle(process);
         got.map_err(|e| Switched::Failed(e.message()))?;
+        let verb = if on { "enable" } else { "disable" };
         match code {
             0 => Ok(()),
             _ => Err(Switched::Failed(format!(
-                "helio-host {} failed (exit code {code}). Run it in an administrator terminal to see \
-                 why.",
-                if on { "enable" } else { "disable" }
+                "helio-host {verb} failed (exit code {code}). Run `helio host {verb}` in an \
+                 administrator terminal to see why."
             ))),
         }
     }

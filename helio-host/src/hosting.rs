@@ -8,7 +8,8 @@
 //!   `C:\Program Files\Helio Host`, a folder only administrators can change
 //!   (`hosting/windows.rs` says why). Turning hosting on or off needs an
 //!   administrator: without one, the command changes nothing and exits with
-//!   [`NEEDS_ELEVATION`], and the app runs it again through UAC.
+//!   [`NEEDS_ELEVATION`], and the app (or `helio host`) runs it again
+//!   through UAC.
 //! - macOS: a LaunchAgent that runs `helio-host host` from a copy of the helper
 //!   app this `helio-host` is in, which follows that app when it is replaced
 //!   (an update) and stops when it is gone (`hosting/mac.rs`).
@@ -23,7 +24,7 @@
 //!
 //! `helio-host status` says off, starting, on or failed (with why), and for on,
 //! whether the host's web API answers on this computer. `--json` is for the
-//! app. What launchd and systemd print is read here, not in their modules,
+//! app; `helio host status` prints either. What launchd and systemd print is read here, not in their modules,
 //! so that the reading is tested on every system.
 
 use std::path::Path;

@@ -8,7 +8,7 @@
 #   tools/linux-dev tools/linux/loopback-test [HELIO STREAM ARGS]
 #   HELIO_TEST_INPUT="..." tools/linux-dev tools/linux/loopback-test
 #
-# LOOPBACK_PERMISSIONS pairs the client with those permissions (`helio-host
+# LOOPBACK_PERMISSIONS pairs the client with those permissions (`helio host
 # permissions` names, or see-only), to see the host hold back what it may
 # not do: HELIO_DOCKER_ARGS="-e LOOPBACK_PERMISSIONS=view,mouse".
 #
@@ -40,10 +40,10 @@ sleep 1
 DISPLAY=:1 "$bin/examples/x11-scene" 60 >"$OUT/scene.log" &
 
 # Pair by hand, both ways.
-host_keys=$("$bin/helio-host" identity | sed -E 's/.*= "(.*)"/\1/' | paste -sd' ')
+host_keys=$("$bin/helio" host identity | sed -E 's/.*= "(.*)"/\1/' | paste -sd' ')
 client_keys=$("$bin/helio" identity)
 # shellcheck disable=SC2086
-"$bin/helio-host" add-client linux-helio $client_keys \
+"$bin/helio" host add-client linux-helio $client_keys \
     ${LOOPBACK_PERMISSIONS:+--permissions "$LOOPBACK_PERMISSIONS"} >/dev/null
 # shellcheck disable=SC2086
 "$bin/helio" add-host linux-loop 127.0.0.1:47810 $host_keys >/dev/null

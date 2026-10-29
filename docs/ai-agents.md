@@ -21,8 +21,8 @@ the host lists it as an **AI agent**.
   for Helio.
 - CLI: `helio pair-agent HOST`.
 - By hand (headless hosts): `helio-agent identity` prints the agent's keys;
-  `helio-host add-client NAME X25519 MLKEM --agent` on the host, and
-  `helio-agent add-host NAME ADDR X25519 MLKEM` with `helio-host identity`'s keys.
+  `helio host add-client NAME X25519 MLKEM --agent` on the host, and
+  `helio-agent add-host NAME ADDR X25519 MLKEM` with `helio host identity`'s keys.
 
 ### 2. Work with it: sessions
 

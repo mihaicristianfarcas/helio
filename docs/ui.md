@@ -145,7 +145,8 @@ administrator.
 ### Hosting, and the app's icon
 
 The switch runs the host's own commands: `helio-host enable`, `helio-host disable` and
-`helio-host status --json` ([cli.md](cli.md)). The host is `Helio Host.app` on a
+`helio-host status --json`, found and run by `helio_cli::engine`, as `helio host`
+runs them ([cli.md](cli.md#helio-host-the-hosts-program)). The host is `Helio Host.app` on a
 Mac, inside this app's bundle under `Contents/Helpers` (for a build run
 from `target/`, inside `target/Helio.app`), `helio-host.exe` beside the app or in
 `C:\Program Files\Helio Host` on Windows, and `helio-host` beside the app or on the

@@ -3465,6 +3465,7 @@ dependencies = [
  "ctrlc",
  "dispatch2",
  "helio-client",
+ "helio-host-data",
  "helio-pairing",
  "helio-proto",
  "helio-transport",

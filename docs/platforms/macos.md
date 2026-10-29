@@ -97,8 +97,8 @@ and the web UI. The Mac-specific modules are in `helio-host/src/mac/`.
 Helio is an ordinary app, in the Dock. The host is a helper app inside it,
 `Helio.app/Contents/Helpers/Helio Host.app`, with its own bundle identifier
 (`dev.mihaicristian.helio.host`) and usage strings, signed before the app around it
-(`tools/build-helio-app`). Helio's hosting switch runs `helio-host enable` from the
-helper, which copies the helper to the host's data folder
+(`tools/build-helio-app`). Helio's hosting switch (and `helio host enable`)
+runs `helio-host enable` from the helper, which copies the helper to the host's data folder
 (`~/Library/Application Support/Helio Host/Helio Host.app`), writes the host's
 LaunchAgent for that copy and loads it; `helio-host disable` removes both. The
 host runs from an app bundle so that macOS's permissions apply to Helio

@@ -175,7 +175,7 @@ impl Hosting {
         cx.notify();
         let first = cx.background_executor().spawn({
             let program = program.clone();
-            async move { switch(&program, on) }
+            async move { switch(&program, on).map(drop) }
         });
         cx.spawn(async move |this, cx| {
             let mut done = first.await;

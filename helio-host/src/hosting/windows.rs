@@ -107,7 +107,7 @@ pub fn trusted_engine() -> Result<PathBuf, String> {
     } else {
         Err(format!(
             "this helio-host runs from {}, not {}: as SYSTEM, only that copy is started \
-                (helio-host enable puts it there)",
+                (turning hosting on puts it there: helio host enable)",
             here.display(),
             engine.display()
         ))
