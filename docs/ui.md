@@ -131,8 +131,9 @@ along the top, the step, and Back, Skip and Continue at the bottom.
    Recording and Accessibility for the host (Helio Host), which macOS asks for as
    the host starts, each with a button to its pane of System Settings and
    marked Allowed as soon as the host says so. On Windows, the administrator
-   UAC asks for once, and whether there are NVIDIA graphics (else it
-   streams in software H.264) and SudoVDA (else the main display, scaled).
+   UAC asks for once, whether there are NVIDIA graphics (else it streams
+   in software H.264), and SudoVDA (else the main display, scaled) and
+   ViGEmBus (else no controllers), which turning hosting on installs.
 4. **Pairing**: in a line, how to pair from the other computer.
 5. **Done**.
 

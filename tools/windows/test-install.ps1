@@ -2,7 +2,7 @@
 # itself (as a person does, then as Helio's own update does), uninstall it,
 # and check after each step that it did what it says
 # and, at the end, that nothing of it is left but the data Helio keeps on
-# purpose. The release workflow runs it on each Windows package; it runs
+# purpose, the drivers hosting installs (SudoVDA, ViGEmBus) included. The release workflow runs it on each Windows package; it runs
 # the same on a PC or a VM of your own.
 #
 #   powershell -NoProfile -ExecutionPolicy Bypass -File tools\windows\test-install.ps1 -Setup PATH [-Signed] [-UnsignedEngine PATH]
@@ -40,6 +40,17 @@ function Check([bool]$ok, [string]$what) {
 }
 
 function Hosting-On { [bool](Get-Service HelioHost -ErrorAction SilentlyContinue) }
+
+# The drivers hosting installs where they are missing
+# (helio-host/src/hosting/drivers.rs), and SudoVDA's certificate, which it
+# trusts for them: what of them this PC has.
+function Drivers {
+    $sudovda = @(Get-PnpDevice -Class Display -ErrorAction SilentlyContinue |
+        Where-Object { $_.HardwareID -contains 'Root\SudoMaker\SudoVDA' }).Count -gt 0
+    $cert = Test-Path 'Cert:\LocalMachine\Root\3C918FC73525AD8B1521B6DB26B71F694277CC49'
+    $vigembus = Test-Path (Join-Path ([Environment]::SystemDirectory) 'drivers\ViGEmBus.sys')
+    "SudoVDA $sudovda, its certificate $cert, ViGEmBus $vigembus"
+}
 
 # A program's exit code and what it printed, stdout and stderr together.
 # Not under 'Stop': Windows PowerShell makes a native program's stderr an
@@ -118,7 +129,8 @@ $pathBefore = User-Path
 try {
     # Installed: the files, the Start menu, Settings > Apps; hosting off.
     Check ((Invoke-Silently $Setup) -eq 0) 'the installer exits with 0'
-    foreach ($file in 'Helio.exe', 'helio-host.exe', 'bin\helio.exe', 'FFmpeg LICENSE.txt', 'unins000.exe') {
+    foreach ($file in 'Helio.exe', 'helio-host.exe', 'bin\helio.exe', 'FFmpeg LICENSE.txt', 'unins000.exe',
+        'drivers\ViGEmBus_setup.exe', 'drivers\ViGEmBus LICENSE.txt', 'drivers\SudoVDA.md') {
         Check (Test-Path (Join-Path $app $file)) "installed: $file"
     }
     foreach ($dll in 'avcodec', 'avutil', 'swresample') {
@@ -158,10 +170,16 @@ try {
         Check-Refused $changed 'it was changed after it was signed' 'an engine changed after signing'
     }
 
-    # Hosting on, from the installed engine, as Helio's switch does it.
+    # Hosting on, from the installed engine, as Helio's switch does it. A
+    # runner may not take a driver (a virtual machine without the GPU
+    # SudoVDA wants): what became of each is said, and checked at the end.
+    $driversBefore = Drivers
+    Write-Output "before hosting: $driversBefore"
     $enable = Invoke-Program (Join-Path $app 'helio-host.exe') @('enable')
     Write-Output $enable.Said
     Check ($enable.Code -eq 0 -and (Hosting-On)) 'hosting turns on'
+    Check ($enable.Said -match 'SudoVDA' -and $enable.Said -match 'ViGEmBus') 'turning hosting on says what became of each driver'
+    Write-Output "with hosting on: $(Drivers)"
     $engine = Join-Path $hostDir 'helio-host.exe'
     Check (Test-Path $engine) "the engine's copy is in $hostDir"
     Check ([bool](Get-NetFirewallRule -DisplayName 'Helio Host' -ErrorAction SilentlyContinue)) "the host's firewall rules are there"
@@ -212,6 +230,7 @@ try {
     Check (-not (Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run' -Name Helio -ErrorAction SilentlyContinue)) `
         'Helio no longer starts at login'
     if ($hadData) { Check (Test-Path $hostData) "the host's identity and pairings stay in $hostData" }
+    Check ((Drivers) -eq $driversBefore) "the drivers are as they were before hosting: $driversBefore"
     Write-Output 'Helio is installed, hosts, and uninstalls with nothing left behind.'
 } finally {
     # What a failed run leaves is cleaned up as far as it can be.

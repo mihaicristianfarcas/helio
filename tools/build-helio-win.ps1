@@ -1,6 +1,7 @@
 # Build Helio for Windows: Helio.exe (the app) beside FFmpeg's DLLs and the
 # host's engine (helio-host.exe, which the app's hosting switch runs), with
-# bin\helio.exe (the `helio` command, which runs Helio.exe's), in
+# bin\helio.exe (the `helio` command, which runs Helio.exe's) and drivers\
+# (the ViGEmBus installer hosting runs, tools\windows\drivers.ps1), in
 # target\Helio, as the release archive holds them; and helio.exe and
 # helio-agent.exe, the CLIs on their own, in target\release.
 #
@@ -21,6 +22,7 @@ param(
 $ErrorActionPreference = 'Stop'
 if (-not $FFmpeg) { throw 'Pass -FFmpeg DIR or set FFMPEG_DIR: an FFmpeg 8 shared build (include\, lib\, bin\).' }
 $repo = Split-Path -Parent $PSScriptRoot
+. (Join-Path $PSScriptRoot 'windows\drivers.ps1')
 $env:FFMPEG_DIR = $FFmpeg
 if (-not $env:LIBCLANG_PATH) { $env:LIBCLANG_PATH = 'C:\Program Files\LLVM\bin' }
 
@@ -45,6 +47,7 @@ try {
     # FFmpeg is LGPL: its license goes with its DLLs, as in the release.
     $license = Join-Path $FFmpeg 'LICENSE.txt'
     if (Test-Path $license) { Copy-Item $license (Join-Path $dist 'FFmpeg LICENSE.txt') }
+    Add-Drivers $repo $dist
     # The CLI finds the DLLs beside itself too.
     foreach ($dll in Get-ChildItem $dist -Filter '*.dll') { Copy-Item $dll.FullName (Join-Path $repo 'target\release') }
     Write-Output "built $dist"

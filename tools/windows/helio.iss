@@ -110,6 +110,10 @@ Source: "{#Source}\avutil-*.dll"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#Source}\swresample-*.dll"; DestDir: "{app}"; Flags: ignoreversion
 ; FFmpeg is LGPL: its license goes with its DLLs.
 Source: "{#Source}\FFmpeg LICENSE.txt"; DestDir: "{app}"; Flags: ignoreversion
+; The ViGEmBus installer that turning hosting on runs, and the drivers'
+; notices (helio-host/src/hosting/drivers.rs; SudoVDA is inside
+; helio-host.exe).
+Source: "{#Source}\drivers\*"; DestDir: "{app}\drivers"; Flags: ignoreversion
 
 [InstallDelete]
 ; What an older release left: FFmpeg's DLLs of another version (this
@@ -122,6 +126,7 @@ Type: files; Name: "{app}\swresample-*.dll"
 ; The folders, once the uninstaller's record of every install over them
 ; has gone; only empty, and only then.
 Type: dirifempty; Name: "{app}\bin"
+Type: dirifempty; Name: "{app}\drivers"
 Type: dirifempty; Name: "{app}"
 
 [Icons]

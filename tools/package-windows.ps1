@@ -12,7 +12,9 @@
 #                                                             runs the installer, helio-update/src/install/windows.rs)
 #
 # The files: Helio.exe beside FFmpeg's DLLs (avcodec, avutil, swresample)
-# and FFmpeg's license, helio-host.exe, and bin\helio.exe. helio-host.exe
+# and FFmpeg's license, helio-host.exe, bin\helio.exe, and drivers\: the
+# ViGEmBus installer that turning hosting on runs, and the drivers'
+# notices (tools\windows\drivers.ps1). helio-host.exe
 # sits beside Helio.exe, where the app's hosting switch finds it; turning
 # hosting on copies it to C:\Program Files\Helio Host, which the service
 # runs (helio-host/src/hosting/windows.rs). bin\helio.exe is the `helio`
@@ -51,6 +53,7 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path -Parent $PSScriptRoot
+. (Join-Path $PSScriptRoot 'windows\drivers.ps1')
 $manifest = Get-Content (Join-Path $repo 'Cargo.toml') -Raw
 if ($manifest -notmatch '(?ms)^\[workspace\.package\].*?^version = "([^"]+)"') { throw 'no version in Cargo.toml [workspace.package]' }
 $version = $Matches[1]
@@ -101,6 +104,7 @@ function Build([string]$stage) {
     $license = Join-Path $FFmpeg 'LICENSE.txt'
     if (-not (Test-Path $license)) { throw "There is no LICENSE.txt in $FFmpeg, and FFmpeg's DLLs go only with it." }
     Copy-Item $license (Join-Path $stage 'FFmpeg LICENSE.txt')
+    Add-Drivers $repo $stage
 }
 
 function Ssign {
@@ -130,8 +134,11 @@ function Sign-Files([string]$ssign, [string]$stage) {
         if ($LASTEXITCODE -ne 0) { throw "ssign failed ($LASTEXITCODE)" }
         $signed += $files
     }
-    # Every program and DLL in the package, and none left out.
-    $all = @(Get-ChildItem $stage -Recurse -Include '*.exe', '*.dll' | ForEach-Object { $_.FullName })
+    # Every program and DLL in the package, and none left out, but for
+    # drivers\: ViGEmBus's installer stays as its author signed it.
+    $theirs = Join-Path $stage 'drivers\*'
+    $all = @(Get-ChildItem $stage -Recurse -Include '*.exe', '*.dll' |
+        Where-Object { $_.FullName -notlike $theirs } | ForEach-Object { $_.FullName })
     $missed = @($all | Where-Object { $signed -notcontains $_ })
     if ($missed.Count) { throw "not signed: $($missed -join ', ')" }
 }

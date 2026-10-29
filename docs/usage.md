@@ -92,7 +92,7 @@ Windows and Linux) opens them.
 | General | Open at login | With hosting on, Helio's icon from the moment you log in, without its window (a LaunchAgent on a Mac, your `Run` key on Windows; not on Linux). With hosting off, nothing starts |
 | | The helio command | **Install** puts `helio`, the command line, on the `PATH` of terminals opened from then on; **Remove** takes it off. How each system does it, and what uninstalling Helio does to it: [cli.md](cli.md) |
 | | Set Up Again | Setup once more: what this computer is for, what it must allow, how to pair |
-| Hosting | Let my devices play this computer | The hosting switch ([Hosting on and off](#hosting-on-and-off)), with what it needs: on a Mac, Screen Recording and Accessibility for the host; on Windows, whether there are NVIDIA graphics and SudoVDA |
+| Hosting | Let my devices play this computer | The hosting switch ([Hosting on and off](#hosting-on-and-off)), with what it needs: on a Mac, Screen Recording and Accessibility for the host; on Windows, whether there are NVIDIA graphics, and the drivers turning hosting on installs (SudoVDA, ViGEmBus) |
 | Updates | Look for updates | New releases (the default for a packaged release), releases and main (the default for a build from a checkout: also commits on `main` newer than the build's), or off. See [Updates](#updates) |
 | | Check for Updates | Asks GitHub now, whatever the setting |
 | Video | Resolution | This display's native size (the default), the scaled desktop size (Mac), or a custom size. Each is fitted to the nearest standard aspect ratio (16:10, 16:9, 21:9...): a size between them makes games draw a smaller picture with strips around it, which a Windows host does not refresh. Below a MacBook's notch that is 16:10, 3024 × 1890 on a 14" |
@@ -398,8 +398,10 @@ same.
 - **"… did not answer this device's AI agent."** The agent is paired on its
   own, apart from Helio: if Helio still streams from the host, Helio Host no longer
   has the agent. Pair it again with **Allow…** on Helio's **Agents** page.
-- **"The host could not create its virtual display"** (Windows): SudoVDA is
-  not installed, or Apollo's service is holding it — stop ApolloService.
+- **"The host could not create its virtual display"** (Windows): SudoVDA did
+  not install (turn hosting off and on: `helio host enable` says what
+  Windows answered; on Windows on Arm it never does), or Apollo's service is
+  holding it — stop ApolloService.
 - **A KDE host streams its screen scaled, not a display of the device's
   size**: KWin did not give Helio Host its virtual output. It does only for
   a `helio-host` named in a desktop entry that asks for it, which Helio's

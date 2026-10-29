@@ -55,6 +55,25 @@ capture and control the secure desktop (UAC prompts, the lock screen), as
 Sunshine does. Clipboard files are read and written as the
 signed-in user, not as SYSTEM.
 
+**The drivers hosting installs.** On Windows, turning hosting on installs
+SudoVDA and ViGEmBus where they are missing
+([docs/platforms/windows.md](docs/platforms/windows.md#the-drivers-hosting-installs)).
+SudoVDA is signed by its author's own certificate (`CN=sudovda@su.mk`), not
+by Microsoft, and Windows installs a driver signed so only from a publisher
+it trusts, so its certificate goes into the machine's Trusted Root and
+Trusted Publishers stores, as Apollo's installer puts it there. The
+certificate is for code signing only (its extended key usage), so Windows
+trusts it for nothing else, websites included; but whoever holds its key
+could sign programs and drivers this PC would trust. Turning hosting off
+takes it out again, when Helio Host put it there. The driver's files come
+inside `helio-host.exe` ([vendor/sudovda](vendor/sudovda/README.md) says
+where from, with their hashes); ViGEmBus's installer, signed by its author,
+runs only once its copy in the engine's folder, which only administrators
+can change, has the SHA-256 Helio pins. On Linux, the host's desktop entry
+asks KWin for its virtual output and fake input; KWin finds the entry by
+the program's path, so this lends nothing a program running as you could
+not ask for with an entry of its own.
+
 **The update check** asks GitHub's public API, over HTTPS (Mozilla's root
 certificates, as `webpki-roots` carries them), once a day, without an
 account, sending nothing but the request and the version in its

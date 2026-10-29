@@ -12,11 +12,14 @@
 //!    and Administrators may change it, Users may read and run it;
 //! 2. checks the copies' Authenticode signature (`signature`): the copies,
 //!    not the originals, which their user could swap after the check;
-//! 3. stops the service if it runs, puts the copies in place, registers the
-//!    service to run them, opens the firewall to them, and starts it.
+//! 3. stops the service if it runs, puts the copies in place, installs the
+//!    drivers the host uses that are missing (`drivers`: SudoVDA,
+//!    ViGEmBus), registers the service to run the copies, opens the
+//!    firewall to them, and starts it.
 //!
-//! `helio-host disable` stops and removes the service, its firewall rules and the
-//! copy. Without an administrator both change nothing and exit with
+//! `helio-host disable` stops and removes the service, its firewall rules,
+//! the drivers `enable` installed, and the copy. Without an administrator
+//! both change nothing and exit with
 //! [`NEEDS_ELEVATION`](super::NEEDS_ELEVATION).
 //!
 //! Helio's own update brings a new engine beside the app; while hosting is
@@ -65,8 +68,9 @@ const REMOVED: &str = "removed";
 /// permissions, elevated or not). `P`: protected, nothing inherited. SY
 /// SYSTEM and BA Administrators: full control; BU Users: read and run
 /// (0x1200a9). `OICI`: inherited by what is created inside.
-const FOLDER: PCWSTR = w!("O:BAD:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;0x1200a9;;;BU)");
-const FILE: PCWSTR = w!("O:BAD:P(A;;FA;;;SY)(A;;FA;;;BA)(A;;0x1200a9;;;BU)");
+pub(super) const FOLDER: PCWSTR =
+    w!("O:BAD:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;0x1200a9;;;BU)");
+pub(super) const FILE: PCWSTR = w!("O:BAD:P(A;;FA;;;SY)(A;;FA;;;BA)(A;;0x1200a9;;;BU)");
 
 /// Windows keeps a program's file busy for a moment after its process has
 /// ended, and says nothing when it lets go: a copy over it, or its
@@ -119,7 +123,7 @@ pub fn trusted_engine() -> Result<PathBuf, String> {
 }
 
 /// Replace `path`'s owner and access list with `sddl`.
-fn secure(path: &Path, sddl: PCWSTR) -> Result<(), String> {
+pub(super) fn secure(path: &Path, sddl: PCWSTR) -> Result<(), String> {
     let mut sd = PSECURITY_DESCRIPTOR::default();
     // SAFETY: `sddl` is a NUL-terminated constant; `sd` receives a
     // descriptor the system allocates, used only until it is freed below.
@@ -268,12 +272,25 @@ pub fn enable() -> Result<String, Error> {
             }
         }
     }
+    // Before the service starts: its first session finds them.
+    let drivers = super::drivers::install(&dir, source);
     let engine = engine()?;
     service::register(&engine)?;
-    Ok(format!(
-        "Hosting is on: HelioHost runs {} from boot, before anyone signs in.",
-        engine.display()
+    Ok(said(
+        format!(
+            "Hosting is on: HelioHost runs {} from boot, before anyone signs in.",
+            engine.display()
+        ),
+        &drivers,
     ))
+}
+
+/// What `enable` or `disable` says: `first`, then a line for each driver.
+fn said(first: String, drivers: &[String]) -> String {
+    std::iter::once(first)
+        .chain(drivers.iter().cloned())
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 pub fn disable() -> Result<String, Error> {
@@ -282,6 +299,9 @@ pub fn disable() -> Result<String, Error> {
     }
     service::unregister()?;
     let dir = install_dir()?;
+    // Once the host has stopped: it holds SudoVDA's device open.
+    let drivers = super::drivers::remove(&dir);
+    let _ = std::fs::remove_dir_all(dir.join("drivers"));
     let here = std::env::current_exe().map_err(|e| e.to_string())?;
     let mut left = None;
     for name in ENGINE_FILES {
@@ -313,7 +333,7 @@ pub fn disable() -> Result<String, Error> {
     // The folder goes once nothing else is in it (an installer may keep
     // Helio Host's window there).
     let _ = std::fs::remove_dir(&dir);
-    Ok(match left {
+    let first = match left {
         None => format!(
             "Hosting is off: HelioHost, its firewall rules and {} are removed.",
             engine()?.display()
@@ -323,7 +343,8 @@ pub fn disable() -> Result<String, Error> {
                 is the engine itself: it is now {}, and goes at the next restart.",
             away.display()
         ),
-    })
+    };
+    Ok(said(first, &drivers))
 }
 
 pub fn state() -> State {
