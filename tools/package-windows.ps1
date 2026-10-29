@@ -1,20 +1,20 @@
-# Package Ping for Windows as a release: the app and the host's engine,
-# built as one (PINGPONG_RELEASE=1: they then follow releases, not the main
+# Package Helio for Windows as a release: the app and the host's engine,
+# built as one (HELIO_RELEASE=1: they then follow releases, not the main
 # branch), in one zip archive for a GitHub release and the website's
 # downloads.
 #
 #   powershell -NoProfile -ExecutionPolicy Bypass -File tools\package-windows.ps1 [-FFmpeg DIR]
-#     -> target\dist\Ping-VERSION-windows-x86_64.zip  (Ping.exe beside FFmpeg's DLLs,
-#                                                        pong.exe, install.ps1, Install Ping.cmd)
+#     -> target\dist\Helio-VERSION-windows-x86_64.zip  (Helio.exe beside FFmpeg's DLLs,
+#                                                        helio-host.exe, install.ps1, Install Helio.cmd)
 #
-# pong.exe sits beside Ping.exe, where the app's hosting switch finds it;
-# turning hosting on copies it to C:\Program Files\Pong, which the service
-# runs (pong/src/hosting/windows.rs). VERSION is the workspace's. -FFmpeg
-# (default: FFMPEG_DIR) and LLVM are what tools\build-ping-win.ps1 needs.
+# helio-host.exe sits beside Helio.exe, where the app's hosting switch finds it;
+# turning hosting on copies it to C:\Program Files\Helio Host, which the service
+# runs (helio-host/src/hosting/windows.rs). VERSION is the workspace's. -FFmpeg
+# (default: FFMPEG_DIR) and LLVM are what tools\build-helio-win.ps1 needs.
 # The files sit at the archive's root, so Explorer's Extract All gives one
-# folder. The programs are not signed: SmartScreen asks before Ping.exe
+# folder. The programs are not signed: SmartScreen asks before Helio.exe
 # first starts. The release workflow (.github/workflows/release.yml) runs
-# this on a Windows runner. PINGPONG_PROFILE=dev packages a debug build (CI
+# this on a Windows runner. HELIO_PROFILE=dev packages a debug build (CI
 # checks the packaging so).
 param(
     [string]$FFmpeg = $env:FFMPEG_DIR
@@ -27,9 +27,9 @@ if ($manifest -notmatch '(?ms)^\[workspace\.package\].*?^version = "([^"]+)"') {
 $version = $Matches[1]
 $env:FFMPEG_DIR = $FFmpeg
 if (-not $env:LIBCLANG_PATH) { $env:LIBCLANG_PATH = 'C:\Program Files\LLVM\bin' }
-$env:PINGPONG_RELEASE = '1'
+$env:HELIO_RELEASE = '1'
 # Not $profile: PowerShell's own name for the user's profile script.
-$cargoProfile = if ($env:PINGPONG_PROFILE) { $env:PINGPONG_PROFILE } else { 'release' }
+$cargoProfile = if ($env:HELIO_PROFILE) { $env:HELIO_PROFILE } else { 'release' }
 $out = if ($cargoProfile -eq 'dev') { 'debug' } else { $cargoProfile }
 
 Push-Location $repo
@@ -37,7 +37,7 @@ try {
     # cargo's progress on stderr is not an error (Windows PowerShell makes
     # it one under 'Stop').
     $ErrorActionPreference = 'Continue'
-    cargo build --profile $cargoProfile -p ping-app -p pong
+    cargo build --profile $cargoProfile -p helio-app -p helio-host
     $ErrorActionPreference = 'Stop'
     if ($LASTEXITCODE -ne 0) { throw "cargo build failed ($LASTEXITCODE)" }
 
@@ -62,11 +62,11 @@ try {
 
     # Archives of an earlier build here, under any name, are not this one's.
     Remove-Item (Join-Path $dist '*-windows-x86_64.zip') -ErrorAction SilentlyContinue
-    zip "Ping-$version-windows-x86_64" {
+    zip "Helio-$version-windows-x86_64" {
         param($dir)
-        Copy-Item (Join-Path $release 'ping-app.exe') (Join-Path $dir 'Ping.exe')
-        Copy-Item (Join-Path $release 'pong.exe') $dir
-        # The DLLs tools\build-ping-win.ps1 puts beside Ping.exe: avcodec,
+        Copy-Item (Join-Path $release 'helio-app.exe') (Join-Path $dir 'Helio.exe')
+        Copy-Item (Join-Path $release 'helio-host.exe') $dir
+        # The DLLs tools\build-helio-win.ps1 puts beside Helio.exe: avcodec,
         # avutil, and swresample (some decoders).
         Get-ChildItem (Join-Path $FFmpeg 'bin') -Filter '*.dll' |
             Where-Object { $_.Name -match '^(avcodec|avutil|swresample)-\d+\.dll$' } |
@@ -74,14 +74,14 @@ try {
         # FFmpeg is LGPL: its license goes with its DLLs.
         $license = Join-Path $FFmpeg 'LICENSE.txt'
         if (Test-Path $license) { Copy-Item $license (Join-Path $dir 'FFmpeg LICENSE.txt') }
-        Copy-Item (Join-Path $PSScriptRoot 'install-ping.ps1') (Join-Path $dir 'install.ps1')
-        # What a person double-clicks. Ping.exe also runs from the unpacked
+        Copy-Item (Join-Path $PSScriptRoot 'install-helio.ps1') (Join-Path $dir 'install.ps1')
+        # What a person double-clicks. Helio.exe also runs from the unpacked
         # folder as it is, hosting included; installed, it is in the Start
-        # menu and Settings > Apps. The window closes once Ping opens, and
+        # menu and Settings > Apps. The window closes once Helio opens, and
         # stays to show why if it did not install.
-        $cmd = "@echo off`r`nrem Install Ping from this folder for you: in the Start menu, and in Settings > Apps to uninstall.`r`n" +
+        $cmd = "@echo off`r`nrem Install Helio from this folder for you: in the Start menu, and in Settings > Apps to uninstall.`r`n" +
             "powershell -NoProfile -ExecutionPolicy Bypass -File `"%~dp0install.ps1`"`r`nif errorlevel 1 pause`r`n"
-        [IO.File]::WriteAllText((Join-Path $dir 'Install Ping.cmd'), $cmd)
+        [IO.File]::WriteAllText((Join-Path $dir 'Install Helio.cmd'), $cmd)
     }
 } finally {
     Pop-Location

@@ -8,7 +8,7 @@
 # request, and there it cannot be skipped.
 set -e
 secrets=$(git diff --cached --name-only --diff-filter=AM |
-    grep -E '(^|/)\.env$|^tools/dev\.env$|(^|/)pingpong-(client|server)\.toml$|\.toml\.bak-' || true)
+    grep -E '(^|/)\.env$|^tools/dev\.env$|\.toml\.bak-' || true)
 if [ -n "$secrets" ]; then
     echo "pre-commit: these must not be committed (keys, local settings):" >&2
     echo "$secrets" | sed 's/^/  /' >&2

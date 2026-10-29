@@ -1,27 +1,27 @@
 #!/usr/bin/env bash
-# Package Ping for Linux as a release: the app and the host's engine, built
-# as one (PINGPONG_RELEASE=1: they then follow releases, not the main
+# Package Helio for Linux as a release: the app and the host's engine, built
+# as one (HELIO_RELEASE=1: they then follow releases, not the main
 # branch), in one tar archive for a GitHub release and the website's
 # downloads.
 #
 #   tools/linux/package
-#     -> target/dist/Ping-VERSION-linux-ARCH.tar.gz
+#     -> target/dist/Helio-VERSION-linux-ARCH.tar.gz
 #
-# The archive is a folder of the same name with the app (ping-app), the
-# host's engine (pong) and its user unit (pong.service, installed but not
+# The archive is a folder of the same name with the app (helio-app), the
+# host's engine (helio-host) and its user unit (helio-host.service, installed but not
 # enabled: hosting is off until the app's switch turns it on), the launcher
 # entry and its icon, and install.sh (tools/linux/install-release). ARCH is
 # this machine's (x86_64, aarch64); VERSION the workspace's. The programs
 # link the system's libraries (FFmpeg, PipeWire, ...) as this machine has
 # them: built on Ubuntu 24.04, they run on it and on distributions built on
 # it. The release workflow (.github/workflows/release.yml) runs this on an
-# Ubuntu 24.04 runner. PINGPONG_PROFILE=dev packages a debug build (CI
+# Ubuntu 24.04 runner. HELIO_PROFILE=dev packages a debug build (CI
 # checks the packaging so).
 set -euo pipefail
 REPO=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 VERSION=$(sed -n '/^\[workspace.package\]/,/^\[/ s/^version = "\(.*\)"/\1/p' "$REPO/Cargo.toml")
 ARCH=$(uname -m)
-PROFILE=${PINGPONG_PROFILE:-release}
+PROFILE=${HELIO_PROFILE:-release}
 TARGET=${CARGO_TARGET_DIR:-$REPO/target}
 case $PROFILE in
     dev) OUT="$TARGET/debug" ;;
@@ -29,24 +29,24 @@ case $PROFILE in
 esac
 DIST="$REPO/target/dist"
 
-export PINGPONG_RELEASE=1
+export HELIO_RELEASE=1
 cd "$REPO"
-cargo build --profile "$PROFILE" -p ping-app
+cargo build --profile "$PROFILE" -p helio-app
 # The host on its own: it and the GPUI apps ask one dependency for different
 # async runtimes (docs/development.md).
-cargo build --profile "$PROFILE" -p pong
+cargo build --profile "$PROFILE" -p helio-host
 
 STAGE=$(mktemp -d)
 trap 'rm -rf "$STAGE"' EXIT
-NAME=Ping-$VERSION-linux-$ARCH
+NAME=Helio-$VERSION-linux-$ARCH
 mkdir -p "$DIST" "$STAGE/$NAME"
 # FILE given as SOURCE or SOURCE:NAME_IN_ARCHIVE.
 for file in \
-    "$OUT/ping-app" \
-    "$OUT/pong" \
-    "$REPO/tools/linux/pong.service" \
-    "$REPO/tools/linux/dev.pingpong.Ping.desktop" \
-    "$REPO/ping-app/assets/icon-256.png:dev.pingpong.Ping.png" \
+    "$OUT/helio-app" \
+    "$OUT/helio-host" \
+    "$REPO/tools/linux/helio-host.service" \
+    "$REPO/tools/linux/dev.mihaicristian.helio.desktop" \
+    "$REPO/helio-app/assets/icon-256.png:dev.mihaicristian.helio.png" \
     "$REPO/tools/linux/install-release:install.sh"; do
     from=${file%%:*} to=${file#*:}
     [[ $file == *:* ]] || to=$(basename "$from")

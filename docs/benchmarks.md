@@ -1,9 +1,9 @@
 # Benchmarks
 
-What pingpong costs, measured: micro-benchmarks of its own code paths, and
+What Helio costs, measured: micro-benchmarks of its own code paths, and
 the real stream end to end, against Moonlight + Sunshine/Apollo where that
 means something. The host comparisons so far were measured against Apollo,
-the Sunshine fork whose virtual display Pong follows: its capture, NVENC
+the Sunshine fork whose virtual display Helio Host follows: its capture, NVENC
 settings, FEC and pacing are Sunshine's. Every figure says what it was
 measured on; the earliest measurements (v1, v2) are in the
 [design history](design/README.md).
@@ -24,32 +24,32 @@ Unless a section says otherwise:
 - **Micro-benchmarks** (Criterion, release profile):
 
   ```sh
-  cargo bench -p pingpong-transport   # pq-boringtun handshake and data plane
-  cargo bench -p pingpong-proto       # packetize, FEC, reassembly, audio
-  cargo bench -p pingpong-decode      # the Annex-B split before VideoToolbox
+  cargo bench -p helio-transport      # pq-boringtun handshake and data plane
+  cargo bench -p helio-proto          # packetize, FEC, reassembly, audio
+  cargo bench -p helio-decode         # the Annex-B split before VideoToolbox
   ```
 
 - **The stream**: the statistics overlay (Ctrl+Alt+Shift+S, or
-  `ping stream NAME --stats`) shows the same figures as Moonlight's, plus the
+  `helio stream NAME --stats`) shows the same figures as Moonlight's, plus the
   host's capture to the client's screen. For a log of them, one line a
-  second: `RUST_LOG=info,ping_core::stats=debug ping stream NAME ...`. The
-  host logs a line a second too (`pong.log`: frames, capture to encoded,
+  second: `RUST_LOG=info,helio_client::stats=debug helio stream NAME ...`. The
+  host logs a line a second too (`helio-host.log`: frames, capture to encoded,
   Mbit/s, recoveries).
 - **The client's presentation alone** (macOS), with no host: synthetic
   frames through the stream window and renderer, a line a second of frames
   shown and decode to glass (the options are at the top of the file):
 
   ```sh
-  cargo run --release -p ping-core --example mac-present -- --fps 120 --secs 10
+  cargo run --release -p helio-client --example mac-present -- --fps 120 --secs 10
   ```
 
 - **Host capture to the client's screen** is measured directly: the two
-  machines' clocks are related through the ping/pong exchange the stream
+  machines' clocks are related through the ping exchange the stream
   already runs (every 500 ms; as in NTP, the sample with the shortest round
   trip of the last 16 sets the offset).
 - **Impairing the link** without network tools: see
-  [development.md](development.md#test-hooks) (`PING_TEST_LOSS`,
-  `PINGPONG_TEST_WIRE_LOSS`, ...).
+  [development.md](development.md#test-hooks) (`HELIO_TEST_LOSS`,
+  `HELIO_TEST_WIRE_LOSS`, ...).
 
 Micro-benchmark numbers below: Apple M4 Pro, rustc 1.98.1, 2026-09-27.
 
@@ -79,7 +79,7 @@ brackets):
 | Reassemble, no loss | 0.08 µs (0.48) | 1.2 µs (5.6) | 25 µs (88) |
 | Reassemble, one datagram lost per FEC block | 101 µs (102) | 119 µs (126) | 675 µs (763) |
 
-`cargo bench -p pingpong-decode` measures the Annex-B split every frame
+`cargo bench -p helio-decode` measures the Annex-B split every frame
 goes through before VideoToolbox: 2.5 µs for a 120 KB frame (a SIMD
 start-code search), where the byte-at-a-time loop took 33 µs.
 
@@ -126,12 +126,12 @@ packet to complete frame 1–1.6 ms, decode 1.5–2 ms.
 
 ### Recording the screen (macOS client)
 
-Measured 2026-10-07 with `ping-core`'s `mac-present` (synthetic frames
+Measured 2026-10-07 with `helio-client`'s `mac-present` (synthetic frames
 through the stream window and renderer, no host or decoder; each frame
 handed over up to 3 ms late), on the MacBook's built-in 120 Hz display at
 3600x2338, V-Sync on, full screen. "Recorded" is `screencapture -V` running
 through the whole run; "a window over it" is a small window above the
-stream for 4 s, as a recorder's controls or a dialog would be. Before is Ping
+stream for 4 s, as a recorder's controls or a dialog would be. Before is Helio
 0.8.2, which let one frame at a time wait for the glass full screen; after,
 three while the trips to the glass say the picture is composited.
 
@@ -158,11 +158,11 @@ streams with a recording running, through CleanShot X: 39 of 60 and 40 of
 
 Measured 2026-10-28 with `mac-present` (frames handed over on time), on the
 MacBook's built-in 120 Hz display at 3600x2338, V-Sync on, 10 s runs.
-Before is Ping with Pong's window still an app of its own; after is the one
-app, in asides' glass. The stream's code (`ping-core`, `pingpong-decode`,
-`pingpong-proto`) and its dependencies' versions are the same in both, so
+Before is Helio with Helio Host's window still an app of its own; after is the one
+app, in asides' glass. The stream's code (`helio-client`, `helio-decode`,
+`helio-proto`) and its dependencies' versions are the same in both, so
 this checks that nothing new reaches the stream: "glass window beside it"
-is Ping's main window open on a settings page next to the stream's.
+is Helio's main window open on a settings page next to the stream's.
 Figures are a run's steady seconds (seconds composited because something
 was over the stream for a moment are left out).
 
@@ -179,7 +179,7 @@ run's figure is steady, and runs differ by up to one refresh (8.3 ms),
 before as after (full screen at 120 fps, a run sits at about 6–7 or
 13–14 ms). The glass window's blur is the WindowServer's, for that window
 alone; the stream's window stays opaque. `mac-present` does not load
-`pingpong-ui`; in the app, its change to GPUI's blending
+`helio-ui`; in the app, its change to GPUI's blending
 (`glass::blend_alpha_over`) acts once, as Metal makes a pipeline, and
 leaves the stream's renderer's pipelines as they are.
 
@@ -187,7 +187,7 @@ leaves the stream's renderer's pipelines as they are.
 
 Apollo streams with Sunshine's video path and adds the virtual display at
 the client's mode, which is what made it the like-for-like host to measure
-Pong against (Sunshine itself streams a physical display). Not measured
+Helio Host against (Sunshine itself streams a physical display). Not measured
 yet: Sunshine's own newer settings (split-frame NVENC on GPUs with two
 encoders), which do not apply to this host's single-encoder RTX 3070 Ti.
 
@@ -195,12 +195,12 @@ encoders), which do not apply to this host's single-encoder RTX 3070 Ti.
 100 Mbit/s, HEVC, 7.1 audio, V-Sync and frame pacing on; 60 fps noise on
 the host; the Mac on Wi-Fi to the host on the LAN (the host on Wi-Fi too).
 Moonlight 5.x against Apollo's "Virtual Display" app, its end-of-stream
-"Global video stats"; Ping against Pong, the per-second statistics
+"Global video stats"; Helio against Helio Host, the per-second statistics
 averaged over 30 s. The Mac's display was asleep, so neither side's
 presentation times are what a person watching would see; they compare
 with each other.
 
-| | Moonlight + Apollo | Ping + Pong |
+| | Moonlight + Apollo | Helio + Helio Host |
 |---|---|---|
 | Frames received / decoded | 110.9 fps | 117.6 fps |
 | Frames shown | 110.0 fps | 115.6 fps |
@@ -211,19 +211,19 @@ with each other.
 
 The round trips are not measured alike. Moonlight's is ENet's smoothed
 estimate on its control channel ("variance: 0 ms"), while the same run logs
-single control messages at 109 ms. Ping's is each second's raw ping
+single control messages at 109 ms. Helio's is each second's raw ping
 through the tunnel, queued behind the video. A second run the same evening:
 Moonlight 105.4 fps received, 0.45% of frames lost and 0.79% dropped for
-jitter, "9 ms"; Ping 108.6 fps shown, round trip 24 ms median, 58 ms p90
+jitter, "9 ms"; Helio 108.6 fps shown, round trip 24 ms median, 58 ms p90
 under 113 Mbit/s of noise and 10.6 ms with a light scene (8.5 Mbit/s).
 
 Not done: Sunshine's network priority, a qWAVE flow of type AudioVideo
-(WMM's video category on Wi-Fi). qWAVE won't take Pong's dual-stack socket
+(WMM's video category on Wi-Fi). qWAVE won't take Helio Host's dual-stack socket
 with an IPv4 client, neither IPv4-mapped (ERROR_NOT_FOUND) nor as IPv4
 (ERROR_INVALID_PARAMETER). Sunshine's sockets are IPv4-only by default.
 It would take an IPv4 socket of its own, or a system QoS policy on the host.
 
-Ping's frame pacing first ran on a `CAMetalDisplayLink`: 20.3 ms decode to
+Helio's frame pacing first ran on a `CAMetalDisplayLink`: 20.3 ms decode to
 glass here, because the link hands out its drawable a refresh or more
 ahead of the one it targets. It is now Moonlight's pacer -- a
 `CVDisplayLink` tick, on which the oldest queued frame is drawn and shown
@@ -247,7 +247,7 @@ With the display awake, presentation was slower than the asleep-display
 runs above had shown: decode to glass 28.9 ms presenting on decode, 27.7
 ms with frame pacing. At 120 fps on the 120 Hz panel, a burst filled the
 layer's three drawables and nothing drained them, so every frame was shown
-two refreshes late (at 60 fps, which the panel drains, it was 10 ms). Ping
+two refreshes late (at 60 fps, which the panel drains, it was 10 ms). Helio
 now draws a frame only when fewer than one (with pacing, two) wait for a
 refresh:
 
@@ -270,15 +270,15 @@ present on decode:
 | 60 fps: shown, decode to glass | 40 of 60 (1080p, 34 ms) | 60 of 60, 22.8 ms | 60 of 60, 21.6 ms |
 | 120 fps: shown, decode to glass | | 80 of 118, 31 ms | 118 of 119, 24-26 ms |
 
-Controller rumble, the game's XInputSetState to Ping's haptics call: ~7 ms
+Controller rumble, the game's XInputSetState to Helio's haptics call: ~7 ms
 (the two machines' clocks differ by ~207 ms, corrected with time.apple.com).
 
 ## Capture to glass
 
 The overlay's last line, "Host capture to screen", measures it directly:
 from the host picking up a captured frame to Metal reporting it on the Mac's
-display. The two machines' clocks are related through the Ping/Pong exchange
-the stream already runs (every 500 ms): a Pong's header carries the host's
+display. The two machines' clocks are related through the ping exchange
+the stream already runs (every 500 ms): a ping reply's header carries the host's
 clock when it replied, and as in NTP the sample with the shortest round trip
 of the last 16 sets the offset.
 
@@ -295,7 +295,7 @@ need a photodiode or a 240 fps camera on both screens.
 
 35 minutes, 1080p60 moving scene with audio, every received datagram
 (handshakes included) dropped at 2% in bursts of 3 and handshake datagrams
-at a further 30% (`PINGPONG_TEST_WIRE_LOSS=2:3 PINGPONG_TEST_HANDSHAKE_LOSS=30`
+at a further 30% (`HELIO_TEST_WIRE_LOSS=2:3 HELIO_TEST_HANDSHAKE_LOSS=30`
 on the client), so each of the ~17 rekeys had to survive lost messages:
 
 - No session interruptions: no IDR requests, no renegotiation, no lost contact.
@@ -317,16 +317,16 @@ exactly this pattern; not yet confirmed here by turning it off
 ## Starting a stream
 
 From launching the client to the first frame, host monitor asleep, Mac on
-Wi-Fi. Ping: 15 consecutive start/stop cycles (10 at 3024×1890@120, 100 Mbps,
+Wi-Fi. Helio: 15 consecutive start/stop cycles (10 at 3024×1890@120, 100 Mbps,
 7.1 audio; 5 at 1080p60), Apollo stopped. Moonlight: one start of the Desktop
 app at the same settings.
 
 | | Launch → first frame |
 |---|---|
-| Ping → Pong | 5.6–7.0 s, typically 6.1 s; 15 of 15 started |
+| Helio → Helio Host | 5.6–7.0 s, typically 6.1 s; 15 of 15 started |
 | Moonlight → Apollo | ~5 s |
 
-Where Pong's time goes (3024×1890@120):
+Where Helio Host's time goes (3024×1890@120):
 
 | Step | ms |
 |---|---|
@@ -354,13 +354,13 @@ Asleep or switched off, the monitor is still on the cable, and Windows
 spends ~3.7 s on it whenever the arrangement changes.
 
 That wait is also why every session failed once Apollo was stopped: SudoVDA
-removes a monitor 3 s after the last ping. Pong pinged only between display
-calls, and Apollo's own pings had kept the monitor alive. The keepalive now
-starts before the monitor is added.
+removes a monitor 3 s after the last ping. Helio Host pinged only between
+display calls, and Apollo's own pings had kept the monitor alive. The
+keepalive now starts before the monitor is added.
 
 ## Optimization pass (2026-09-30)
 
-Ping (Mac, Wi-Fi) against Pong (the Windows host, Ethernet): 3024x1890 at
+Helio (Mac, Wi-Fi) against Helio Host (the Windows host, Ethernet): 3024x1890 at
 120 fps, 100 Mbit/s, HEVC, full screen, 60 fps noise on the host, about 114
 Mbit/s on the wire. Each figure is the
 average of a run's middle 24-26 seconds; A and B were run back to back.
@@ -371,7 +371,7 @@ average of a run's middle 24-26 seconds; A and B were run back to back.
 | Client: full screen asked again when macOS refuses it (a stream started just as another left its Space) | such sessions ran in a window, decode to glass 22-28 ms; now full screen, 8-10 ms |
 | Client: SIMD Annex-B split, the AVCC sample written straight into the block buffer | decode 2.36-2.51 -> 2.24-2.36 ms |
 | Client: reassembly into reused buffers (no allocation per datagram) | see the table above |
-| Host: sends batched, 16 datagrams per call (USO on Windows, GSO on Linux, `sendmsg_x` on macOS); packetizing into one reused buffer | pong.exe 24-25% of a core -> 13-18%, frame delivery unchanged (1.6 ms) |
+| Host: sends batched, 16 datagrams per call (USO on Windows, GSO on Linux, `sendmsg_x` on macOS); packetizing into one reused buffer | helio-host.exe 24-25% of a core -> 13-18%, frame delivery unchanged (1.6 ms) |
 | Host: 64 datagrams per call (a whole pacing group) | the same CPU, but frames 1 ms later: a call that large held the sender until it was all on the wire |
 | LAN-sized shards (1400-byte payloads on the local network, as Moonlight's 1392) | the client's receive thread 33% -> 31% of a core at the same rate; latency unchanged |
 | Client: user-interactive QoS on the stream's threads | no change measured (the receive thread still runs mostly on efficiency cores); real-time scheduling did no better |
@@ -387,27 +387,27 @@ what comes with waking); ChaCha20-Poly1305 1%; Metal's command submission
 datagrams saved less than their count suggests: the kernel's cost follows
 the Wi-Fi bursts more than the datagrams.
 
-Idle: Pong's session thread ticks every 100 ms between sessions (was 8 ms);
-Ping polls its host list every 30 s while in the background (every 4 s in
-front): Ping.app hidden went from about 160 wakeups a second to about 90.
+Idle: Helio Host's session thread ticks every 100 ms between sessions (was 8 ms);
+Helio polls its host list every 30 s while in the background (every 4 s in
+front): Helio.app hidden went from about 160 wakeups a second to about 90.
 
-Switches for diagnosis: `PINGPONG_SEND_BATCH=N` (0: one datagram per call),
-`PINGPONG_RECV_BATCH=N` (0: one per call), `PINGPONG_LAN_SHARDS=0` (client:
-path-sized datagrams on the LAN too), `PINGPONG_SERVICE_CLASS=0` (see
+Switches for diagnosis: `HELIO_SEND_BATCH=N` (0: one datagram per call),
+`HELIO_RECV_BATCH=N` (0: one per call), `HELIO_LAN_SHARDS=0` (client:
+path-sized datagrams on the LAN too), `HELIO_SERVICE_CLASS=0` (see
 [cli.md](cli.md#environment-variables)).
 
-## Ping 0.8.0 against 0.7.0 (2026-10-05)
+## Helio 0.8.0 against 0.7.0 (2026-10-05)
 
 Whether the renderer's HDR and 4:4:4 paths cost an SDR stream anything, and
 what the Windows host's streaming set-up (full GPU power, a 1 ms timer, DWM
-under MMCSS, Wi-Fi in media-streaming mode) does to host processing. Ping
-(Mac, Wi-Fi) against Pong 0.8.0 (the Windows host, Wi-Fi), through a VPN
+under MMCSS, Wi-Fi in media-streaming mode) does to host processing. Helio
+(Mac, Wi-Fi) against Helio Host 0.8.0 (the Windows host, Wi-Fi), through a VPN
 overlay rather than the LAN: 3024x1890 at 120 fps, 100 Mbit/s, HEVC, 7.1
 audio, frame pacing on, full screen, 60 fps noise on the host. Two pairs of
 runs, 0.7.0 then 0.8.0 and then the other way round; each figure is a run's
 62 s under load.
 
-| | Ping 0.7.0 | Ping 0.8.0 |
+| | Helio 0.7.0 | Helio 0.8.0 |
 |---|---|---|
 | Frames received | 116.8-118.4 fps | 117.3-117.7 fps |
 | Frames shown | 111.6 fps | 110.9-111.6 fps |

@@ -43,16 +43,16 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace --no-fail-fast
-      # Ping.app with Pong Host.app inside, signed ad hoc, inside out.
+      # Helio.app with Helio Host.app inside, signed ad hoc, inside out.
       - name: The app, packaged
         run: tools/package-macos
         env:
-          PINGPONG_PROFILE: dev
+          HELIO_PROFILE: dev
       - name: One archive, the host inside it
         run: |
           ls target/dist
           [ "$(ls target/dist | wc -l)" -eq 1 ]
-          unzip -l target/dist/Ping-*-macos-arm64.zip | grep -q 'Ping.app/Contents/Helpers/Pong Host.app/Contents/MacOS/pong'
+          unzip -l target/dist/Helio-*-macos-arm64.zip | grep -q 'Helio.app/Contents/Helpers/Helio Host.app/Contents/MacOS/helio-host'
 
   windows:
     name: Windows
@@ -86,7 +86,7 @@ jobs:
         shell: pwsh
         run: ./tools/package-windows.ps1
         env:
-          PINGPONG_PROFILE: dev
+          HELIO_PROFILE: dev
       - name: One archive, the host inside it
         shell: pwsh
         run: |
@@ -95,7 +95,7 @@ jobs:
           if ($zips.Count -ne 1) { throw "$($zips.Count) archives, not one" }
           Add-Type -AssemblyName System.IO.Compression.FileSystem
           $names = [IO.Compression.ZipFile]::OpenRead($zips[0].FullName).Entries.FullName
-          foreach ($file in 'Ping.exe', 'pong.exe', 'install.ps1') {
+          foreach ($file in 'Helio.exe', 'helio-host.exe', 'install.ps1') {
             if ($names -notcontains $file) { throw "no $file in $($zips[0].Name)" }
           }
 
@@ -119,20 +119,20 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       # The host on its own: it and the GPUI apps ask one dependency for
       # different async runtimes (docs/development.md).
-      - run: cargo clippy --workspace --exclude pong --all-targets -- -D warnings
-      - run: cargo clippy -p pong --all-targets -- -D warnings
+      - run: cargo clippy --workspace --exclude helio-host --all-targets -- -D warnings
+      - run: cargo clippy -p helio-host --all-targets -- -D warnings
       # The GPUI apps linked two at a time at most: more can run the runner
       # out of memory.
-      - run: cargo test --workspace --exclude pong -j 2 --no-fail-fast
-      - run: cargo test -p pong --no-fail-fast
+      - run: cargo test --workspace --exclude helio-host -j 2 --no-fail-fast
+      - run: cargo test -p helio-host --no-fail-fast
       - name: The app, packaged
         run: tools/linux/package
         env:
-          PINGPONG_PROFILE: dev
+          HELIO_PROFILE: dev
       - name: One archive, the host inside it
         run: |
           ls target/dist
           [ "$(ls target/dist | wc -l)" -eq 1 ]
-          tar -tzf target/dist/Ping-*-linux-x86_64.tar.gz | sort | tee /dev/stderr |
-            grep -c '/\(ping-app\|pong\|pong.service\|install.sh\|dev.pingpong.Ping.desktop\)$' |
+          tar -tzf target/dist/Helio-*-linux-x86_64.tar.gz | sort | tee /dev/stderr |
+            grep -c '/\(helio-app\|helio-host\|helio-host.service\|install.sh\|dev.mihaicristian.helio.desktop\)$' |
             grep -qx 5

@@ -1,12 +1,12 @@
 # A release, from every push to main that changes the programs: the app, with
 # the host's engine inside it, built on macOS (Apple silicon and Intel),
-# Windows and Linux, one archive per system and architecture (Ping-VERSION-
+# Windows and Linux, one archive per system and architecture (Helio-VERSION-
 # OS-ARCH), each the artifact of its job, and published as the website's
 # downloads (tools/publish-downloads: Cloudflare R2, served at
-# download.pingpong.mihaicristian.dev; the website is on the landing-page
+# download.helio.mihaicristian.dev; the website is on the landing-page
 # branch). When the workspace's version (Cargo.toml's [workspace.package])
 # has no tag yet, the same archives become the GitHub release vVERSION too,
-# and a pull request brings the Homebrew cask (Casks/ping.rb) to it (main
+# and a pull request brings the Homebrew cask (Casks/helio.rb) to it (main
 # takes changes only through pull requests). So releasing a version is
 # merging the change that sets it.
 #
@@ -110,7 +110,7 @@ jobs:
           fi
           printf '%s\n' "$API_KEY" > "$RUNNER_TEMP/AuthKey.p8"
           {
-            echo "PINGPONG_SIGN_IDENTITY=$identity"
+            echo "HELIO_SIGN_IDENTITY=$identity"
             echo "APPLE_API_KEY_PATH=$RUNNER_TEMP/AuthKey.p8"
             echo "APPLE_API_KEY_ID=$API_KEY_ID"
             echo "APPLE_API_ISSUER=$API_ISSUER"
@@ -136,7 +136,7 @@ jobs:
       - name: Rust
         run: rustup toolchain install stable --profile minimal && rustup default stable
       # As in ci.yml: FFmpeg's current shared build (its DLLs go beside
-      # Ping.exe), and LLVM's libclang (on the runner already).
+      # Helio.exe), and LLVM's libclang (on the runner already).
       - name: FFmpeg
         shell: pwsh
         env:
@@ -237,7 +237,7 @@ jobs:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
           gh release create "v$VERSION" dist/* --target "$GITHUB_SHA" \
-            --title "pingpong $VERSION" --generate-notes
+            --title "Helio $VERSION" --generate-notes
       - name: The cask, at the new version, as a pull request
         if: steps.version.outputs.new
         env:
@@ -250,10 +250,10 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git switch -c "$branch"
           git add Casks
-          git commit -m "Casks: Ping $VERSION" \
+          git commit -m "Casks: Helio $VERSION" \
             -m "The release's archives and their checksums, from the release workflow."
           git push origin "$branch"
-          gh pr create --base main --head "$branch" --title "Casks: Ping $VERSION" \
+          gh pr create --base main --head "$branch" --title "Casks: Helio $VERSION" \
             --body "The Homebrew cask at release v$VERSION: its archives and their checksums. Merging this is what makes \`brew upgrade\` see the release."
           # GitHub holds the CI run of a pull request a workflow opened until
           # someone approves it, and main merges only on that run's checks

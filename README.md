@@ -1,13 +1,13 @@
-# pingpong
+# Helio
 
 Stream a computer's desktop — games included — to another computer, with the
 latency of Moonlight and Sunshine/Apollo, inside one post-quantum WireGuard
 tunnel.
-**Ping** is the app: it plays your other computers, and with hosting on (a
+**Helio** is the app: it plays your other computers, and with hosting on (a
 switch, off until you turn it on) it lets them play this one, through
-**Pong**, the host. Both run on macOS, Windows and Linux.
+**Helio Host**, the host. Both run on macOS, Windows and Linux.
 
-![This computer in Ping during a session](docs/images/pong-overview.png)
+![This computer in Helio during a session](docs/images/helio-host-overview.png)
 
 - **Moonlight-class streaming**: up to 4K and 120+ fps, HEVC or H.264,
   hardware encode and decode, HDR and YUV 4:4:4, loss repaired by
@@ -26,35 +26,35 @@ switch, off until you turn it on) it lets them play this one, through
   screen, use the keyboard, mouse or controllers, copy and paste each way,
   start apps, take over or watch agents
   ([docs/usage.md](docs/usage.md#what-each-device-may-do)).
-- **AI agents** can use your hosts as clients of their own — from Ping, or
+- **AI agents** can use your hosts as clients of their own — from Helio, or
   from any MCP client — held to rules the host enforces
   ([docs/ai-agents.md](docs/ai-agents.md)).
 
-![An agent session in Ping](docs/images/ping-agent-session.png)
+![An agent session in Helio](docs/images/helio-agent-session.png)
 
 ## Getting started
 
-1. [Install](docs/install.md) Ping on both computers, the one to stream and
-   the one you sit at (the host, Pong, comes inside it): download it for
+1. [Install](docs/install.md) Helio on both computers, the one to stream and
+   the one you sit at (the host, Helio Host, comes inside it): download it for
    macOS, Windows or Linux from
-   [pingpong.mihaicristian.dev](https://pingpong.mihaicristian.dev/#install),
+   [helio.mihaicristian.dev](https://helio.mihaicristian.dev/#install),
    on a Mac with Homebrew
-   (`brew tap mihaicristianfarcas/pingpong https://github.com/mihaicristianfarcas/pingpong`,
-   then `brew install --cask ping`), or build it from source.
-2. On the host, turn hosting on in Ping (setup asks, or **Settings →
-   Hosting**). On the other computer open Ping, click the host, and type
-   the PIN it shows into the host's Ping (**This computer → Devices**).
+   (`brew tap mihaicristianfarcas/helio https://github.com/mihaicristianfarcas/helio`,
+   then `brew install --cask helio`), or build it from source.
+2. On the host, turn hosting on in Helio (setup asks, or **Settings →
+   Hosting**). On the other computer open Helio, click the host, and type
+   the PIN it shows into the host's Helio (**This computer → Devices**).
 3. Click the host again to stream. Ctrl+Alt+Shift+Q ends the stream
-   ([usage](docs/usage.md)). While hosting is on, Ping's icon in the menu
+   ([usage](docs/usage.md)). While hosting is on, Helio's icon in the menu
    bar or the taskbar's notification area says what the host is doing;
-   Ping says when there is an update.
+   Helio says when there is an update.
 
 ## Status
 
 | | Client | Host |
 |---|---|---|
-| macOS 14+ | Ping.app: in daily use | Pong Host, inside Ping.app: works; stereo, or 5.1/7.1 with a surround output ([macOS](docs/platforms/macos.md#sound-in-surround)); no controllers yet |
-| Windows 10/11 | Ping.exe: works; less tested than macOS | PongService: in daily use (best with an NVIDIA GPU and SudoVDA; without them, H.264 in software and the host's own display) |
+| macOS 14+ | Helio.app: in daily use | Helio Host, inside Helio.app: works; stereo, or 5.1/7.1 with a surround output ([macOS](docs/platforms/macos.md#sound-in-surround)); no controllers yet |
+| Windows 10/11 | Helio.exe: works; less tested than macOS | Helio Host, a Windows service: in daily use (best with an NVIDIA GPU and SudoVDA; without them, H.264 in software and the host's own display) |
 | Linux | works under X11 and Wayland; tested in a container | works under X11 and Wayland (portal); scaled, no virtual display |
 
 What is verified and what is not, per platform:
@@ -75,7 +75,7 @@ Security problems: [SECURITY.md](SECURITY.md).
 
 ## Acknowledgements
 
-pingpong follows the lead of [Moonlight](https://moonlight-stream.org) and
+Helio follows the lead of [Moonlight](https://moonlight-stream.org) and
 [Sunshine](https://github.com/LizardByte/Sunshine): where it had to choose
 how streaming should behave, it chose what they do, and says so in its
 comments. Its virtual displays follow
@@ -90,9 +90,9 @@ post-quantum fork of Cloudflare's boringtun; the windows are drawn with
 
 [GPL-3.0](LICENSE): the GNU General Public License, version 3. Two pieces
 of vendored code keep their own licenses: the NVENC type bindings in
-`pingpong-encode/src/nvenc_sys/` (MIT, from NVIDIA's header and the
+`helio-encode/src/nvenc_sys/` (MIT, from NVIDIA's header and the
 `nvidia-video-codec-sdk` crate; see the `LICENSE` there) and the no-op
-profiling shims in `vendor/` (Apache-2.0). The libraries pingpong depends
+profiling shims in `vendor/` (Apache-2.0). The libraries Helio depends
 on are under their own licenses, all compatible with the GPL-3.0
 (`cargo tree` lists them); FFmpeg, where it is used, is linked
 dynamically.

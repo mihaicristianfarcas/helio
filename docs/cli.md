@@ -1,28 +1,28 @@
 # Command line
 
 Everything the apps do can also be done from a terminal: streaming and
-pairing with `ping`, the host with `pong`, AI agents with `ping-agent`. The
-CLIs are built with the apps (`cargo build --release -p ping-core -p pong
--p ping-agent`; the binaries land in `target/release/`).
+pairing with `helio`, the host with `helio-host`, AI agents with `helio-agent`. The
+CLIs are built with the apps (`cargo build --release -p helio-client -p helio-host
+-p helio-agent`; the binaries land in `target/release/`).
 
-## `ping` — the client
+## `helio` — the client
 
 The same streaming code as the app, with a window of the platform's own.
 
 | Command | Does |
 |---|---|
-| `ping identity` | Print this client's public keys (X25519 and ML-KEM-768) |
-| `ping discover` | List hosts on the local network, paired or not |
-| `ping pair HOST[:PORT]` | Pair with a host: shows a PIN to type on the host |
-| `ping pair-agent HOST[:PORT]` | Pair this device's AI agent (a key of its own) |
-| `ping hosts` | List paired hosts |
-| `ping add-host NAME ADDR X25519 MLKEM` | Pair by hand, with the host's keys from `pong identity` |
-| `ping remove-host NAME` | Forget a host |
-| `ping wake NAME` | Send Wake-on-LAN packets to a paired host |
-| `ping stream NAME [FLAGS]` | Stream a paired host |
-| `ping watch NAME [FLAGS]` | Watch the AI agent working on a host |
+| `helio identity` | Print this client's public keys (X25519 and ML-KEM-768) |
+| `helio discover` | List hosts on the local network, paired or not |
+| `helio pair HOST[:PORT]` | Pair with a host: shows a PIN to type on the host |
+| `helio pair-agent HOST[:PORT]` | Pair this device's AI agent (a key of its own) |
+| `helio hosts` | List paired hosts |
+| `helio add-host NAME ADDR X25519 MLKEM` | Pair by hand, with the host's keys from `helio-host identity` |
+| `helio remove-host NAME` | Forget a host |
+| `helio wake NAME` | Send Wake-on-LAN packets to a paired host |
+| `helio stream NAME [FLAGS]` | Stream a paired host |
+| `helio watch NAME [FLAGS]` | Watch the AI agent working on a host |
 
-`ping stream` flags (the defaults come from this display, fitted to the
+`helio stream` flags (the defaults come from this display, fitted to the
 nearest standard aspect ratio as in the app, at 60 fps and Moonlight's
 bitrate for the mode):
 
@@ -53,29 +53,29 @@ Ctrl-C ends the stream properly, as Ctrl+Alt+Shift+Q does, so the host puts
 its displays back at once. The exit status is 1 when the stream ended for a
 reason other than you quitting.
 
-## `pong` — the host
+## `helio-host` — the host
 
 | Command | Does |
 |---|---|
-| `pong` or `pong host` | Run the host in this session. On a Mac the host's LaunchAgent adds `--app PATH`, the app the host came with: the host follows it when it is replaced and turns hosting off when it is gone ([platforms/macos.md](platforms/macos.md#hosting-from-ping-and-its-menu-bar-icon)) |
-| `pong enable` | Turn hosting on: the host starts now and at every start after (see [usage.md](usage.md#hosting-on-and-off)). Windows: as administrator |
-| `pong disable` | Turn hosting off: the host stops and no longer starts. Windows: as administrator |
-| `pong status [--json]` | `off`, `starting`, `on` or `failed` (with why); for `on`, whether the host's web API answers on this computer |
-| `pong identity` | Print the host's public keys |
-| `pong clients` | List paired clients and agents, with what each may do |
-| `pong add-client NAME X25519 MLKEM [--agent] [--permissions LIST]` | Pair a client by hand (headless setups), with the keys from `ping identity` or `ping-agent identity`. Without `--permissions` it gets what pairing gives: everything for the first person's device, see only after it; an agent sees and acts |
-| `pong remove-client X25519` | Unpair a client |
-| `pong permissions X25519 [LIST]` | Show what a paired client may do, or set it. `LIST`: `all`, `none`, `see-only`, or names joined by commas (`view,keyboard,mouse`; the names are in [usage.md](usage.md#what-each-device-may-do)). What a client of its kind cannot have is left out |
-| `pong service` | Windows: the service itself (started by Windows) |
-| `pong clipboard-agent` | Windows: clipboard sharing as the signed-in user (started by the host for a session) |
+| `helio-host` or `helio-host host` | Run the host in this session. On a Mac the host's LaunchAgent adds `--app PATH`, the app the host came with: the host follows it when it is replaced and turns hosting off when it is gone ([platforms/macos.md](platforms/macos.md#hosting-from-helio-and-its-menu-bar-icon)) |
+| `helio-host enable` | Turn hosting on: the host starts now and at every start after (see [usage.md](usage.md#hosting-on-and-off)). Windows: as administrator |
+| `helio-host disable` | Turn hosting off: the host stops and no longer starts. Windows: as administrator |
+| `helio-host status [--json]` | `off`, `starting`, `on` or `failed` (with why); for `on`, whether the host's web API answers on this computer |
+| `helio-host identity` | Print the host's public keys |
+| `helio-host clients` | List paired clients and agents, with what each may do |
+| `helio-host add-client NAME X25519 MLKEM [--agent] [--permissions LIST]` | Pair a client by hand (headless setups), with the keys from `helio identity` or `helio-agent identity`. Without `--permissions` it gets what pairing gives: everything for the first person's device, see only after it; an agent sees and acts |
+| `helio-host remove-client X25519` | Unpair a client |
+| `helio-host permissions X25519 [LIST]` | Show what a paired client may do, or set it. `LIST`: `all`, `none`, `see-only`, or names joined by commas (`view,keyboard,mouse`; the names are in [usage.md](usage.md#what-each-device-may-do)). What a client of its kind cannot have is left out |
+| `helio-host service` | Windows: the service itself (started by Windows) |
+| `helio-host clipboard-agent` | Windows: clipboard sharing as the signed-in user (started by the host for a session) |
 
-`pong enable` and `pong disable` exit with 0 when done, and 1 when they
+`helio-host enable` and `helio-host disable` exit with 0 when done, and 1 when they
 failed (with why on stderr). On Windows, run without an administrator, they
 change nothing and exit with **740** (Windows's `ERROR_ELEVATION_REQUIRED`):
 run the same command again elevated. Where the host runs from on each
 system is in [usage.md](usage.md#hosting-on-and-off).
 
-`pong status --json` prints one line for programs (always exit 0):
+`helio-host status --json` prints one line for programs (always exit 0):
 
 ```json
 {"state":"off"}
@@ -93,22 +93,22 @@ a running host after it restarts; the window and the web UI apply theirs at
 once. On Windows the installed host's data folder is private to SYSTEM and
 Administrators, so these commands need an administrator's terminal there.
 
-## `ping-agent` — AI agents
+## `helio-agent` — AI agents
 
 | Command | Does |
 |---|---|
-| `ping-agent providers` | What can run here, and which provider is chosen |
-| `ping-agent set-key PROVIDER` | Save an API key (`anthropic`, `openai`, `openrouter`, `custom`, or `cloudflare`: the token clef's [screen checks](ai-agents.md#screen-checks-cloudflare-clef) use), read from stdin; an empty line forgets it |
-| `ping-agent check SCREEN.png --click X,Y \| --enter \| --typing N \| --personal` | What clef makes of a screenshot, as a screen check would: its answers, and whether the step would wait |
-| `ping-agent identity` | The agent's public keys (for `pong add-client --agent`) |
-| `ping-agent hosts` | Hosts the agent is paired with |
-| `ping-agent add-host NAME ADDR X25519 MLKEM` | Pair the agent by hand |
-| `ping-agent run --host NAME [FLAGS] TASK` | Run one task, printing each action |
-| `ping-agent converse --host NAME [FLAGS] MESSAGE [--then MESSAGE ...]` | A conversation: each message a turn, on one connection |
-| `ping-agent mcp [FLAGS]` | The MCP server on stdin/stdout (what `Ping mcp` runs) |
-| `ping-agent mcp status` | Each agent this computer has (Claude Code, Codex, OpenCode, ...), and whether the server is in its settings |
-| `ping-agent mcp install APP ... \| --all` | Add the server to those agents' settings (`claude-code`, `codex`, `opencode`, `gemini`, `cursor`, `copilot`, `droid`, `amp`, `kiro`, `claude-desktop`, `diri`); `--all`: every one found here |
-| `ping-agent mcp uninstall APP ... \| --all` | Take it out again |
+| `helio-agent providers` | What can run here, and which provider is chosen |
+| `helio-agent set-key PROVIDER` | Save an API key (`anthropic`, `openai`, `openrouter`, `custom`, or `cloudflare`: the token clef's [screen checks](ai-agents.md#screen-checks-cloudflare-clef) use), read from stdin; an empty line forgets it |
+| `helio-agent check SCREEN.png --click X,Y \| --enter \| --typing N \| --personal` | What clef makes of a screenshot, as a screen check would: its answers, and whether the step would wait |
+| `helio-agent identity` | The agent's public keys (for `helio-host add-client --agent`) |
+| `helio-agent hosts` | Hosts the agent is paired with |
+| `helio-agent add-host NAME ADDR X25519 MLKEM` | Pair the agent by hand |
+| `helio-agent run --host NAME [FLAGS] TASK` | Run one task, printing each action |
+| `helio-agent converse --host NAME [FLAGS] MESSAGE [--then MESSAGE ...]` | A conversation: each message a turn, on one connection |
+| `helio-agent mcp [FLAGS]` | The MCP server on stdin/stdout (what `Helio mcp` runs) |
+| `helio-agent mcp status` | Each agent this computer has (Claude Code, Codex, OpenCode, ...), and whether the server is in its settings |
+| `helio-agent mcp install APP ... \| --all` | Add the server to those agents' settings (`claude-code`, `codex`, `opencode`, `gemini`, `cursor`, `copilot`, `droid`, `amp`, `kiro`, `claude-desktop`, `diri`); `--all`: every one found here |
+| `helio-agent mcp uninstall APP ... \| --all` | Take it out again |
 
 `run` and `converse` flags: `--host NAME` (the default: the only host the
 agent may use), `--provider codex|claude-code|anthropic|openai|openrouter|custom`,
@@ -125,21 +125,21 @@ agent may use), `--provider codex|claude-code|anthropic|openai|openrouter|custom
 answers are exchanged; see [ai-agents.md](ai-agents.md#design-decisions-and-why)),
 `--hold-wait SECS` (how long an action waits while a person has the
 keyboard and mouse), `--data-dir DIR`. `--until` and `--owner-pid` bound a
-run started by Ping.
+run started by Helio.
 
 ## The apps
 
-- `Ping mcp` (or `ping-app mcp`) runs the MCP server, as `ping-agent mcp`;
-  `Ping mcp install`, `uninstall` and `status` add it to other agents'
-  settings, as `ping-agent mcp install` does (see
+- `Helio mcp` (or `helio-app mcp`) runs the MCP server, as `helio-agent mcp`;
+  `Helio mcp install`, `uninstall` and `status` add it to other agents'
+  settings, as `helio-agent mcp install` does (see
   [ai-agents.md](ai-agents.md#3-or-use-your-hosts-from-another-agent-mcp)).
-- On Linux, `ping-app --ping-stream` is the stream's own process, started by
+- On Linux, `helio-app --helio-stream` is the stream's own process, started by
   the app.
-- `Ping --background` (`ping-app --background`) starts the app as its icon
+- `Helio --background` (`helio-app --background`) starts the app as its icon
   only, without the window, when hosting is on, and quits when it is off:
   what Open at login does.
 - Starting the app while it runs shows the copy that runs, and adds none
-  (one copy per data folder: a `PING_DATA_DIR` elsewhere is another app).
+  (one copy per data folder: a `HELIO_DATA_DIR` elsewhere is another app).
 
 ## Environment variables
 
@@ -147,25 +147,25 @@ For everyone:
 
 | Variable | Used by | Does |
 |---|---|---|
-| `RUST_LOG` | all | Log filter, e.g. `info,ping_core::stats=debug` |
-| `PING_DATA_DIR` | Ping, `ping`, `ping-agent` | Ping's data folder |
-| `PONG_DATA_DIR` | Pong, Ping's This computer | Pong's data folder. On a Mac, `pong enable` hands it on to the host it starts |
-| `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `OPENROUTER_API_KEY`, `PING_AGENT_API_KEY` (a custom endpoint) | agents | API keys; win over saved keys |
+| `RUST_LOG` | all | Log filter, e.g. `info,helio_client::stats=debug` |
+| `HELIO_DATA_DIR` | Helio, `helio`, `helio-agent` | Helio's data folder |
+| `HELIO_HOST_DATA_DIR` | Helio Host, Helio's This computer | Helio Host's data folder. On a Mac, `helio-host enable` hands it on to the host it starts |
+| `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `OPENROUTER_API_KEY`, `HELIO_AGENT_API_KEY` (a custom endpoint) | agents | API keys; win over saved keys |
 | `ANTHROPIC_BASE_URL`, `OPENAI_BASE_URL` | agents | Point the API loops at a gateway or proxy |
 | `CLOUDFLARE_AUTH_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` | agents | The Workers AI token and account clef's screen checks use; win over Agent setup's |
-| `PINGPONG_APPEARANCE` | the apps | `light` or `dark`, whatever the system says |
-| `PINGPONG_UPDATE_API` | the apps | Where the update check asks instead of `https://api.github.com` (a mirror, or a test) |
-| `PING_SOFTWARE_DECODE` | Ping on Linux | Decode in software even where VA-API is available |
-| `PONG_CAPTURE` | Pong on Linux | `x11` or `portal`, where the session type is not clear |
+| `HELIO_APPEARANCE` | the apps | `light` or `dark`, whatever the system says |
+| `HELIO_UPDATE_API` | the apps | Where the update check asks instead of `https://api.github.com` (a mirror, or a test) |
+| `HELIO_SOFTWARE_DECODE` | Helio on Linux | Decode in software even where VA-API is available |
+| `HELIO_HOST_CAPTURE` | Helio Host on Linux | `x11` or `portal`, where the session type is not clear |
 
 For diagnosis (see [benchmarks.md](benchmarks.md)):
 
 | Variable | Does |
 |---|---|
-| `PINGPONG_SEND_BATCH=N` | Datagrams per send call (default 16; 0: one at a time) |
-| `PINGPONG_RECV_BATCH=N` | macOS client: datagrams per receive call (default 32; 0: one at a time) |
-| `PINGPONG_LAN_SHARDS=0` | The client asks for path-sized datagrams on the LAN too |
-| `PINGPONG_SERVICE_CLASS=0` | Leave the client's traffic unmarked (not Wi-Fi's voice queue) |
+| `HELIO_SEND_BATCH=N` | Datagrams per send call (default 16; 0: one at a time) |
+| `HELIO_RECV_BATCH=N` | macOS client: datagrams per receive call (default 32; 0: one at a time) |
+| `HELIO_LAN_SHARDS=0` | The client asks for path-sized datagrams on the LAN too |
+| `HELIO_SERVICE_CLASS=0` | Leave the client's traffic unmarked (not Wi-Fi's voice queue) |
 
 For tests, and the ones only tests need, see
 [development.md](development.md#test-hooks).

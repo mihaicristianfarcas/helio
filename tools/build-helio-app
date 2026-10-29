@@ -1,0 +1,100 @@
+#!/usr/bin/env bash
+# Build Helio.app: the app (helio-app) and, inside it, the host it runs when
+# hosting is on (helio-host), as a helper app of its own:
+#
+#   Helio.app/Contents/MacOS/Helio                      the app
+#   Helio.app/Contents/Helpers/Helio Host.app           the host
+#       Contents/MacOS/helio-host
+#
+# The helper has its own bundle identifier (dev.mihaicristian.helio.host) and usage
+# strings, so the permissions the host needs (Screen Recording,
+# Accessibility, System Audio Recording) are granted to it, and the app
+# itself never asks for them. `helio-host enable` copies the helper out of the app
+# into the host's data folder and points the host's LaunchAgent at the copy:
+# macOS files Screen Recording for code inside an app under that app
+# (helio-host/src/hosting/mac.rs).
+#
+#   tools/build-helio-app            -> target/Helio.app
+#   tools/build-helio-app --install  -> also copy it to /Applications
+#
+# Signed inside out, as codesign requires of nested code (never --deep): the
+# helper, then the app around it. With the Developer ID that
+# HELIO_SIGN_IDENTITY names (a release), else the dev identity when there
+# is one, else ad hoc. The bundles' version is the workspace's (Cargo.toml).
+# HELIO_RELEASE=1 makes it a release build, as tools/package-macos does;
+# HELIO_PROFILE=dev builds the debug profile instead (CI's check that the
+# app still packages, without a release build's time).
+set -euo pipefail
+REPO=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+APP="$REPO/target/Helio.app"
+HELPER="$APP/Contents/Helpers/Helio Host.app"
+VERSION=$(sed -n '/^\[workspace.package\]/,/^\[/ s/^version = "\(.*\)"/\1/p' "$REPO/Cargo.toml")
+PROFILE=${HELIO_PROFILE:-release}
+case $PROFILE in
+    dev) OUT="$REPO/target/debug" ;;
+    *) OUT="$REPO/target/$PROFILE" ;;
+esac
+
+export MACOSX_DEPLOYMENT_TARGET=14.0
+# Xcode's Metal compiler, for a release when it is installed: the bundle then
+# carries GPUI's shaders compiled, not their source to compile at every
+# launch. A debug build keeps the default features, as the tests build them.
+FEATURES=()
+XCODE=/Applications/Xcode.app/Contents/Developer
+if [[ $PROFILE != dev ]] && DEVELOPER_DIR=$XCODE xcrun metal --version >/dev/null 2>&1; then
+    export DEVELOPER_DIR=$XCODE
+    FEATURES=(--no-default-features)
+fi
+cargo build --profile "$PROFILE" -p helio-app -p helio-host ${FEATURES[@]+"${FEATURES[@]}"} \
+    --manifest-path "$REPO/Cargo.toml"
+
+# The icons, drawn by code (helio-app/examples/make-icon.rs): Helio's for the
+# app, Helio Host's for the host, which System Settings shows beside its name.
+ICONS="$REPO/target/icon"
+MAKE_ICON="$REPO/helio-app/examples/make-icon.rs"
+if [[ ! -f $REPO/target/AppIcon.icns || ! -f $REPO/target/HelioHost.icns ||
+    $MAKE_ICON -nt $REPO/target/AppIcon.icns ]]; then
+    cargo run --profile "$PROFILE" -q -p helio-app --example make-icon \
+        --manifest-path "$REPO/Cargo.toml" -- "$ICONS"
+    iconutil -c icns "$ICONS/AppIcon.iconset" -o "$REPO/target/AppIcon.icns"
+    iconutil -c icns "$ICONS/HelioHost.iconset" -o "$REPO/target/HelioHost.icns"
+fi
+
+# bundle DIR PLIST PROGRAM NAME ICON: an app bundle with its Info.plist at
+# the workspace's version, its program as NAME and its icon.
+bundle() {
+    mkdir -p "$1/Contents/MacOS" "$1/Contents/Resources"
+    cp "$2" "$1/Contents/Info.plist"
+    /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" \
+        -c "Set :CFBundleVersion $VERSION" "$1/Contents/Info.plist"
+    cp "$3" "$1/Contents/MacOS/$4"
+    cp "$5" "$1/Contents/Resources/"
+}
+
+rm -rf "$APP"
+bundle "$APP" "$REPO/helio-app/macos/Info.plist" "$OUT/helio-app" Helio "$REPO/target/AppIcon.icns"
+bundle "$HELPER" "$REPO/helio-host/macos/Info.plist" "$OUT/helio-host" helio-host "$REPO/target/HelioHost.icns"
+
+# A Developer ID (HELIO_SIGN_IDENTITY, as the release workflow sets it)
+# with the hardened runtime and a secure timestamp, which notarization
+# requires. Else the dev identity when there is one (see
+# tools/dev-signing-identity), so the permissions macOS grants the host
+# survive a rebuild; else ad hoc.
+if [[ -n ${HELIO_SIGN_IDENTITY:-} ]]; then
+    SIGN=(--sign "$HELIO_SIGN_IDENTITY" --options runtime --timestamp)
+else
+    DEV=$("$REPO/tools/dev-signing-identity" --check)
+    SIGN=(--sign "${DEV:--}")
+fi
+codesign --force "${SIGN[@]}" --identifier dev.mihaicristian.helio.host "$HELPER" >/dev/null
+codesign --force "${SIGN[@]}" --identifier dev.mihaicristian.helio "$APP" >/dev/null
+# What Gatekeeper and an update check of the bundle: every nested signature
+# whole, and sealed into the app's.
+codesign --verify --deep --strict "$APP"
+echo "built $APP ($VERSION, $PROFILE)"
+
+if [[ ${1:-} == --install ]]; then
+    rm -rf /Applications/Helio.app
+    cp -R "$APP" /Applications/Helio.app
+    echo "installed /Applications/Helio.app"
+fi

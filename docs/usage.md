@@ -1,4 +1,4 @@
-# Using Ping and Pong
+# Using Helio
 
 Once [installed and paired](install.md), streaming is a click. This page is
 the rest: the shortcuts, the settings on both sides, the clipboard, waking a
@@ -6,10 +6,10 @@ host, reaching it from away, and what to check when something does not work.
 
 ## Streaming
 
-Click a paired host on Ping's **Hosts** page. The stream opens in a window of
+Click a paired host on Helio's **Hosts** page. The stream opens in a window of
 its own — full screen by default — at the resolution, frame rate and bitrate
 set under **Video**; the host sets up a display in exactly that mode for the
-session. Ping's own window stays open beside it. The card's **…** menu (or a
+session. Helio's own window stays open beside it. The card's **…** menu (or a
 right click) has more: **Steam Big Picture** (open Steam's Big Picture on
 the host, and close it after), **Wake**, the host's **web UI**, **Unpair**.
 
@@ -28,7 +28,7 @@ and a key (Ctrl+Option+Shift on a Mac keyboard):
 | Ctrl+Alt+Shift+V | Type this computer's clipboard on the host |
 | Ctrl+Alt+Shift+T | Watching an AI agent: take over its keyboard and mouse, or hand them back |
 
-**A held key repeats** on the host as it does on your keyboard: Ping sends
+**A held key repeats** on the host as it does on your keyboard: Helio sends
 the key once and tells the host your keyboard's repeat delay and rate (System
 Settings > Keyboard on a Mac, the Keyboard control panel on Windows), and a
 Windows or Mac host repeats the key at that pace until you let go, as
@@ -38,12 +38,12 @@ keys itself.
 **The mouse works as in Moonlight.** The pointer you see is the host's
 own, drawn into the picture by the host where its screen shows it: hidden
 when a game hides it, wherever a game, the Steam overlay or a controller
-puts it. Ping sends the mouse's relative motion, which is what games read,
+puts it. Helio sends the mouse's relative motion, which is what games read,
 and the host's pointer follows it with the host's own pointer speed.
 Ctrl+Alt+Shift+M switches to sending positions instead (Moonlight's
 "remote desktop" mouse), which suits the desktop and breaks most games;
-press it again to go back. Against an older Pong, which leaves the
-pointer to the client, Ping draws it and switches between the two modes
+press it again to go back. Against an older Helio Host, which leaves the
+pointer to the client, Helio draws it and switches between the two modes
 by itself, as earlier versions did.
 
 **Screenshots.** Your computer's screenshot shortcuts stay your
@@ -74,7 +74,7 @@ for the host takes over the session (the first is told) unless the host's
 
 ### The statistics
 
-Ctrl+Alt+Shift+S (or `ping stream --stats`) shows Moonlight's figures —
+Ctrl+Alt+Shift+S (or `helio stream --stats`) shows Moonlight's figures —
 incoming, decoded and rendered frame rates, bitrate, frames dropped,
 network round trip, host processing, decode and render times — and one more:
 **host capture to screen**, the time from the host capturing a frame to it
@@ -82,14 +82,14 @@ being on your display, measured with the two machines' clocks related
 through the stream itself. A note in the corner warns while the network is
 losing frames or lagging (**Connection warnings**).
 
-## Ping's settings
+## Helio's settings
 
 Changes to the streaming settings apply to the next stream. ⌘, (Ctrl+, on
 Windows and Linux) opens them.
 
 | Page | Setting | What it does |
 |---|---|---|
-| General | Open at login | With hosting on, Ping's icon from the moment you log in, without its window (a LaunchAgent on a Mac, your `Run` key on Windows; not on Linux). With hosting off, nothing starts |
+| General | Open at login | With hosting on, Helio's icon from the moment you log in, without its window (a LaunchAgent on a Mac, your `Run` key on Windows; not on Linux). With hosting off, nothing starts |
 | | Set Up Again | Setup once more: what this computer is for, what it must allow, how to pair |
 | Hosting | Let my devices play this computer | The hosting switch ([Hosting on and off](#hosting-on-and-off)), with what it needs: on a Mac, Screen Recording and Accessibility for the host; on Windows, whether there are NVIDIA graphics and SudoVDA |
 | Updates | Look for updates | New releases (the default for a packaged release), releases and main (the default for a build from a checkout: also commits on `main` newer than the build's), or off. See [Updates](#updates) |
@@ -115,80 +115,80 @@ Windows and Linux) opens them.
 | | Swap mouse buttons | The left button clicks right on the host, and the right one left (Moonlight's option) |
 | | Reverse scrolling | The wheel and the trackpad scroll the host the other way (Moonlight's option) |
 
-Settings are kept in `settings.toml` in Ping's data folder, beside the paired
+Settings are kept in `settings.toml` in Helio's data folder, beside the paired
 hosts (`hosts.toml`) and this device's keys:
 
-| System | Ping's data folder |
+| System | Helio's data folder |
 |---|---|
-| macOS | `~/Library/Application Support/Ping` |
-| Windows | `%APPDATA%\Ping` |
-| Linux | `~/.config/ping` (`$XDG_CONFIG_HOME/ping`) |
+| macOS | `~/Library/Application Support/Helio` |
+| Windows | `%APPDATA%\Helio` |
+| Linux | `~/.config/helio` (`$XDG_CONFIG_HOME/helio`) |
 
-`PING_DATA_DIR` points Ping (and `ping`, `ping-agent`) elsewhere.
+`HELIO_DATA_DIR` points Helio (and `helio`, `helio-agent`) elsewhere.
 
 ## Hosting on and off
 
-Hosting is one switch, and it is off until you turn it on: in Ping, in
+Hosting is one switch, and it is off until you turn it on: in Helio, in
 **Settings → Hosting** (or in setup, by answering that your devices will
 play this computer). Off, nothing of the host runs on
 your computer: no port is open for streaming, pairing or the web UI,
 nothing is published for finding the host from the internet, and it is not
-announced on the local network. Ping, the client, opens none of these.
+announced on the local network. Helio, the client, opens none of these.
 
 The switch runs the host's own commands, which you can also run yourself:
 
 ```sh
-pong enable     # on: the host starts now, and every time after
-pong disable    # off: the host stops, and no longer starts
-pong status     # off, starting, on or failed (with why)
+helio-host enable   # on: the host starts now, and every time after
+helio-host disable  # off: the host stops, and no longer starts
+helio-host status   # off, starting, on or failed (with why)
 ```
 
-| | `pong enable` | `pong disable` |
+| | `helio-host enable` | `helio-host disable` |
 |---|---|---|
-| macOS | Copies the app bundle `pong` is in (`Ping.app/Contents/Helpers/Pong Host.app`) to `~/Library/Application Support/Pong/Pong Host.app`, and writes the LaunchAgent `~/Library/LaunchAgents/dev.pingpong.Pong.plist`, which runs the host from that copy whenever you are logged in, and starts it now. `pong` outside an app bundle refuses: macOS's Screen Recording and Accessibility permissions belong to that helper app, not to Ping (and for Screen Recording, only to a copy outside Ping.app: [platforms/macos.md](platforms/macos.md#hosting-from-ping-and-its-menu-bar-icon)) | Stops the host, deletes the LaunchAgent and the copy |
-| Windows | As administrator: copies `pong.exe` to `C:\Program Files\Pong` (only administrators can change that folder), checks its signature, and runs it as **PongService**, which starts at boot, before anyone signs in, with Windows Firewall rules for it | As administrator: stops and deletes PongService, its firewall rules and the copy in `C:\Program Files\Pong` |
-| Linux | `systemctl --user enable --now pong`: the host runs in your desktop session, now and at each login (the unit comes with the install, not turned on) | `systemctl --user disable --now pong` |
+| macOS | Copies the app bundle `helio-host` is in (`Helio.app/Contents/Helpers/Helio Host.app`) to `~/Library/Application Support/Helio Host/Helio Host.app`, and writes the LaunchAgent `~/Library/LaunchAgents/dev.mihaicristian.helio.host.plist`, which runs the host from that copy whenever you are logged in, and starts it now. `helio-host` outside an app bundle refuses: macOS's Screen Recording and Accessibility permissions belong to that helper app, not to Helio (and for Screen Recording, only to a copy outside Helio.app: [platforms/macos.md](platforms/macos.md#hosting-from-helio-and-its-menu-bar-icon)) | Stops the host, deletes the LaunchAgent and the copy |
+| Windows | As administrator: copies `helio-host.exe` to `C:\Program Files\Helio Host` (only administrators can change that folder), checks its signature, and runs it as **HelioHost**, which starts at boot, before anyone signs in, with Windows Firewall rules for it | As administrator: stops and deletes HelioHost, its firewall rules and the copy in `C:\Program Files\Helio Host` |
+| Linux | `systemctl --user enable --now helio-host`: the host runs in your desktop session, now and at each login (the unit comes with the install, not turned on) | `systemctl --user disable --now helio-host` |
 
 On Windows the service runs as SYSTEM, the only account that can show and
 control the sign-in screen and UAC prompts. That is why it runs only from
 its own copy in Program Files, never from a folder you (or a program you
 run) can write to, and why turning hosting on or off asks for an
-administrator. Without one, `pong enable` and `pong disable` change nothing
-and exit with code 740, and Ping asks Windows to run them again elevated
+administrator. Without one, `helio-host enable` and `helio-host disable` change nothing
+and exit with code 740, and Helio asks Windows to run them again elevated
 (the UAC prompt). The signature check only warns until Windows releases are signed;
-after that, `pong enable` refuses an engine that is unsigned or was changed
+after that, `helio-host enable` refuses an engine that is unsigned or was changed
 after signing.
 
 On a Mac the host asks for Screen Recording and Accessibility with macOS's
-own prompts as it first starts, as **Pong Host**: System Settings lists it,
-not Ping, under both. Ping's Hosting page says, for each, whether
+own prompts as it first starts, as **Helio Host**: System Settings lists it,
+not Helio, under both. Helio's Hosting page says, for each, whether
 macOS allows it, with a button to its pane of System Settings, and notices
 when it is allowed. After Screen Recording is turned on there, macOS asks
 to quit and reopen the host.
 
-Quitting Ping never stops the host: only the switch does. Uninstalling Ping
+Quitting Helio never stops the host: only the switch does. Uninstalling Helio
 turns hosting off first ([install.md](install.md#uninstalling)). Your
 pairings and settings stay in the data folder either way.
 
 ## This computer and the web UI
 
-With hosting on, Ping's **This computer** pages and **Settings → Hosting**
+With hosting on, Helio's **This computer** pages and **Settings → Hosting**
 and the host's web UI (`https://HOST:47802`) do the same things: see and
 end the session, pair and unpair devices, set what each may do, change the
 host's settings, read its log. This computer is for the host's own screen; the web UI for a
-headless host or another computer. On Windows, Ping signs in to the host
+headless host or another computer. On Windows, Helio signs in to the host
 once with the web UI's admin account.
 
-**Ping's icon** sits in the menu bar on a Mac and in the taskbar's
+**Helio's icon** sits in the menu bar on a Mac and in the taskbar's
 notification area on Windows while hosting is on, with or without the
 window open. Its menu says what the host is doing (ready, streaming to
 whom, starting, stopped), opens the window, names a device asking to pair
-(a notification says so too), and says when a newer Ping exists. With the
+(a notification says so too), and says when a newer Helio exists. With the
 icon there, closing the window leaves the app running behind it (on a Mac,
-without a Dock tile until the window is open again); **Quit Ping** in its
+without a Dock tile until the window is open again); **Quit Helio** in its
 menu quits the app. Either way the host keeps running: it is a service of
-its own (PongService, the LaunchAgent, or the user unit). Linux has no
-single tray to put an icon in, so there closing the window quits Ping, and
+its own (HelioHost, the LaunchAgent, or the user unit). Linux has no
+single tray to put an icon in, so there closing the window quits Helio, and
 the host runs on.
 
 | Page | Setting | Default | `config.toml` |
@@ -199,8 +199,8 @@ the host runs on.
 | | Share the clipboard with clients | on | `clipboard` |
 | Video | NVENC preset | P1 (fastest), as Sunshine | `nvenc_preset` |
 | | Two-pass encoding | on | `nvenc_two_pass` |
-| | Full GPU power for Pong (NVIDIA, after a restart) | on | `nvidia_max_power` |
-| | OpenGL and Vulkan through DXGI (NVIDIA, system-wide while Pong runs, after a restart) | on | `nvidia_dxgi_present` |
+| | Full GPU power for Helio Host (NVIDIA, after a restart) | on | `nvidia_max_power` |
+| | OpenGL and Vulkan through DXGI (NVIDIA, system-wide while Helio Host runs, after a restart) | on | `nvidia_dxgi_present` |
 | | Allow HEVC, Allow AV1 | on | `allow_hevc`, `allow_av1` |
 | | Allow HDR, Allow YUV 4:4:4 (for a client that asks) | on | `allow_hdr`, `allow_yuv444` |
 | | Maximum bitrate, maximum frame rate | the client's choice | `max_bitrate_kbps`, `max_fps` |
@@ -212,34 +212,34 @@ the host runs on.
 | AI agents | Allow paired AI agents | on | `agents` |
 | | Hold after local input | 10 s | `agent_local_input_hold_secs` |
 
-The groups are the web UI's. In Ping, with hosting on, each setting is on
-the settings page of its kind, after Ping's own: the name, taking over and
+The groups are the web UI's. In Helio, with hosting on, each setting is on
+the settings page of its kind, after Helio's own: the name, taking over and
 the Network group in **Settings → Hosting**, under the switch; keeping the
 monitors on and the Video group in **Settings → Video** ("Streaming from
 this PC", "What devices may ask of this PC"); the clipboard in **Settings →
 Input**; the AI agents group in **Settings → Agent setup**. A computer that
 only plays shows none of them. A changed name or port applies after the
 host restarts (the page offers to).
-Pong's data folder holds `config.toml`, its identity, the paired clients,
+Helio Host's data folder holds `config.toml`, its identity, the paired clients,
 the web UI's certificate and account, and `logs/`:
 
-| System | Pong's data folder |
+| System | Helio Host's data folder |
 |---|---|
-| Windows | `C:\ProgramData\Pong` |
-| macOS | `~/Library/Application Support/Pong` |
-| Linux | `~/.config/pong` |
+| Windows | `C:\ProgramData\Helio Host` |
+| macOS | `~/Library/Application Support/Helio Host` |
+| Linux | `~/.config/helio-host` |
 
-`PONG_DATA_DIR` points Pong elsewhere.
+`HELIO_HOST_DATA_DIR` points Helio Host elsewhere.
 
 ## What each device may do
 
 Each paired device has permissions on the host, as Apollo gives each of its
 clients: whether it may see the screen, which input the host takes from it,
-which way the clipboard goes, and more. Set them in Ping, This computer →
+which way the clipboard goes, and more. Set them in Helio, This computer →
 **Devices** (the button beside each device) or in the web UI under
 **Clients**. A change applies at once, to a stream that is running too.
 
-| Permission | Lets the device | Name (`pong permissions`) |
+| Permission | Lets the device | Name (`helio-host permissions`) |
 |---|---|---|
 | See the screen | Stream the screen and sound. Off: the device stays paired, but is turned away | `view` |
 | Start apps | Open an app with the stream, such as Steam Big Picture | `launch` |
@@ -268,7 +268,7 @@ what they could do.
 
 What the device hears:
 
-- Ping says what the host holds back as a stream starts, and when it
+- Helio says what the host holds back as a stream starts, and when it
   changes: "gaming-pc ignores your keyboard, mouse and controllers: this
   device may not use them there."
 - A device that may not stream, start the app it asked for, or watch an
@@ -280,13 +280,13 @@ What the device hears:
   read on the side that may not send them. Sharing that was off when a
   stream started comes on with the next stream.
 
-From a terminal: `pong permissions X25519 view,keyboard,mouse`
-([cli.md](cli.md#pong--the-host)).
+From a terminal: `helio-host permissions X25519 view,keyboard,mouse`
+([cli.md](cli.md#helio-host--the-host)).
 
 ## Updates
 
-Ping says when there is something newer than the copy that runs: a line at
-the foot of the sidebar ("Ping 0.7.0 is available"), and, while hosting is
+Helio says when there is something newer than the copy that runs: a line at
+the foot of the sidebar ("Helio 0.7.0 is available"), and, while hosting is
 on, its icon's menu. Clicking it says what it is, with
 **Install and Restart**: the app downloads the release from GitHub, checks
 it, installs it and opens again. Nothing is downloaded or installed until
@@ -298,8 +298,8 @@ How each system installs it:
 | | The app | The host, while hosting is on |
 |---|---|---|
 | macOS | The app is replaced where it is (Applications), the host inside it too | Sees the new app and restarts on it 15 s later |
-| macOS, installed with Homebrew | `brew upgrade --cask ping`, run for you | Sees the new app and restarts on it 15 s later |
-| Windows | The app's files, `pong.exe` among them, are replaced in its folder; Settings > Apps shows the new version | `pong enable` runs again from the new files: Windows asks for an administrator's permission, and PongService restarts on the new engine. Declined, the host keeps the engine it had until hosting is turned off and on |
+| macOS, installed with Homebrew | `brew upgrade --cask helio`, run for you | Sees the new app and restarts on it 15 s later |
+| Windows | The app's files, `helio-host.exe` among them, are replaced in its folder; Settings > Apps shows the new version | `helio-host enable` runs again from the new files: Windows asks for an administrator's permission, and HelioHost restarts on the new engine. Declined, the host keeps the engine it had until hosting is turned off and on |
 | Linux | The new release's `install.sh` (into `~/.local/bin`) | The host's user service restarts |
 
 The download is checked against the SHA-256 GitHub records for the
@@ -322,18 +322,18 @@ folder.
 ## Sharing the clipboard
 
 Copy on one side, paste on the other: text, images, and files and folders,
-both ways, for as long as your stream runs. Ping asks for it (**Share the
-clipboard**, on by default; `ping stream --no-clipboard` for one stream),
+both ways, for as long as your stream runs. Helio asks for it (**Share the
+clipboard**, on by default; `helio stream --no-clipboard` for one stream),
 and the host agrees unless its **Share the clipboard with clients** is off,
 the ways the device's permissions allow (**Copy from this computer**,
 **Paste to this computer**; see
 [What each device may do](#what-each-device-may-do)).
 
 - Each end watches its own clipboard and sends each new copy: files if there
-  are some, else text, else an image. Ping also sends what is on its
+  are some, else text, else an image. Helio also sends what is on its
   clipboard as the stream starts, so what you copied before connecting
   pastes on the host. Files arrive in a temporary folder
-  (`Ping Clipboard` or `Pong Clipboard`, replaced by the next copy) and are
+  (`Helio Clipboard` or `Helio Host Clipboard`, replaced by the next copy) and are
   put on the clipboard as files, so pasting in Finder or Explorer copies
   them from there.
 - Copies travel inside the tunnel, chunked and acknowledged, under a rate
@@ -347,49 +347,49 @@ does, for places that do not take a paste.
 
 ## Wake-on-LAN
 
-Pong announces its network adapters on the local network, and Ping
+Helio Host announces its network adapters on the local network, and Helio
 remembers them, so an offline host can be woken: **Wake** in the host's
-menu, a click on an offline host, or `ping wake NAME`. The host must be on a
+menu, a click on an offline host, or `helio wake NAME`. The host must be on a
 wired connection with Wake-on-LAN enabled: in its firmware (often called
 "Resume by PCI-E device" or "Wake on LAN"; with ErP off), and in the network
 adapter's settings (power-saving features such as Energy-Efficient Ethernet
-off). Ping must have seen the host on the local network at least once.
+off). Helio must have seen the host on the local network at least once.
 
 ## Away from home
 
 Nothing to set up: with **Allow streaming over the internet** on (the
-default), a paired Ping finds the host through the DHT and connects directly
+default), a paired Helio finds the host through the DHT and connects directly
 through both NATs, from anywhere. The first connection of a session can take
-a few seconds; while Ping is open it keeps the path warm. If both networks
+a few seconds; while Helio is open it keeps the path warm. If both networks
 use symmetric NAT, forward UDP 47800 to the host on its router. How it
 works: [networking.md](networking.md).
 
 The host's card says **Online** away from home too. For up to a minute and
-a half after Ping starts or your computer changes networks, it can say
+a half after Helio starts or your computer changes networks, it can say
 **Checking…** while the host opens its path to you; a click streams all the
 same.
 
 ## When something does not work
 
-- **Ping finds no hosts (macOS).** Allow Ping on the local network: System
+- **Helio finds no hosts (macOS).** Allow Helio on the local network: System
   Settings > Privacy & Security > Local Network.
-- **Windows asks about the firewall.** Allow Ping (and `ping.exe`) on private
-  networks. The host's firewall rules are added by `pong enable`.
-- **"The host did not answer."** Is hosting on there (Ping's **Settings →
-  Hosting** on the host; on Windows, `PongService` in Services)? Is this device still paired (the host's
+- **Windows asks about the firewall.** Allow Helio (and `helio.exe`) on private
+  networks. The host's firewall rules are added by `helio-host enable`.
+- **"The host did not answer."** Is hosting on there (Helio's **Settings →
+  Hosting** on the host; on Windows, `HelioHost` in Services)? Is this device still paired (the host's
   **Devices**)?
-- **The host ignores your keyboard or mouse**, and Ping says so: this
-  device may not use them there. In Pong on the host, **Devices**, give it
+- **The host ignores your keyboard or mouse**, and Helio says so: this
+  device may not use them there. In Helio Host on the host, **Devices**, give it
   **Keyboard** and **Mouse** (or choose **Everything**).
 - **"… does not let this device stream."** Its **See the screen**
-  permission is off: turn it on in Pong on the host, under **Devices**.
+  permission is off: turn it on in Helio on the host, under **This computer → Devices**.
 - **"… did not answer this device's AI agent."** The agent is paired on its
-  own, apart from Ping: if Ping still streams from the host, Pong no longer
-  has the agent. Pair it again with **Allow…** on Ping's **Agents** page.
+  own, apart from Helio: if Helio still streams from the host, Helio Host no longer
+  has the agent. Pair it again with **Allow…** on Helio's **Agents** page.
 - **"The host could not create its virtual display"** (Windows): SudoVDA is
   not installed, or Apollo's service is holding it — stop ApolloService.
 - **A Mac host ignores the keyboard and mouse**, or streams nothing: give
-  Pong Host Accessibility and Screen Recording in System Settings > Privacy
+  Helio Host Accessibility and Screen Recording in System Settings > Privacy
   & Security, then turn hosting off and on.
 - **A Linux host under Wayland shows a dialog every time**, or ignores input:
   answer the desktop's sharing dialog with **Allow Remote Interaction** on;
@@ -398,7 +398,7 @@ same.
   a common cause; see [benchmarks.md](benchmarks.md#long-sessions-and-loss).
 - **Logs** say what happened (never a PIN, password, key or token):
   [ui.md](ui.md#logs) lists where each program writes. `RUST_LOG` widens
-  them, e.g. `RUST_LOG=info,ping_core::stats=debug` for a line of
+  them, e.g. `RUST_LOG=info,helio_client::stats=debug` for a line of
   statistics a second.
 
-The command line (`ping`, `pong`, `ping-agent`) is in [cli.md](cli.md).
+The command line (`helio`, `helio-host`, `helio-agent`) is in [cli.md](cli.md).

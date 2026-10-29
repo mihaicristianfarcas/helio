@@ -1,8 +1,8 @@
 # Security
 
-pingpong gives another computer your screen, keyboard and mouse, so its
+Helio gives another computer your screen, keyboard and mouse, so its
 security matters as much as its latency. This page says how to report a
-problem, and what pingpong does and does not protect against.
+problem, and what Helio does and does not protect against.
 
 ## Reporting a vulnerability
 
@@ -17,7 +17,7 @@ Only the latest code on the default branch is supported.
 
 ## The model
 
-**Transport.** Every packet between Ping and Pong travels inside a
+**Transport.** Every packet between Helio and Helio Host travels inside a
 WireGuard tunnel (pq-boringtun) whose handshake combines X25519 with
 ML-KEM-768 and authenticates both peers with static keys: a recording of the
 traffic stays closed to a future quantum computer. A host accepts handshakes
@@ -32,25 +32,25 @@ port (TCP 47801) serves the local network only.
 
 **The host's web UI and API** (HTTPS on TCP 47802) use a self-signed
 certificate the host makes for itself, and require the admin account the
-first visitor creates (or, from Pong's own window, a token the host writes
+first visitor creates (or, from Helio on the host itself, a token the host writes
 for its own user). It is meant for the local network; do not forward the
 port.
 
 **Secrets at rest.** On macOS and Linux, each device's private keys, the
 agent's API keys and the host's tokens are written readable only by their
-owner (0600). On Windows, Ping's files are in the user's own `%APPDATA%`,
-and the host makes its data folder (`C:\ProgramData\Pong`) private when it
+owner (0600). On Windows, Helio's files are in the user's own `%APPDATA%`,
+and the host makes its data folder (`C:\ProgramData\Helio Host`) private when it
 starts: only SYSTEM, Administrators and the folder's owner can read or write
-it, except `config.toml` and `web-cert.pem`, which Pong's window needs and
+it, except `config.toml` and `web-cert.pem`, which Helio Host's window needs and
 every user may read; the host's tokens are closed to everyone but SYSTEM and
 Administrators. The host uses that folder only if SYSTEM or Administrators
 own it: any user may create it before the host first runs and put an
 account or a device of their own in it, so a folder someone else made is
-moved aside (`Pong.untrusted-…`) and the host starts afresh, in one it
+moved aside (`Helio Host.untrusted-…`) and the host starts afresh, in one it
 creates owned by Administrators and private from the start. Whoever can
 read a device's keys can act as that device: unpair a device you lost.
 
-**The host's privileges.** On Windows, Pong runs as SYSTEM so it can
+**The host's privileges.** On Windows, Helio Host runs as SYSTEM so it can
 capture and control the secure desktop (UAC prompts, the lock screen), as
 Sunshine does. Clipboard files are read and written as the
 signed-in user, not as SYSTEM.

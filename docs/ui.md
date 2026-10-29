@@ -1,18 +1,18 @@
 # The window (GPUI)
 
-One app, Ping, with one window, drawn with
+One app, Helio, with one window, drawn with
 [GPUI](https://github.com/zed-industries/zed/tree/main/crates/gpui), Zed's UI
 framework. Everyone gets the client; hosting is a switch in it, off by
 default. Its look is asides' (`asides-overlay`'s `controls.rs`, which started
-from `pingpong-ui`): glass the window blurs what is behind it through, warm
+from `helio-ui`): glass the window blurs what is behind it through, warm
 grays in dark mode and white in light mode, one hairline weight, a glass pill
 behind what is selected that slides to the next, settings as cards of rows
 that each say what they do, colour kept for status (green live, amber
 attention, red danger), and asides' soft blue (`#c2d6f6`) for the one main
 action on a page. Light and dark follow the system
-(`PINGPONG_APPEARANCE=light|dark` overrides it).
+(`HELIO_APPEARANCE=light|dark` overrides it).
 
-- **`pingpong-ui`**: the theme (`Theme`, `Ink`, `Radius`, `Type`,
+- **`helio-ui`**: the theme (`Theme`, `Ink`, `Radius`, `Type`,
   `Metrics`), the glass (`glass`), how things move (`motion`: what opens
   fades in 140 ms, rising a few points; a width eases in 100 ms; both eased
   out, cubic; `Glide`, the sliding pill), the keyboard (`focus`: Tab order,
@@ -26,8 +26,8 @@ action on a page. Light and dark follow the system
   the menu bar a Mac app has (`menus`), the tray icon (`tray`), one running
   copy per data folder (`instance`), starting at login (`login`), the About
   panel and the Dock (`desktop`), and the update check's notice, sheet and
-  settings (`updates`, over `pingpong-update`).
-- **`ping-app`**: the app. `host/` is This computer: the host's pages, a
+  settings (`updates`, over `helio-update`).
+- **`helio-app`**: the app. `host/` is This computer: the host's pages, a
   client of its web API (`api.rs`, `worker.rs`, `link.rs`), the hosting
   switch (`switch.rs`) and the host's icon (`tray.rs`).
 
@@ -64,13 +64,13 @@ Linux keeps the system's title bar.
 A sidebar on the glass, as asides': **Hosts**; **This computer**; **Agents**
 (**New Session**, the Agents page) and the open **Sessions**; the
 **Settings** pages; at its foot the version,
-or "Looking for hosts…", and above it a line when a newer Ping exists. The
+or "Looking for hosts…", and above it a line when a newer Helio exists. The
 pages are one stop for Tab, the arrows going up and down them, each shown as
 the keyboard comes to it; each page fades in as it is picked, as the pill
 slides to it. ⌘1, ⌘2 and ⌘3 go to Hosts, This computer and Agents, ⌘,
 to Settings (Ctrl on Windows and Linux).
 
-On a Mac the menu bar is a Mac app's: **Ping** (About, Check for Updates,
+On a Mac the menu bar is a Mac app's: **Helio** (About, Check for Updates,
 Settings, Services, Hide, Quit), **File** (Add Host ⌘N, Look for Hosts
 Again ⌘R, Close Window ⌘W), **Edit** (cut, copy and paste in the text
 fields), **View** (the pages), **Window** and **Help** (the documentation,
@@ -94,9 +94,9 @@ the logs, reporting an issue).
     and agents, each with a button that names what it may do and opens the
     sheet that sets each permission, and unpairable.
   - **Logs**: the last 400 lines of the host's log, following its end.
-- **Settings**: Ping's own pages, **Hosting** with the switch and what the
+- **Settings**: Helio's own pages, **Hosting** with the switch and what the
   system must allow for it. While hosting is on, the host's own settings
-  follow Ping's on the page of their kind (`HostPages::settings_for`): its
+  follow Helio's on the page of their kind (`HostPages::settings_for`): its
   name, taking over and network on Hosting, its encoder and limits on
   Video, its clipboard on Input, what agents may do on it on Agent setup.
   They save as they change (text fields on Return); encoder settings a Mac
@@ -128,7 +128,7 @@ along the top, the step, and Back, Skip and Continue at the bottom.
    from here (the client only), Let my devices play this one, or Both.
 3. **Permissions**, for hosting only: the switch, and what the system must
    allow, each said in a line before it is asked. On a Mac, Screen
-   Recording and Accessibility for the host (Pong), which macOS asks for as
+   Recording and Accessibility for the host (Helio Host), which macOS asks for as
    the host starts, each with a button to its pane of System Settings and
    marked Allowed as soon as the host says so. On Windows, the administrator
    UAC asks for once, and whether there are NVIDIA graphics (else it
@@ -144,13 +144,13 @@ administrator.
 
 ### Hosting, and the app's icon
 
-The switch runs the host's own commands: `pong enable`, `pong disable` and
-`pong status --json` ([cli.md](cli.md)). The host is `Pong Host.app` on a
+The switch runs the host's own commands: `helio-host enable`, `helio-host disable` and
+`helio-host status --json` ([cli.md](cli.md)). The host is `Helio Host.app` on a
 Mac, inside this app's bundle under `Contents/Helpers` (for a build run
-from `target/`, inside `target/Ping.app`), `pong.exe` beside the app or in
-`C:\Program Files\Pong` on Windows, and `pong` beside the app or on the
+from `target/`, inside `target/Helio.app`), `helio-host.exe` beside the app or in
+`C:\Program Files\Helio Host` on Windows, and `helio-host` beside the app or on the
 `PATH` on Linux. On Windows,
-when `pong` says it needs an administrator (exit code 740), the app runs it
+when `helio-host` says it needs an administrator (exit code 740), the app runs it
 again through UAC and says it waits for Windows meanwhile. The state is
 asked again when something says it may have changed (the app starting, a
 switch made, the host's API coming or going, the window coming forward),
@@ -159,7 +159,7 @@ never on a timer.
 While hosting is on, the app shows the host's icon, in the menu bar on a Mac
 and the notification area on Windows: what the host is doing, a device
 asking to pair (also a system notification, unless the window is in front),
-Open Ping, Check for Updates, Quit Ping. With the icon there, closing the
+Open Helio, Check for Updates, Quit Helio. With the icon there, closing the
 window leaves the app running behind it (on a Mac, without a Dock tile until
 the window opens again); with hosting off, closing the window quits.
 Quitting the app never stops the host. Linux has no tray: closing the window
@@ -182,7 +182,7 @@ token:
   is readable by SYSTEM and Administrators only, so an app that is not
   elevated **signs in once** with the web UI's admin account (creating it
   if there is none yet). It gets an app token, which it keeps in the user's
-  profile (`%APPDATA%\Pong\app-token`) and the host keeps hashed
+  profile (`%APPDATA%\Helio Host\app-token`) and the host keeps hashed
   (`app-tokens.toml`). Signing out drops it on both sides.
 
 `POST /api/app-token` (user, password, optional `setup` to create the
@@ -197,12 +197,12 @@ Each program writes its own, and never a PIN, password, key or token:
 
 | Program | Where |
 |---|---|
-| Ping | `~/Library/Logs/Ping/ping.log` (macOS), `%LOCALAPPDATA%\Ping\Logs\ping.log` (Windows), `~/.local/state/ping/ping.log` (Linux); the previous two launches' beside it |
-| Pong (the host) | `logs/pong.log.DATE` in its data folder (`C:\ProgramData\Pong\logs` for the service) |
-| `ping`, `ping-agent`, `Ping mcp` | stderr |
+| Helio | `~/Library/Logs/Helio/helio.log` (macOS), `%LOCALAPPDATA%\Helio\Logs\helio.log` (Windows), `~/.local/state/helio/helio.log` (Linux); the previous two launches' beside it |
+| Helio Host (the host) | `logs/helio-host.log.DATE` in its data folder (`C:\ProgramData\Helio Host\logs` for the service) |
+| `helio`, `helio-agent`, `Helio mcp` | stderr |
 
 `RUST_LOG` narrows or widens any of them (for example
-`RUST_LOG=info,ping_core::input=trace` logs each input event sent).
+`RUST_LOG=info,helio_client::input=trace` logs each input event sent).
 
 ## GPUI
 
@@ -217,16 +217,16 @@ xcb development packages (see [install.md](install.md#building-from-source)).
 
 ## Checking it without clicking
 
-`PING_UI_DEMO` drives the window through a list of steps and can save it as
+`HELIO_UI_DEMO` drives the window through a list of steps and can save it as
 a PNG (on a Mac, `screencapture` of the window), so a change to the UI can
 be checked, and compared with before, without a person:
 
 ```sh
-PING_UI_DEMO=settings=video,snapshot=/tmp/video.png,quit target/debug/ping-app
-PING_UI_DEMO=agents=sample,snapshot=/tmp/session.png,quit target/debug/ping-app
-PING_UI_DEMO=setup=use,snapshot=/tmp/setup.png,quit target/debug/ping-app
-PING_UI_DEMO=hosting=on,host-sample,host=devices,snapshot=/tmp/devices.png,quit target/debug/ping-app
-PING_UI_DEMO=hosting=on,host-sample,host=devices,permissions=macbook,open=permissions-preset,snapshot=/tmp/menu.png,quit target/debug/ping-app
+HELIO_UI_DEMO=settings=video,snapshot=/tmp/video.png,quit target/debug/helio-app
+HELIO_UI_DEMO=agents=sample,snapshot=/tmp/session.png,quit target/debug/helio-app
+HELIO_UI_DEMO=setup=use,snapshot=/tmp/setup.png,quit target/debug/helio-app
+HELIO_UI_DEMO=hosting=on,host-sample,host=devices,snapshot=/tmp/devices.png,quit target/debug/helio-app
+HELIO_UI_DEMO=hosting=on,host-sample,host=devices,permissions=macbook,open=permissions-preset,snapshot=/tmp/menu.png,quit target/debug/helio-app
 ```
 
 The steps: `settings[=general|video|audio|input|agents|hosting|updates]`,
@@ -257,17 +257,17 @@ settings are on the settings pages, `settings=hosting|video|input|agents`), `hos
 settings), `host-signin`, `host-setup`, `host-offline` (the real host made
 signed out, without an account yet, or not answering),
 `signin-as=USER:PASSWORD`, `permissions=NAME` (the permissions sheet of the
-paired device called NAME). `PONG_DATA_DIR` points the app at a test host's
-data folder; `PONG_APP_URL`, `PONG_APP_CERT` and `PONG_APP_TOKEN` at another
-host altogether; `PING_HOST_PROGRAM` at the `pong` the switch runs.
-`PING_UI_DEMO_SCREEN=PATH` gives the sample sessions a screenshot to show.
+paired device called NAME). `HELIO_HOST_DATA_DIR` points the app at a test host's
+data folder; `HELIO_HOST_APP_URL`, `HELIO_HOST_APP_CERT` and `HELIO_HOST_APP_TOKEN` at another
+host altogether; `HELIO_HOST_PROGRAM` at the `helio-host` the switch runs.
+`HELIO_UI_DEMO_SCREEN=PATH` gives the sample sessions a screenshot to show.
 
-With `PING_UI_DEMO` set, the update check asks GitHub nothing on its own
+With `HELIO_UI_DEMO` set, the update check asks GitHub nothing on its own
 (`update` makes up its answer), and the app runs beside a copy that is
 already running rather than showing it.
 
-Use an empty `PING_DATA_DIR` for checks, so they neither read nor change
-your own hosts and settings, and a throwaway `PONG_DATA_DIR` with
+Use an empty `HELIO_DATA_DIR` for checks, so they neither read nor change
+your own hosts and settings, and a throwaway `HELIO_HOST_DATA_DIR` with
 `internet_access = false` and `port_mapping = false` in its `config.toml`
 before turning the switch on for real. An occluded window is not redrawn, so
 the demo driver brings its window to the front first. A snapshot is the

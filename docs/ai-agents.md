@@ -1,11 +1,11 @@
 # AI agents on your hosts (computer use)
 
-An AI agent can use a paired host the way you do through Ping: it sees the
+An AI agent can use a paired host the way you do through Helio: it sees the
 screen, and it drives the keyboard and mouse. It works over the same
 post-quantum tunnel, the same stream and the same input path, from anywhere
-Ping reaches. You hand it a task from Ping's **Agents** page, or give an
+Helio reaches. You hand it a task from Helio's **Agents** page, or give an
 agent you already use (Claude Code, Codex, Claude Desktop, Cursor) your
-hosts as tools through `Ping mcp`. Either way you can watch it, take over,
+hosts as tools through `Helio mcp`. Either way you can watch it, take over,
 pause or stop it, and the host holds it to rules of its own.
 
 ## Using it
@@ -15,18 +15,18 @@ pause or stop it, and the host holds it to rules of its own.
 The agent is a client of its own: it pairs once per host, like a device, and
 the host lists it as an **AI agent**.
 
-- Ping: **Allow…** beside the host, on the Agents page (under **Your
+- Helio: **Allow…** beside the host, on the Agents page (under **Your
   hosts**) or in **Agent setup** (under **Hosts the agent may use**). Type
-  the PIN into the host's Ping (This computer → Devices) or its web UI, as
-  for Ping.
-- CLI: `ping pair-agent HOST`.
-- By hand (headless hosts): `ping-agent identity` prints the agent's keys;
-  `pong add-client NAME X25519 MLKEM --agent` on the host, and
-  `ping-agent add-host NAME ADDR X25519 MLKEM` with `pong identity`'s keys.
+  the PIN into the host's Helio (This computer → Devices) or its web UI, as
+  for Helio.
+- CLI: `helio pair-agent HOST`.
+- By hand (headless hosts): `helio-agent identity` prints the agent's keys;
+  `helio-host add-client NAME X25519 MLKEM --agent` on the host, and
+  `helio-agent add-host NAME ADDR X25519 MLKEM` with `helio-host identity`'s keys.
 
 ### 2. Work with it: sessions
 
-On Ping's **Agents** page, say what you need, pick the host, the model and
+On Helio's **Agents** page, say what you need, pick the host, the model and
 when to ask for your go-ahead, and press Return. That opens a **session**: a
 conversation with the agent about one host, listed in the sidebar under
 **Sessions** with its state (Working, Waiting for you, Paused, Connected,
@@ -69,7 +69,7 @@ something, look over its shoulder, do a bit yourself, ask again.
   to 15 minutes (not counted against the turn); no answer is a no. A yes
   to the model's own request covers the next few risky actions that carry
   it out (2 minutes, 3 actions), so you are not asked twice.
-- **Notifications** (macOS): when a session is not on screen, Ping tells you
+- **Notifications** (macOS): when a session is not on screen, Helio tells you
   when the agent asks for your go-ahead (with **Allow** and **Don't** on the
   notification), waits at a sign-in or administrator prompt, is done, or
   stopped.
@@ -80,15 +80,15 @@ stream a host yourself at any time, with or without an agent session on it.
 
 ### Who does the thinking
 
-Ping runs no model of its own. Pick one under **Agent setup** (the **Model**
+Helio runs no model of its own. Pick one under **Agent setup** (the **Model**
 menu):
 
 | Provider | How it runs | What you need |
 |---|---|---|
-| Codex (ChatGPT plan) | `codex exec`, with pingpong's tools only | Codex installed, `codex login` with ChatGPT |
-| Claude Code (Claude plan) | `claude -p`, with pingpong's tools only | Claude Code installed and signed in |
-| Anthropic API key | Ping drives Claude's computer toolset itself | a key (`ANTHROPIC_API_KEY`, or saved in Agent setup) |
-| OpenAI API key | Ping drives OpenAI's computer tool itself | a key (`OPENAI_API_KEY`, or saved) |
+| Codex (ChatGPT plan) | `codex exec`, with Helio's tools only | Codex installed, `codex login` with ChatGPT |
+| Claude Code (Claude plan) | `claude -p`, with Helio's tools only | Claude Code installed and signed in |
+| Anthropic API key | Helio drives Claude's computer toolset itself | a key (`ANTHROPIC_API_KEY`, or saved in Agent setup) |
+| OpenAI API key | Helio drives OpenAI's computer tool itself | a key (`OPENAI_API_KEY`, or saved) |
 | OpenRouter API key | the actions offered as functions | a key; any model with tools and images (`:free` models cost nothing) |
 | OpenAI-compatible endpoint | the same, against your URL | Ollama, LM Studio, a gateway |
 
@@ -97,27 +97,27 @@ display size (1280x800 by default) and when to ask for your go-ahead are
 settings. `ANTHROPIC_BASE_URL` and `OPENAI_BASE_URL` point the API loops at
 a gateway or proxy, as the makers' SDKs allow.
 
-**What is kept.** Ping keeps sessions in memory only; each has a working
-folder under `agent/conversations/` in Ping's data folder that is removed
+**What is kept.** Helio keeps sessions in memory only; each has a working
+folder under `agent/conversations/` in Helio's data folder that is removed
 when it ends. Codex and Claude Code keep a session's thread themselves,
 screenshots included — that is how the next turn resumes it (Codex under
 `~/.codex/sessions/`, Claude Code under `~/.claude/projects/`) — and ending
-the session does not remove those. One-off runs (`ping-agent run`) keep
+the session does not remove those. One-off runs (`helio-agent run`) keep
 nothing. Whatever the provider, the screenshots go to the model's maker as
 the model's input; with screen checks on, they also go to Cloudflare.
 
 From the command line:
 
 ```sh
-ping-agent providers                  # what can run here
-ping-agent run --host gaming-pc --provider codex "Open Notepad and write a shopping list"
-ping-agent run --host gaming-pc --provider anthropic --max-actions 30 "…"
-ping-agent run --host gaming-pc --provider codex --approvals every "…"   # every action asks y/N
-ping-agent converse --host gaming-pc --provider codex "What is open?" --then "Close it"
-echo "$KEY" | ping-agent set-key openrouter
+helio-agent providers                 # what can run here
+helio-agent run --host gaming-pc --provider codex "Open Notepad and write a shopping list"
+helio-agent run --host gaming-pc --provider anthropic --max-actions 30 "…"
+helio-agent run --host gaming-pc --provider codex --approvals every "…"  # every action asks y/N
+helio-agent converse --host gaming-pc --provider codex "What is open?" --then "Close it"
+echo "$KEY" | helio-agent set-key openrouter
 ```
 
-The full list of flags is in [cli.md](cli.md#ping-agent--ai-agents).
+The full list of flags is in [cli.md](cli.md#helio-agent--ai-agents).
 
 ### Screen checks (Cloudflare clef)
 
@@ -131,11 +131,11 @@ never drives the host; it holds steps for you. Turn each check on under
 |---|---|---|---|
 | Clicks | A left click, a drag's drop, Enter | With a ring where the click lands: does it delete, spend, send or post, change settings, or install? | The step waits for your go-ahead, as a rule's catch does (with **Ask for your go-ahead** on risky steps) |
 | Typing a secret | Typing | Is the focus in a field for a password, a PIN, a key or a card number? Clef is told how many characters, never which | The step waits for your go-ahead |
-| Personal information | Every screen the model gets | Does it show passwords or keys, payment or bank details, ID numbers, health records, private messages, or people's addresses or phone numbers? | Ping asks whether the model may see it. A yes covers screens with that kind for the rest of the turn; on a no, or no answer in 15 minutes, the model gets no picture, only a note saying why and to stop |
+| Personal information | Every screen the model gets | Does it show passwords or keys, payment or bank details, ID numbers, health records, private messages, or people's addresses or phone numbers? | Helio asks whether the model may see it. A yes covers screens with that kind for the rest of the turn; on a no, or no answer in 15 minutes, the model gets no picture, only a note saying why and to stop |
 
 You need a Cloudflare account ID and a Workers AI API token: on the Workers
 AI page of Cloudflare's dashboard, **Create a Workers AI API Token**. Save
-the token in Agent setup or with `ping-agent set-key cloudflare`, or set
+the token in Agent setup or with `helio-agent set-key cloudflare`, or set
 `CLOUDFLARE_AUTH_TOKEN` (and `CLOUDFLARE_ACCOUNT_ID`).
 
 - **Checks only add holds.** A click clef thinks harmless still meets the
@@ -144,7 +144,7 @@ the token in Agent setup or with `ping-agent set-key cloudflare`, or set
   without it; a screen goes to the model only if you allow it.
 - **The personal-information check asks whatever the approvals setting.**
   It applies to every agent that uses your hosts from this computer,
-  `Ping mcp` included; where nobody can be asked (an agent outside Ping),
+  `Helio mcp` included; where nobody can be asked (an agent outside Helio),
   such a screen is withheld.
 - **Each check sends the screen to Cloudflare**, at most 1280 pixels
   across, as a JPEG: Workers AI refuses larger pictures (a PNG of
@@ -152,31 +152,31 @@ the token in Agent setup or with `ping-agent set-key cloudflare`, or set
   and faster, $0.09. A check adds clef's time to the step: 209 ms median
   in Cloudflare's own run, plus the network.
 - **Not measured on screens yet.** Cloudflare's benchmarks have no
-  screenshots in them. `ping-agent check SCREEN.png --click X,Y` (or
+  screenshots in them. `helio-agent check SCREEN.png --click X,Y` (or
   `--enter`, `--typing N`, `--personal`) prints what clef makes of a
   screenshot of yours.
 
 ### 3. Or use your hosts from another agent (MCP)
 
-`Ping mcp` is an MCP server on stdin/stdout that acts as this device's
+`Helio mcp` is an MCP server on stdin/stdout that acts as this device's
 agent:
 
 | System | Command |
 |---|---|
-| macOS | `/Applications/Ping.app/Contents/MacOS/Ping mcp` |
-| Windows | `%LOCALAPPDATA%\Programs\Ping\Ping.exe mcp` |
-| Linux | `ping-app mcp` |
-| A build | `ping-agent mcp` |
+| macOS | `/Applications/Helio.app/Contents/MacOS/Helio mcp` |
+| Windows | `%LOCALAPPDATA%\Programs\Helio\Helio.exe mcp` |
+| Linux | `helio-app mcp` |
+| A build | `helio-agent mcp` |
 
 **Agent setup**, under *Your hosts in other agents*, lists the agents on
 this computer and adds the server to any of them (**Add**), takes it out
-again (**Remove**), or points an entry left by another copy of Ping at this
-one (**Update**). From a terminal, `Ping mcp install` does the same:
+again (**Remove**), or points an entry left by another copy of Helio at this
+one (**Update**). From a terminal, `Helio mcp install` does the same:
 
 ```sh
-Ping mcp status                       # each agent, and whether it has the server
-Ping mcp install codex claude-code    # or --all: every agent found here
-Ping mcp uninstall opencode
+Helio mcp status                      # each agent, and whether it has the server
+Helio mcp install codex claude-code   # or --all: every agent found here
+Helio mcp uninstall opencode
 ```
 
 | Agent | `APP` | Where the entry goes |
@@ -193,16 +193,16 @@ Ping mcp uninstall opencode
 | Claude Desktop | `claude-desktop` | `claude_desktop_config.json` in its settings folder |
 | Diri | `diri` | each of Diri's agent accounts with a settings folder of its own; the others use Claude Code's and Codex's |
 
-The entry is called `pingpong`. The rest of each file stays as it was (its
+The entry is called `helio`. The rest of each file stays as it was (its
 keys in their order, Codex's comments). A file with comments in its JSON
 (OpenCode's `opencode.jsonc`) is not rewritten: add the entry there by hand.
 An agent reads its servers when a session starts, so start a new one. By
 hand, in any agent:
 
 ```sh
-claude mcp add --scope user pingpong -- /Applications/Ping.app/Contents/MacOS/Ping mcp
-codex mcp add pingpong -- /Applications/Ping.app/Contents/MacOS/Ping mcp
-# elsewhere: {"mcpServers": {"pingpong": {"command": "…/Ping", "args": ["mcp"]}}}
+claude mcp add --scope user Helio -- /Applications/Helio.app/Contents/MacOS/Helio mcp
+codex mcp add Helio -- /Applications/Helio.app/Contents/MacOS/Helio mcp
+# elsewhere: {"mcpServers": {"helio": {"command": "…/Helio", "args": ["mcp"]}}}
 ```
 
 The tools, named as in Claude's computer-use toolset:
@@ -224,17 +224,17 @@ connects again.
 
 ### 4. Watch, take over, stop
 
-- **Log In** (a session's page), or `ping watch HOST`, opens the agent's
+- **Log In** (a session's page), or `helio watch HOST`, opens the agent's
   screen in a stream window (waiting up to 25 s for an agent still
   starting). **Ctrl+Alt+Shift+T** takes the keyboard and mouse; pressing it
   again hands them back.
 - **While you have them, the agent waits** — up to 15 minutes, not against
   the turn's minutes. Its next action is then not done: the model gets the
   screen as you left it and decides again. The same goes when you pause it
-  (in Ping or Pong), use the host's own keyboard or mouse, a secure screen
+  (in Helio or Helio Host), use the host's own keyboard or mouse, a secure screen
   is up, or nobody watches an agent that may act only while watched.
   **Stop** or **End Session** end the wait at once.
-- **The host's Ping (This computer) and web UI** show an agent's session — who watches, what
+- **The host's Helio (This computer) and web UI** show an agent's session — who watches, what
   holds the agent, and each action as the agent described it — with
   **Pause**, **Resume**, **Hand back** and **Stop**. Under **Devices**, each
   agent's permissions: **See the screen**, **Keyboard**, **Mouse** and **Act
@@ -248,7 +248,7 @@ connects again.
 
 ## The rules the host holds agents to
 
-Pong enforces these, whatever the agent or its model does:
+Helio Host enforces these, whatever the agent or its model does:
 
 1. **Never over a person.** An agent is refused while a person streams, even
    with take-over allowed.
@@ -269,20 +269,20 @@ Pong enforces these, whatever the agent or its model does:
    watch an agent's session; a watcher who takes over drives the host, as
    far as their own permissions go, while the agent's input is held.
 7. **Everything is written down.** The agent says what each action is, and
-   Pong logs it and shows it.
+   Helio Host logs it and shows it.
 
 The agent hears why it is held. Its next action waits for the hold to end
-(up to 15 minutes in the runs and sessions Ping starts; 50 s for `Ping mcp`,
+(up to 15 minutes in the runs and sessions Helio starts; 50 s for `Helio mcp`,
 whose clients give a call about a minute) and then answers with what
 happened and the screen, so the model decides again. If the hold outlasts
 the wait, the action fails and the model is told to stop and report.
 
 ## Design decisions, and why
 
-**pingpong is the tool, not the agent.** Models change every month, and
+**Helio is the tool, not the agent.** Models change every month, and
 people already pay for some: a subscription through the maker's own program,
 or a key. A subscription is only ever used through that program (Codex,
-Claude Code), as its terms want; Ping never reads their credentials.
+Claude Code), as its terms want; Helio never reads their credentials.
 
 **An agent is a client of its own.** It pairs with a separate key, and the
 role is sealed with the PIN's key, so the host knows it by key rather than
@@ -297,13 +297,13 @@ never do — share the clipboard, start apps, watch, take over a person — and
 with one of its own: acting only while watched, for the work you want to
 see done. A keyboard-only agent works by shortcuts; the model is told so
 before anything is sent, rather than finding its clicks did nothing.
-The agent keeps its identity and hosts in `agent/` in Ping's data folder.
+The agent keeps its identity and hosts in `agent/` in Helio's data folder.
 
 **The display is the model's size.** Windows and Mac hosts make their
 virtual display the size the agent asks for (1280x800 by default, the size
 Anthropic and OpenAI suggest for computer use). Screenshot, display and
 coordinates are then one space: nothing is scaled. A Linux host scales its
-screen to it, as it does for Ping.
+screen to it, as it does for Helio.
 
 **A settled screenshot after every action.** Agents look after every step
 anyway, and a picture mid-animation misleads them. An action waits at least
@@ -321,10 +321,10 @@ SDK: the protocol is small, the Rust SDKs change fast, and nothing but
 protocol may reach stdout. It answers protocol versions 2024-11-05 to
 2025-11-25.
 
-**The CLI agents run with pingpong's tools and nothing else.** Codex runs
+**The CLI agents run with Helio's tools and nothing else.** Codex runs
 with its shell, its own computer use, browser, apps, plugins and sub-agents
 off, without the user's Codex config, in an empty directory with a
-read-only sandbox; Claude Code with no built-in tools, only pingpong's, and
+read-only sandbox; Claude Code with no built-in tools, only Helio's, and
 a strict MCP config. Neither can touch the client machine, only the host.
 
 **The API loops follow each API's own shape**: Anthropic's computer toolset
@@ -340,22 +340,22 @@ variable wins over a saved key.
 **A run is bounded twice.** The runner stops a run after its minutes and
 kills the agent's program; the MCP server enforces the action budget and
 the run's end itself, and stops acting once the process that started it is
-gone. A Ping that crashes mid-run leaves no agent acting.
+gone. A Helio that crashes mid-run leaves no agent acting.
 
 **Approvals and pausing go through a folder.** Whatever does the actions —
-Ping itself, or the MCP server Codex or Claude Code started — checks the
+Helio itself, or the MCP server Codex or Claude Code started — checks the
 run's control folder before each input action: a `pause` file holds it; a
 step to approve is written as `ask-N.json` and waits for `answer-N`. One
 mechanism for every provider, with no socket.
 
-**Risky steps: the model asks, rules back it up** (`ping-agent/src/risk.rs`).
+**Risky steps: the model asks, rules back it up** (`helio-agent/src/risk.rs`).
 The model sees the screen and knows what a click will do, so it is told
 which steps need a go-ahead and has a tool to ask. A model can forget, so
 what can be judged without the screen — typed text and key chords — is
 judged by rule too, tuned to stay quiet for everyday typing: a gate that
 asks all the time gets clicked through.
 
-**Clef looks where the rules cannot** (`ping-agent/src/judge.rs`). What is
+**Clef looks where the rules cannot** (`helio-agent/src/judge.rs`). What is
 under a click, or whether a field takes a password, is on the screen, so a
 check needs a model that sees it. Clef is a decision model: one pass
 returns a probability per answer, with no text to parse, which suits a gate
@@ -369,7 +369,7 @@ screen read out first (OCR or an accessibility tree).
 and the watcher sees exactly what the agent sees. Watching is for agents'
 sessions only; a person's session is not watchable.
 
-**Telling someone at the host from the agent.** Pong cannot see where input
+**Telling someone at the host from the agent.** Helio Host cannot see where input
 comes from on every system, so it compares times: input at the host more
 recent than the last the session injected, by more than 300 ms, is someone
 else's (a session's first three seconds excepted). It is a heuristic: a
@@ -378,11 +378,11 @@ until their next one.
 
 **Text types at 66 characters a second on a Windows host.** Windows 11's
 WinUI text fields stall for a moment after each word and read the Unicode
-keystrokes queued meanwhile as whichever came last, so Pong types one
+keystrokes queued meanwhile as whichever came last, so Helio Host types one
 character every 15 ms, on a thread of its own (8 ms garbled; 12 ms and more
 typed a 200-character sentence exactly).
 
-**A session is a conversation, and Ping stores none of it.** Keeping
+**A session is a conversation, and Helio stores none of it.** Keeping
 sessions across launches would mean a database of transcripts and
 screenshots of a user's computers, with its own retention and security
 questions.
@@ -390,19 +390,19 @@ questions.
 ## Threat model
 
 It protects against an agent that is confused, or instructed by something on
-the screen (prompt injection), acting through pingpong. Such an agent cannot
+the screen (prompt injection), acting through helio. Such an agent cannot
 act while a person streams, over a person, on a secure screen, while someone
 uses the host, beyond its permissions, beyond its run's budget or after its run,
-or unseen: every action is in Pong's log, and a person can watch and stop
+or unseen: every action is in Helio Host's log, and a person can watch and stop
 it.
 
 It does not protect against:
 
 - **A malicious program on the client machine.** It can read the agent's
-  key, as it can read Ping's: whoever owns the client owns its pairings.
+  key, as it can read Helio's: whoever owns the client owns its pairings.
   Unpair the device on the host.
-- **An agent outside Ping's runner with other tools.** Claude Code or Codex
-  run interactively with pingpong added as an MCP server still have their
+- **An agent outside Helio's runner with other tools.** Claude Code or Codex
+  run interactively with Helio added as an MCP server still have their
   shell on the client machine; that is their sandbox's business.
 - **What an agent does within its permissions.** It is a real computer. Use
   See only for looking, Only while watched for the first runs, and prefer a
@@ -431,7 +431,7 @@ Not verified yet:
   paid OpenRouter models.
 - Claude Desktop, Cursor, Gemini CLI, Copilot CLI, Droid, Amp and Kiro as
   MCP clients: their entries follow each one's documented format, and
-  `Ping mcp install` was run only against Claude Code, Codex and OpenCode
+  `Helio mcp install` was run only against Claude Code, Codex and OpenCode
   (Claude Code and Codex list the entry, and Claude Code connects to it).
 - Sessions with Claude Code (`--session-id`, then `--resume`) and with an
   API key's model: built, not run.
@@ -441,8 +441,8 @@ Not verified yet:
 
 ## Tests
 
-Unit tests: `cargo test -p ping-agent -p pong -p pingpong-proto -p
-pingpong-pairing`. `tools/linux/agent-desktop` starts a desktop in the Linux
+Unit tests: `cargo test -p helio-agent -p helio-host -p helio-proto -p
+helio-pairing`. `tools/linux/agent-desktop` starts a desktop in the Linux
 container for agents to work on, and `tools/linux/agent-tests/` has the
 helpers used above (a scripted MCP client, a watcher, a person streaming, the
 web API, the mock model APIs); see its

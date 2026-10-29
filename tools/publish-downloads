@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # Publish a release's archives as the website's downloads: Cloudflare R2
-# (the bucket pingpong-downloads, served at
-# download.pingpong.mihaicristian.dev), with wrangler.
+# (the bucket helio-downloads, served at
+# download.helio.mihaicristian.dev), with wrangler.
 #
 #   tools/publish-downloads DIST_DIR
 #
 # DIST_DIR holds what tools/package-macos, tools/package-windows.ps1 and
 # tools/linux/package made: one archive per system and architecture
-# (Ping-VERSION-OS-ARCH.zip or .tar.gz). Each goes to latest/Ping-OS-ARCH.EXT,
+# (Helio-VERSION-OS-ARCH.zip or .tar.gz). Each goes to latest/Helio-OS-ARCH.EXT,
 # a name that stays the same from one release to the next so the page can
 # link it, and is downloaded under its own name. Then latest/SHA256SUMS, and
 # latest.json, which says what is there (version, commit, each file's size
@@ -26,10 +26,10 @@
 set -euo pipefail
 REPO=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 DIST=${1:?usage: publish-downloads DIST_DIR}
-BUCKET=${DOWNLOADS_BUCKET:-pingpong-downloads}
-BASE=${DOWNLOADS_URL:-https://download.pingpong.mihaicristian.dev}
+BUCKET=${DOWNLOADS_BUCKET:-helio-downloads}
+BASE=${DOWNLOADS_URL:-https://download.helio.mihaicristian.dev}
 VERSION=$(sed -n '/^\[workspace.package\]/,/^\[/ s/^version = "\(.*\)"/\1/p' "$REPO/Cargo.toml")
-COMMIT=${PINGPONG_COMMIT:-$(git -C "$REPO" rev-parse HEAD)}
+COMMIT=${HELIO_COMMIT:-$(git -C "$REPO" rev-parse HEAD)}
 export WRANGLER_SEND_METRICS=false
 if command -v wrangler >/dev/null; then wrangler=(wrangler); else wrangler=(npx --yes wrangler@4); fi
 
@@ -53,7 +53,7 @@ files='{}'
 shopt -s nullglob
 for path in "$DIST"/*-"$VERSION"-*.zip "$DIST"/*-"$VERSION"-*.tar.gz; do
     name=$(basename "$path")
-    # Ping-0.7.0-macos-arm64.zip -> Ping-macos-arm64.zip
+    # Helio-0.7.0-macos-arm64.zip -> Helio-macos-arm64.zip
     key=${name/-$VERSION-/-}
     case $name in
         *.zip) type=application/zip ext=.zip ;;

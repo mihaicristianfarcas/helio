@@ -1,16 +1,16 @@
 # macOS
 
-Ping and Pong both run on macOS 14 or later (Apple silicon and Intel; the
+Helio and Helio Host both run on macOS 14 or later (Apple silicon and Intel; the
 measurements here are from an M4 Pro).
 
-## Ping, the client
+## Helio, the client
 
 - **Window.** A stream opens in a window of its own. Full screen (the
-  default) it goes into a Space of its own, as Moonlight's does: Ping's own
+  default) it goes into a Space of its own, as Moonlight's does: Helio's own
   window stays on the desktop a swipe away, and the Dock and menu bar stay
   hidden in the stream's Space. Ctrl+Option+Shift+X switches between full
   screen and a window. If macOS refuses full screen (a stream started just
-  as another left its Space), Ping asks again until it gets it.
+  as another left its Space), Helio asks again until it gets it.
 - **Picture.** VideoToolbox decodes in real time — one frame in, one frame
   out, no buffering — and the pixel buffer is bound to Metal without a copy
   (`CVMetalTextureCache`). Without frame pacing the newest frame is drawn at
@@ -21,7 +21,7 @@ measurements here are from an M4 Pro).
   frame at a time waits for it, so the next frame drawn is the next shown.
   A screen recording, a window, menu or notification over the stream, a
   window rather than full screen, or HDR makes macOS composite the picture
-  first, two to three refreshes later. Ping tells which from how long its
+  first, two to three refreshes later. Helio tells which from how long its
   frames take to reach the screen, lets three wait while it lasts, and
   goes back to one after; every frame is still shown (the log says "the
   stream is composited"). The composited path costs latency: about 22 ms
@@ -29,7 +29,7 @@ measurements here are from an M4 Pro).
   [benchmarks](../benchmarks.md#recording-the-screen-macos-client)).
   macOS also takes a recorded stream straight to the display at times
   and shows some of its frames a refresh late; at the display's full rate
-  (120 fps at 120 Hz), Ping then shows 105–117 frames of 120 rather than
+  (120 fps at 120 Hz), Helio then shows 105–117 frames of 120 rather than
   add a refresh to every one.
 - **AV1.** On a Mac with an AV1 decoder (M3 and later), VideoToolbox
   decodes it in hardware, 8- and 10-bit: the format description carries an
@@ -37,7 +37,7 @@ measurements here are from an M4 Pro).
   without temporal delimiters, as MP4 stores them. Settings > Video offers
   AV1 only there.
 - **HDR and 4:4:4.** On Apple silicon, VideoToolbox decodes HEVC Main10
-  and HEVC 4:4:4 (8- and 10-bit) in hardware (measured on an M4 Pro); Ping
+  and HEVC 4:4:4 (8- and 10-bit) in hardware (measured on an M4 Pro); Helio
   asks for 10-bit pictures as `x420`/`x444`, which Metal samples plane by
   plane (VideoToolbox's own are packed). With **HDR** on (Settings >
   Video) and a display with headroom above SDR white (an XDR panel, an
@@ -60,22 +60,22 @@ measurements here are from an M4 Pro).
   HID reports, as Moonlight does; rumble through the pad's haptics. macOS
   26 also opens its Games overlay on that button, as it does with Moonlight.
 - **Sound.** CoreAudio, stereo to 7.1.
-- **Local network.** macOS asks once whether Ping may use the local network
+- **Local network.** macOS asks once whether Helio may use the local network
   (it declares `NSLocalNetworkUsageDescription`); without it, discovery and
   LAN connections fail.
 - **Notifications** for agent sessions (when a session needs you and is not
   on screen) are asked for the first time a session opens.
-- **The menu bar** is a Mac app's: Ping (About, Check for Updates,
+- **The menu bar** is a Mac app's: Helio (About, Check for Updates,
   Settings, Services, Hide, Quit), File (Add Host, Look for Hosts Again,
   Close Window), Edit, View (the pages), Window and Help (the docs, the
   logs in Finder, reporting an issue).
-- **One copy.** Opening Ping again brings the running one forward.
+- **One copy.** Opening Helio again brings the running one forward.
 
-## Pong, the host
+## Hosting: Helio Host
 
-Pong also runs on a Mac, with the Windows host's session rules and the same
+Helio Host also runs on a Mac, with the Windows host's session rules and the same
 wire protocol. A client cannot tell them apart, except that the session ack
-says which system the host runs (so Ping forwards Command as Command).
+says which system the host runs (so Helio forwards Command as Command).
 
 | | Windows host | macOS host |
 |---|---|---|
@@ -90,29 +90,29 @@ says which system the host runs (so Ping forwards Command as Command).
 
 Everything after the encoder is shared with the other hosts: the paced
 sender, FEC, adaptive bitrate, the tunnel, pairing, discovery, reconnection
-and the web UI. The Mac-specific modules are in `pong/src/mac/`.
+and the web UI. The Mac-specific modules are in `helio-host/src/mac/`.
 
-### Hosting from Ping, and its menu bar icon
+### Hosting from Helio, and its menu bar icon
 
-Ping is an ordinary app, in the Dock. The host is a helper app inside it,
-`Ping.app/Contents/Helpers/Pong Host.app`, with its own bundle identifier
-(`dev.pingpong.Pong`) and usage strings, signed before the app around it
-(`tools/build-ping-app`). Ping's hosting switch runs `pong enable` from the
+Helio is an ordinary app, in the Dock. The host is a helper app inside it,
+`Helio.app/Contents/Helpers/Helio Host.app`, with its own bundle identifier
+(`dev.mihaicristian.helio.host`) and usage strings, signed before the app around it
+(`tools/build-helio-app`). Helio's hosting switch runs `helio-host enable` from the
 helper, which copies the helper to the host's data folder
-(`~/Library/Application Support/Pong/Pong Host.app`), writes the host's
-LaunchAgent for that copy and loads it; `pong disable` removes both. The
-host runs from an app bundle so that macOS's permissions apply to Pong
-Host, not to Ping, and from a copy outside Ping.app because macOS files
+(`~/Library/Application Support/Helio Host/Helio Host.app`), writes the host's
+LaunchAgent for that copy and loads it; `helio-host disable` removes both. The
+host runs from an app bundle so that macOS's permissions apply to Helio
+Host, not to Helio, and from a copy outside Helio.app because macOS files
 Screen Recording for code inside an app under that app: run from inside
-Ping.app (`Contents/Helpers` or `Contents/Library/LoginItems`), the
-request named Ping and the grant was kept under Ping's identifier; from
-outside, it is Pong Host's. Accessibility was the helper's either way
-(macOS 26.5). `pong enable` from a `pong` outside an app bundle
-refuses (`pong/src/hosting/mac.rs`). An update of Ping copies the new
+Helio.app (`Contents/Helpers` or `Contents/Library/LoginItems`), the
+request named Helio and the grant was kept under Helio's identifier; from
+outside, it is Helio Host's. Accessibility was the helper's either way
+(macOS 26.5). `helio-host enable` from a `helio-host` outside an app bundle
+refuses (`helio-host/src/hosting/mac.rs`). An update of Helio copies the new
 helper and restarts the host while hosting is on.
 
 The copy has to follow the app. So the LaunchAgent names the app the copy
-came from (`pong host --app PATH`), and the host watches it: kqueue says
+came from (`helio-host host --app PATH`), and the host watches it: kqueue says
 when the app is moved, renamed or deleted, or what is in it changes
 (Homebrew's upgrade keeps the app folder and replaces its contents), and
 15 s later the host looks again (every update puts the new app in place
@@ -137,34 +137,34 @@ So every update keeps hosting as it was, with nothing asked of the
 package manager. Homebrew could not do it: it upgrades a cask by
 uninstalling and installing it, tells neither step which it is doing, and
 runs a cask's install steps in a sandbox with a home folder of its own
-(`tools/update-casks`). `brew uninstall` quits Ping, and the host stops by
+(`tools/update-casks`). `brew uninstall` quits Helio, and the host stops by
 itself 15 s later; `brew uninstall --zap` stops it at once.
 
-While hosting is on, Ping shows the host's icon in the menu bar: what the
+While hosting is on, Helio shows the host's icon in the menu bar: what the
 host does, a device asking to pair (a notification says so too), the
-window, an update. Closing the window leaves the icon, and Ping leaves the
+window, an update. Closing the window leaves the icon, and Helio leaves the
 Dock until its window opens again (the accessory activation policy);
-**Open at login** in General starts Ping at login as the icon only
-(`--background`). Quitting Ping leaves the host running: it is the
+**Open at login** in General starts Helio at login as the icon only
+(`--background`). Quitting Helio leaves the host running: it is the
 helper's copy, under a LaunchAgent that keeps it alive.
 
-Opening **Pong Host** itself (from the Finder, inside Ping.app, or with
-Spotlight) starts the host and Ping with it, in the background, so the
+Opening **Helio Host** itself (from the Finder, inside Helio.app, or with
+Spotlight) starts the host and Helio with it, in the background, so the
 icon is in the menu bar whenever you started the host. Opened again while it runs, it changes
 nothing. The host started at login by its LaunchAgent leaves the icon to
-Ping's own login item (Open at login).
+Helio's own login item (Open at login).
 
 ### Permissions
 
-Pong needs **Screen Recording** (to capture) and **Accessibility** (to
+Helio Host needs **Screen Recording** (to capture) and **Accessibility** (to
 inject the keyboard and mouse). As the helper app it asks for both in its
-own name, **Pong Host**, at start, and System Settings lists it, not Ping,
+own name, **Helio Host**, at start, and System Settings lists it, not Helio,
 under both. The host says on its API what macOS
-allows it, and Ping's Hosting page and setup show it, with a button to
-each pane of System Settings; Ping itself needs neither. From a terminal, the terminal needs them.
-Without Accessibility, Pong tells the client, and Ping shows that the host
+allows it, and Helio's Hosting page and setup show it, with a button to
+each pane of System Settings; Helio itself needs neither. From a terminal, the terminal needs them.
+Without Accessibility, Helio Host tells the client, and Helio shows that the host
 is ignoring its keyboard and mouse. Sound in surround needs **System Audio
-Recording** besides (below): Pong asks for it the first time a client wants
+Recording** besides (below): Helio Host asks for it the first time a client wants
 5.1 or 7.1, and that session streams stereo while you answer.
 
 macOS ties these permissions to the app's signature. An ad hoc signature
@@ -176,7 +176,7 @@ next, and notarized.
 
 ### Sound in surround
 
-ScreenCaptureKit, which Pong captures the screen with, mixes the system's
+ScreenCaptureKit, which Helio Host captures the screen with, mixes the system's
 sound down to stereo whatever it is asked for (2 channels at 48 kHz when
 asked for 6 or 8, measured on macOS 26.5). A client that asks for 5.1 or 7.1
 gets it from a Core Audio tap instead (macOS 14.2 and later), which hears
@@ -185,16 +185,16 @@ surround only to an output that has the speakers for it, so the Mac needs
 one:
 
 - **A receiver or TV with surround on HDMI**, set to 5.1 or 7.1 in Audio
-  MIDI Setup (**Configure Speakers**). Pong taps it while it stays the
+  MIDI Setup (**Configure Speakers**). Helio Host taps it while it stays the
   default output, and keeps the sound off it unless the client asks for the
   sound on the host too (`--host-audio`), as the Windows host does.
 - **A loopback device**, as Sunshine uses on a Mac: install
   [BlackHole](https://github.com/ExistentialAudio/BlackHole) 16ch
-  (`brew install --cask blackhole-16ch`). For each surround session Pong
+  (`brew install --cask blackhole-16ch`). For each surround session Helio Host
   makes it the default output, sets its speakers to the session's 5.1 or
   7.1, and puts back the previous output and speakers when the session
   ends, as the Windows host does with Steam Streaming Speakers. The Mac
-  plays nothing aloud meanwhile; with `--host-audio` Pong leaves the output
+  plays nothing aloud meanwhile; with `--host-audio` Helio Host leaves the output
   alone and the session is stereo.
 
 The channels go into the stream in Moonlight's order whatever order the
@@ -204,9 +204,9 @@ BlackHole 16ch, streaming the Mac to itself: a test file sounding one
 channel at a time came out of the client's decoder in the same channel,
 for 5.1 and for 7.1, each at its level (a 5.1 file's back pair 3 dB lower:
 macOS plays its rear speakers into the 5.1 device's surround pair). With
-neither, or without the permission, sessions are stereo and Pong's log
+neither, or without the permission, sessions are stereo and Helio Host's log
 says why.
-`cargo run -p pingpong-audio --example mac-outputs` lists the outputs and
+`cargo run -p helio-audio --example mac-outputs` lists the outputs and
 what each can carry; `-- --tap 5` also listens to the default one for five
 seconds and prints each channel's level.
 
@@ -223,19 +223,19 @@ seconds and prints each channel's level.
 - Loss: 5% in bursts of 3 recovered by long-term-reference refreshes, with
   no keyframes and no decode errors.
 - Sound: 200 packets a second, nothing concealed.
-- Pong killed mid-stream and restarted: Ping renegotiated, and video was
-  back 0.4 s after Pong was.
+- Helio Host killed mid-stream and restarted: Helio renegotiated, and video was
+  back 0.4 s after Helio Host was.
 
 ### Behaviour worth knowing
 
 - **One virtual panel.** macOS holds a display it has never seen offline
-  until someone answers "What do you want to show on Pong?". So the virtual
+  until someone answers "What do you want to show on Helio Host?". So the virtual
   panel is the same every session (3840x2400) and put in the session's mode
   once online: sizes from 800x600 to 3024x1890 come up in 0.1–0.7 s without
-  a prompt. If it does not come up within 2 s, Pong streams the main display.
+  a prompt. If it does not come up within 2 s, Helio Host streams the main display.
 - **Lid closed**: the stream goes on. A MacBook sleeps a few seconds after
   its lid closes, on battery even with a display attached, and no power
-  assertion stops that; for the length of a session Pong asks macOS not to
+  assertion stops that; for the length of a session Helio Host asks macOS not to
   sleep on the lid (`kPMSetClamshellSleepState`, as Amphetamine's
   Closed-Display Mode does), and lets it again when the session ends. The
   session's virtual display is what gets captured. A locked Mac streams its
@@ -257,7 +257,7 @@ seconds and prints each channel's level.
   across. Another resolution picked in System Settings mid-session is
   followed by the keyboard and mouse at once.
 - **Loss recovery** uses VideoToolbox's long-term references. The protocol
-  has no per-frame acknowledgement, so Pong counts a frame as arrived once
+  has no per-frame acknowledgement, so Helio Host counts a frame as arrived once
   200 ms pass with no loss reported for it, and acknowledges it to the
   encoder; after a loss the next frame refreshes from an acknowledged one. A
   wrong guess costs a keyframe, as before.
@@ -274,7 +274,7 @@ seconds and prints each channel's level.
 
 - No 4:4:4: VideoToolbox encodes HEVC at 4:2:2 at most (its RExt profile
   is 4:2:2 10-bit).
-- Sound is stereo unless the Mac has a surround output and Pong may record
+- Sound is stereo unless the Mac has a surround output and Helio Host may record
   the system's sound (see [Sound in surround](#sound-in-surround)).
 - No controllers yet: macOS makes virtual controllers only for a program
   signed with the HID Virtual Device entitlement

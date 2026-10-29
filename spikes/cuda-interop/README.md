@@ -110,7 +110,7 @@ you in session 0 (services), where WGC fails with `ItemConvertFailed` before
 capturing anything. Use the launcher:
 
 ```powershell
-cd C:\path\to\pingpong\spikes\cuda-interop
+cd C:\path\to\helio\spikes\cuda-interop
 cargo build --release
 powershell -ExecutionPolicy Bypass -File ..\run-interactive.ps1 `
     -WorkDir $PWD -Exe .\target\release\cuda-interop.exe

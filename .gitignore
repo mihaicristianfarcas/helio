@@ -9,10 +9,10 @@ spikes/**/*.png
 spikes/**/Cargo.lock
 
 # cargo-fuzz working data; the target and corpus are regenerable.
-pingpong-proto/fuzz/target
-pingpong-proto/fuzz/corpus
-pingpong-proto/fuzz/artifacts
-pingpong-proto/fuzz/Cargo.lock
+helio-proto/fuzz/target
+helio-proto/fuzz/corpus
+helio-proto/fuzz/artifacts
+helio-proto/fuzz/Cargo.lock
 spikes/**/interactive-run.log
 
 # Output of the example runs, regenerable per each example's doc comment.
@@ -21,17 +21,14 @@ spikes/**/interactive-run.log
 interactive-run.log
 
 # ...but test fixtures are inputs, not output, and must be committed.
-!pingpong-decode/tests/fixtures/*.h264
-!pingpong-decode/tests/fixtures/*.hevc
-!pingpong-decode/tests/fixtures/*.obu
-# ...and so are the apps' icons (drawn by ping-app/examples/make-icon.rs).
-!ping-app/assets/*.png
+!helio-decode/tests/fixtures/*.h264
+!helio-decode/tests/fixtures/*.hevc
+!helio-decode/tests/fixtures/*.obu
+# ...and so are the apps' icons (drawn by helio-app/examples/make-icon.rs).
+!helio-app/assets/*.png
 # ...and the documentation's screenshots.
 !docs/images/*.png
 
-# Local endpoint configs: these contain private keys.
-pingpong-client.toml
-pingpong-server.toml
 # Superseded keys are still keys -- rekeying leaves these behind.
 *.toml.bak-*
 
