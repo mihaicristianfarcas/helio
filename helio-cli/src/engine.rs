@@ -100,7 +100,11 @@ pub fn host_program() -> Option<PathBuf> {
     if let Some(p) = std::env::var_os("HELIO_HOST_PROGRAM") {
         return Some(PathBuf::from(p));
     }
+    // Run as `helio`, the program may be a link to the app's (the Mac app's
+    // Contents/Resources/bin/helio, Linux's ~/.local/bin/helio), which macOS
+    // names as it was started: the app is where the link leads.
     let exe = std::env::current_exe().ok()?;
+    let exe = exe.canonicalize().unwrap_or(exe);
     candidates(&exe).into_iter().find(|p| p.is_file())
 }
 

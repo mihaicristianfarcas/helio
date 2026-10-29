@@ -48,11 +48,13 @@ jobs:
         run: tools/package-macos
         env:
           HELIO_PROFILE: dev
-      - name: One archive, the host inside it
+      - name: One archive, the host and the command inside it
         run: |
           ls target/dist
           [ "$(ls target/dist | wc -l)" -eq 1 ]
           unzip -l target/dist/Helio-*-macos-arm64.zip | grep -q 'Helio.app/Contents/Helpers/Helio Host.app/Contents/MacOS/helio-host'
+          # `helio`, a link to the app's program, kept a link.
+          zipinfo target/dist/Helio-*-macos-arm64.zip 'Helio.app/Contents/Resources/bin/helio' | grep -q '^l'
 
   windows:
     name: Windows
@@ -94,8 +96,8 @@ jobs:
           $zips.Name
           if ($zips.Count -ne 1) { throw "$($zips.Count) archives, not one" }
           Add-Type -AssemblyName System.IO.Compression.FileSystem
-          $names = [IO.Compression.ZipFile]::OpenRead($zips[0].FullName).Entries.FullName
-          foreach ($file in 'Helio.exe', 'helio-host.exe', 'install.ps1') {
+          $names = [IO.Compression.ZipFile]::OpenRead($zips[0].FullName).Entries.FullName -replace '\\', '/'
+          foreach ($file in 'Helio.exe', 'helio-host.exe', 'bin/helio.exe', 'install.ps1') {
             if ($names -notcontains $file) { throw "no $file in $($zips[0].Name)" }
           }
 

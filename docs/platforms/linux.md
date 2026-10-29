@@ -40,6 +40,11 @@ line of its standard output. That process is `helio_client::linux`:
   is still an ordinary app: closing it quits, and the host runs on as its
   user unit. The hosting switch runs `helio-host enable` (`systemctl --user`),
   as `helio host enable` does, which asks for nothing.
+- **`helio` in a terminal.** **Settings → General → Command line** links
+  `~/.local/bin/helio` to the app's program, which most distributions put
+  on the `PATH` (Fedora's `~/.bashrc`, Ubuntu's `~/.profile`); a `helio`
+  there that is not Helio's is left as it is. `install.sh --uninstall`
+  removes the link.
 
 ## Hosting: Helio Host
 

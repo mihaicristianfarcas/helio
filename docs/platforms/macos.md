@@ -70,6 +70,18 @@ measurements here are from an M4 Pro).
   Close Window), Edit, View (the pages), Window and Help (the docs, the
   logs in Finder, reporting an issue).
 - **One copy.** Opening Helio again brings the running one forward.
+- **`helio` in a terminal.** The command line is inside the app,
+  `Contents/Resources/bin/helio`, a link to the app's program
+  (`tools/build-helio-app`). **Settings → General → Command line** writes
+  `/etc/paths.d/helio` naming that folder, which `path_helper` adds to every
+  login shell's `PATH` (Terminal's and iTerm's are login shells), as
+  Postgres.app does; `/etc/paths.d` is root's, so macOS asks for an
+  administrator. Not a link in `/usr/local/bin`: an app dragged to the
+  Trash runs nothing, and a cask's uninstall steps run at every upgrade
+  too, so that link would outlive the app. This way `helio` goes with the
+  app, and what stays is a line naming a folder that is gone. The button
+  is greyed out while Helio runs from its disk image or from where it was
+  downloaded (App Translocation runs that from a folder of its own).
 
 ## Hosting: Helio Host
 

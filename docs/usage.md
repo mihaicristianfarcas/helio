@@ -90,6 +90,7 @@ Windows and Linux) opens them.
 | Page | Setting | What it does |
 |---|---|---|
 | General | Open at login | With hosting on, Helio's icon from the moment you log in, without its window (a LaunchAgent on a Mac, your `Run` key on Windows; not on Linux). With hosting off, nothing starts |
+| | The helio command | **Install** puts `helio`, the command line, on the `PATH` of terminals opened from then on; **Remove** takes it off. How each system does it, and what uninstalling Helio does to it: [cli.md](cli.md) |
 | | Set Up Again | Setup once more: what this computer is for, what it must allow, how to pair |
 | Hosting | Let my devices play this computer | The hosting switch ([Hosting on and off](#hosting-on-and-off)), with what it needs: on a Mac, Screen Recording and Accessibility for the host; on Windows, whether there are NVIDIA graphics and SudoVDA |
 | Updates | Look for updates | New releases (the default for a packaged release), releases and main (the default for a build from a checkout: also commits on `main` newer than the build's), or off. See [Updates](#updates) |
@@ -304,7 +305,7 @@ How each system installs it:
 |---|---|---|
 | macOS | The app is replaced where it is (Applications), the host inside it too | Sees the new app and restarts on it 15 s later |
 | macOS, installed with Homebrew | `brew upgrade --cask helio`, run for you | Sees the new app and restarts on it 15 s later |
-| Windows | The app's files, `helio-host.exe` among them, are replaced in its folder; Settings > Apps shows the new version | Hosting is turned on again from the new files: Windows asks for an administrator's permission, and HelioHost restarts on the new engine. Declined, the host keeps the engine it had until hosting is turned off and on |
+| Windows | The app's files, `helio-host.exe` and `bin\helio.exe` (the `helio` command) among them, are replaced in its folder; Settings > Apps shows the new version | Hosting is turned on again from the new files: Windows asks for an administrator's permission, and HelioHost restarts on the new engine. Declined, the host keeps the engine it had until hosting is turned off and on |
 | Linux | The new release's `install.sh` (into `~/.local/bin`) | The host's user service restarts |
 
 The download is checked against the SHA-256 GitHub records for the

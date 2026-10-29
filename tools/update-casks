@@ -70,10 +70,14 @@ mkdir -p "$OUT"
 # folder and replaces what is in it), it checks the new app's helper is
 # signed as it is and that Gatekeeper accepts the app, copies the helper and
 # restarts on it; gone after an uninstall, it turns hosting off 15 s later.
-# The uninstall quits the app (and an upgrade opens it again). zap, which
-# only an explicit brew uninstall --zap runs, stops the host at once and
-# removes the rest: the host's LaunchAgent and the app's own (which opens it
-# at login, helio-ui's login.rs), the app's data and logs, the host's
+# The uninstall quits the app (and an upgrade opens it again). `helio`, the
+# command line, is inside the app and goes with it: Settings > General puts
+# the app's folder for it on the PATH (/etc/paths.d/helio,
+# helio-app/src/command.rs), and an uninstall step to take that off would
+# run at every upgrade too. zap, which only an explicit brew uninstall
+# --zap runs, stops the host at once and removes the rest: the host's
+# LaunchAgent and the app's own (which opens it at login, helio-ui's
+# login.rs), /etc/paths.d/helio, the app's data and logs, the host's
 # identity, pairings, logs and copy.
 cat > "$OUT/helio.rb" <<CASK
 # Written by tools/update-casks for each release: change that script, not
@@ -97,6 +101,7 @@ $LIMIT
   uninstall quit: "dev.mihaicristian.helio"
 
   zap launchctl: "dev.mihaicristian.helio.host",
+      delete:    "/etc/paths.d/helio",
       trash:     [
         "~/Library/Application Support/Helio",
         "~/Library/Application Support/Helio Host",

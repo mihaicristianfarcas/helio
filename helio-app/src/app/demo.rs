@@ -16,6 +16,10 @@ use super::{HelioApp, Page};
 /// whole, `unpair=NAME` its confirmation, `menu=NAME` a host's menu,
 /// `open=ID` opens the select with that id (`fps`, `codec`),
 /// `settings[=video|audio|input|agents]` a settings page,
+/// `command=on|off|elsewhere|taken|unavailable|busy` the `helio` command
+/// in that state (General's Command line row; its button then changes
+/// nothing on the system), `command-install` and `command-remove` its
+/// button pressed, for real,
 /// `agents[=setup|sample|sample-live|sample-ask]` the Agents page (the setup page or a
 /// sample session), `chat=MESSAGE` a message to the agent session (a new one
 /// on the first agent host; each waits for the turn before it), `stream=NAME` streams from that host,
@@ -288,6 +292,17 @@ impl HelioApp {
                 }
             } else if let Some(tab) = action.strip_prefix("settings") {
                 self.page = Page::Settings(Tab::parse(tab.trim_start_matches('=')));
+            } else if action == "command-install" {
+                self.change_command(true, cx);
+            } else if action == "command-remove" {
+                self.change_command(false, cx);
+            } else if let Some(name) = action.strip_prefix("command=") {
+                if name == "busy" {
+                    self.command_demo = Some(crate::command::State::Off);
+                    self.command_change = Some(true);
+                } else {
+                    self.command_demo = crate::command::State::demo(name);
+                }
             } else if let Some(name) = action.strip_prefix("stream=") {
                 match self.model.items.iter().find(|i| i.name == name).cloned() {
                     Some(item) => self.stream(&item, false, window, cx),

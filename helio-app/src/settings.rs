@@ -1,6 +1,7 @@
 //! The app's own settings (General, Hosting, Updates), Moonlight's (video,
 //! audio, input) and the agents' setup, one page each: asides' cards of
-//! labelled rows, each saying what it does.
+//! labelled rows, each saying what it does. General's Command line row puts
+//! `helio` on the PATH and takes it off (`crate::command`).
 
 use gpui::{div, prelude::*, px, AnyElement, App, Context, SharedString, Window};
 use helio_proto::control::{codec, video};
@@ -8,6 +9,7 @@ use helio_ui::login::LoginItem;
 use helio_ui::{button, rows, section, select, setting, slider, switch, Choice, Theme, Type};
 
 use crate::app::{page_body, HelioApp};
+use crate::command::{self, State as CommandState};
 use crate::prefs::{parse_size, Prefs, FRAME_RATES, RESOLUTIONS};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -73,7 +75,7 @@ impl HelioApp {
         let (title, subtitle, body): (&str, &str, AnyElement) = match tab {
             Tab::General => (
                 "General",
-                "Helio itself: when it opens, and setting it up again.",
+                "Helio itself: when it opens, its command line, and setting it up again.",
                 self.general(t, cx),
             ),
             Tab::Hosting => (
@@ -178,7 +180,7 @@ impl HelioApp {
     }
 
     /// General: opening at login (for the host's icon, with hosting on),
-    /// and setup again.
+    /// `helio` in terminals, and setup again.
     fn general(&mut self, t: Theme, cx: &mut Context<Self>) -> AnyElement {
         let mut startup = Vec::new();
         if helio_ui::login::supported() {
@@ -226,6 +228,7 @@ impl HelioApp {
             .when(!startup.is_empty(), |d| {
                 d.child(section("Startup", t).child(rows(startup, t)))
             })
+            .child(section("Command line", t).child(rows([self.command_row(t, cx)], t)))
             .child(
                 section("Setup", t).child(rows(
                     [setting(
@@ -243,6 +246,105 @@ impl HelioApp {
                 )),
             )
             .into_any_element()
+    }
+
+    /// The Command line row: where `helio` stands, and the button that
+    /// changes it.
+    fn command_row(&mut self, t: Theme, cx: &mut Context<Self>) -> AnyElement {
+        let state = self.command_demo.clone().unwrap_or_else(command::state);
+        // What the button does (`Some(true)`: install), and the row's line.
+        let (does, line): (Option<bool>, String) = match state {
+            CommandState::Off => (
+                Some(true),
+                format!(
+                    "Stream, pair and turn hosting on or off from a terminal. Install puts helio \
+                        on the PATH of terminals opened from now on. {}",
+                    command::HOW
+                ),
+            ),
+            CommandState::On => (
+                Some(false),
+                "helio is on the PATH: type helio --help in a terminal opened since. It goes \
+                    when Helio does."
+                    .into(),
+            ),
+            CommandState::Elsewhere(at) => (
+                Some(true),
+                format!(
+                    "helio leads to another copy of Helio ({}): Install makes it this one's.",
+                    at.display()
+                ),
+            ),
+            CommandState::Taken(at) => (
+                None,
+                format!(
+                    "{} is another program, left as it is: Helio's command can go there once it \
+                        is gone.",
+                    at.display()
+                ),
+            ),
+            CommandState::Unavailable(why) => (None, why),
+        };
+        let label = match (self.command_change, does) {
+            (Some(true), _) => "Installing…",
+            (Some(false), _) => "Removing…",
+            (None, Some(false)) => "Remove",
+            (None, _) => "Install",
+        };
+        let control = button("command-line", label, t)
+            .disabled(self.command_change.is_some() || does.is_none())
+            .on_click(cx.listener(move |app, _, _, cx| {
+                if let Some(on) = does {
+                    app.change_command(on, cx);
+                }
+            }));
+        setting("The helio command", Some(line.into()), control, t).into_any_element()
+    }
+
+    /// Put `helio` on the PATH (`on`) or take it off, off the window's
+    /// thread: on a Mac it waits for an administrator's password. A state
+    /// made up for HELIO_UI_DEMO changes nothing on the system.
+    pub(crate) fn change_command(&mut self, on: bool, cx: &mut Context<Self>) {
+        if self.command_change.is_some() {
+            return;
+        }
+        if let Some(state) = &mut self.command_demo {
+            *state = if on {
+                CommandState::On
+            } else {
+                CommandState::Off
+            };
+            cx.notify();
+            return;
+        }
+        self.command_change = Some(on);
+        cx.notify();
+        let task = cx.background_executor().spawn(async move {
+            if on {
+                command::install()
+            } else {
+                command::remove()
+            }
+        });
+        cx.spawn(async move |this, cx| {
+            let done = task.await;
+            let _ = this.update(cx, |app, cx| {
+                app.command_change = None;
+                match done {
+                    Ok(done) => tracing::info!(on, ?done, "the helio command"),
+                    Err(e) => {
+                        let title = if on {
+                            "helio was not put on the PATH"
+                        } else {
+                            "helio was not taken off the PATH"
+                        };
+                        app.show_alert(title, &e, cx);
+                    }
+                }
+                cx.notify();
+            });
+        })
+        .detach();
     }
 
     /// Updates: the channel the check follows, and the version.

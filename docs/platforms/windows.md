@@ -257,14 +257,21 @@ As Moonlight does it on Windows:
 **Install Helio.cmd** (`tools/install-helio.ps1`, the download's
 `install.ps1`) installs Helio for the user who runs it, with no
 administrator: Helio and the host's engine in
-`%LOCALAPPDATA%\Programs\Helio` with the script beside it, in the Start
-menu, and in Settings > Apps (the key
+`%LOCALAPPDATA%\Programs\Helio` with the script beside it, `helio` (the
+command line: `bin\helio.exe`, a console program that runs `Helio.exe cli`
+and waits for it, since Helio.exe is a window program a terminal neither
+waits for nor shares its console with), in the Start menu, and in
+Settings > Apps (the key
 `HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\dev.mihaicristian.helio`),
 whose **Uninstall** runs the script with `-Uninstall`. When Helio starts
 from that folder and its entry is missing or names another version, as
 after an update installed by 0.9.4 or older, the script beside it writes
 the entry again. Uninstalling turns hosting off first, while it is on
-(`helio-host disable`, as an administrator: Windows asks).
+(`helio-host disable`, as an administrator: Windows asks), and takes `bin`
+off the user's `PATH`. Helio's **Settings → General → Command line** puts
+it there (`HKCU\Environment`, written as the `REG_EXPAND_SZ` Windows keeps
+it as, then `WM_SETTINGCHANGE` so that what Explorer starts has it); no
+installer does.
 
 Building it needs an FFmpeg 8 shared build and LLVM (for the FFmpeg
 bindings): see [../install.md](../install.md#helio-on-windows).
