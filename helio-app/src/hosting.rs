@@ -11,8 +11,9 @@
 //! - Windows: NVIDIA's encoder and SudoVDA's virtual display, used when
 //!   they are here (without them: software H.264, and the main display
 //!   scaled, `docs/platforms/windows.md`).
-//! - Linux: nothing to grant ahead (the desktop portal asks on Wayland when
-//!   a device connects).
+//! - Linux: nothing to grant ahead (GNOME and KDE make each session a
+//!   display of its own; elsewhere the desktop portal asks on Wayland when a
+//!   device connects).
 
 use gpui::{div, prelude::*, px, AnyElement, Context, SharedString};
 use helio_ui::{

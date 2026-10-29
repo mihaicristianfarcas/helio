@@ -200,7 +200,7 @@ the host runs on.
 |---|---|---|---|
 | General | Name (as clients see it) | the computer's name | `name` |
 | | Let a client take over a session (a device also needs **Take over** in its permissions) | on | `allow_takeover` |
-| | Keep this PC's monitors on while streaming | off: the virtual display is the whole desktop | `keep_host_displays` |
+| | Keep this PC's monitors on while streaming | off: the virtual display is the whole desktop (Windows, macOS, GNOME; on KDE it extends the desktop either way) | `keep_host_displays` |
 | | Share the clipboard with clients | on | `clipboard` |
 | Video | NVENC preset | P1 (fastest), as Sunshine | `nvenc_preset` |
 | | Two-pass encoding | on | `nvenc_two_pass` |
@@ -400,10 +400,16 @@ same.
   has the agent. Pair it again with **Allow…** on Helio's **Agents** page.
 - **"The host could not create its virtual display"** (Windows): SudoVDA is
   not installed, or Apollo's service is holding it — stop ApolloService.
+- **A KDE host streams its screen scaled, not a display of the device's
+  size**: KWin did not give Helio Host its virtual output. It does only for
+  a `helio-host` named in a desktop entry that asks for it, which Helio's
+  `install.sh` puts in `~/.local/share/applications`: install with it, and
+  host with the `helio-host` it installed.
 - **A Mac host ignores the keyboard and mouse**, or streams nothing: give
   Helio Host Accessibility and Screen Recording in System Settings > Privacy
   & Security, then turn hosting off and on.
-- **A Linux host under Wayland shows a dialog every time**, or ignores input:
+- **A Linux host under Wayland shows a dialog every time** (a desktop other
+  than GNOME and KDE), or ignores input:
   answer the desktop's sharing dialog with **Allow Remote Interaction** on;
   the restore token then saves asking again.
 - **Stutter every 20–30 s on a Mac on Wi-Fi**: AWDL (AirDrop, Continuity) is

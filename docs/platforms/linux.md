@@ -50,9 +50,49 @@ line of its standard output. That process is `helio_client::linux`:
 
 The same host — sessions, pairing, the web UI, the bitrate controller, the
 internet path — with `helio-host/src/linux/` where Windows and macOS have theirs.
-It streams the screen as it is: there is no virtual display, so the picture
-is scaled to the client's size (letterboxed when the shapes differ, the
-pointer mapped to match).
+On GNOME and KDE under Wayland, each session gets a virtual display at the
+client's mode, made by the desktop's compositor (below). Elsewhere it
+streams the screen as it is, scaled to the client's size (letterboxed when
+the shapes differ, the pointer mapped to match).
+
+### A virtual display (GNOME, KDE)
+
+As SudoVDA does on Windows and `CGVirtualDisplay` on macOS, the desktop
+makes a monitor of the client's size and rate for the session, and removes
+it when the session ends; the client sees that monitor alone, its pointer
+drawn in, at its own density where the client says it (a Retina Mac's
+200 %). It needs nothing installed beyond the desktop
+(`helio-host/src/linux/virtual_display.rs`):
+
+- **GNOME** (tested with mutter 46 and 50): mutter's own screen cast and remote
+  desktop (`org.gnome.Mutter.ScreenCast`, `RecordVirtual`, and
+  `org.gnome.Mutter.RemoteDesktop`), what gnome-remote-desktop uses, open to
+  the session's own programs — so there is no dialog to answer. mutter 50
+  takes the mode as asked; earlier ones size the monitor from the stream,
+  which asks for exactly the client's size (`helio-host/src/linux/mutter.rs`).
+  For the session the virtual monitor is the whole desktop, the host's own
+  monitors off, so windows open where the client sees them, as on Windows
+  (unless **Keep this PC's monitors on while streaming**: then it extends
+  the desktop beside them). The arrangement is mutter's temporary one: when
+  the monitor goes, mutter puts back the one it keeps for the host's own
+  monitors (`helio-host/src/linux/mutter_layout.rs`).
+- **KDE Plasma** (KWin 6): KWin's own screen cast makes a virtual output
+  (`zkde_screencast_unstable_v1`), and input goes through KWin's fake input
+  (`org_kde_kwin_fake_input`), as krfb's virtual monitor and KDE's portal do
+  (`helio-host/src/linux/kwin.rs`). KWin offers both only to a program whose
+  desktop entry asks for them (`X-KDE-Wayland-Interfaces`), found by the
+  program's path: Helio's `install.sh` installs `helio-host`'s own,
+  `dev.mihaicristian.helio.host.desktop`, hidden from the launcher. The
+  output extends the desktop; the host's monitors stay on. Text goes as
+  keysyms (fake input 6, as KWin 6.6 has it; with an older KWin, keys
+  only).
+
+Typed text reaches characters on the host's keyboard layout only (mutter
+and KWin type a keysym with the layout's own keys), as through the portal.
+Under X11, and on other Wayland desktops (wlroots), there is no virtual
+display. The host's log says which it uses (`a Wayland session: sessions
+get a virtual display of the desktop's own`, or `... go through the desktop
+portal`).
 
 ### Under X11
 
@@ -75,8 +115,9 @@ pointer mapped to match).
 
 ### Under Wayland
 
-The screen and the input go through the desktop portal, the way desktop
-sharing is meant to work there (`helio-host/src/linux/portal.rs`): a RemoteDesktop
+Where the desktop makes no virtual display for the host, the screen and
+the input go through the desktop portal, the way desktop sharing is meant
+to work there (`helio-host/src/linux/portal.rs`): a RemoteDesktop
 session with a screen cast in it (GNOME, KDE), or a ScreenCast session alone
 where the desktop has no RemoteDesktop portal (wlroots: sway, Hyprland — no
 input from the client there). Frames come over PipeWire with the pointer
@@ -95,7 +136,8 @@ environment does not make it clear.
 
 Helio Host runs in the desktop session, as the user: `tools/linux/helio-host.service` is
 a systemd user unit for that, which Helio's `install.sh` installs beside the
-app without turning it on ([../install.md](../install.md#hosting-on-linux)),
+app without turning it on, with the host's desktop entry
+([../install.md](../install.md#on-linux)),
 and which turning hosting on and off (the switch, or `helio host enable` and
 `disable`) enables and disables (`systemctl --user enable|disable --now
 helio-host`; no root).
@@ -110,11 +152,21 @@ Data and logs are in `~/.config/helio-host`.
 | The same through the Wayland portal (GNOME 46, nested, software rendering) | frames at the 42 fps the nested compositor draws; 4.7 ms capture to encoded; 10–11 ms capture to screen; input arrives; later sessions start from the restore token without asking |
 | Linux client streaming a Windows host over a VPN, 1280x720@60 | H.264 and HEVC; 60 fps received, decoded and presented; 1 ms decode (software); 14–20 ms capture to screen |
 | Offscreen decode and present of the 600-frame test stream (`helio-client/examples/linux-render-check.rs`) | every colour bar matches FFmpeg's own BT.709 conversion exactly |
+| GNOME's virtual display: Ubuntu 26.04's mutter 50.1, headless (no GPU), to a client in the same VM, x264 in software, release build | a 1600x900@60 monitor made for the session and removed at its end; the host's monitor off for the session and back after it; 2.9 ms capture to encoded (p50), 4.2 ms capture to screen; a still desktop sends 12 fps; a click, keys and typed text reach a terminal opened on it |
+| The same with Ubuntu 24.04's mutter 46.2 (no `modes`), in the container, debug build | a 1440x900 monitor sized from the stream; arranged and restored the same |
+
+`tools/linux/virtual-display-test` repeats the last row.
 
 `tools/linux/loopback-test` repeats the first row; see
 [../development.md](../development.md#linux).
 
 ## Not verified yet
+
+- KDE's virtual display on a real Plasma session (built, type-checked; a
+  headless KWin offers no screen cast without OpenGL).
+- GNOME's on a desktop with real monitors (the tests ran headless mutter,
+  whose own monitor is virtual too), and a client's density there (Linux
+  clients do not send one; the scale chosen is unit-tested).
 
 - Real hardware: VA-API decode and encode, NVENC, controllers, a real
   window manager, compositor and cursor theme, keyboard and mouse through
@@ -129,11 +181,11 @@ Data and logs are in `~/.config/helio-host`.
 
 - Input on wlroots desktops (no RemoteDesktop portal there): uinput, or
   their virtual keyboard and pointer protocols.
-- GNOME without the dialog, and at the client's resolution: mutter's own
-  screen-cast API can record a virtual monitor of any size (what
-  gnome-remote-desktop does).
 - The host at the client's resolution under X11 (RandR modes) rather than
-  scaled.
+  scaled, and on wlroots desktops (`swaymsg create_output`).
+- The host's monitors off for a session on KDE (KWin's output management),
+  as on GNOME.
 - Controllers on a Linux host (uinput gamepads).
-- Packages: there is a systemd unit and a per-user install script for the
-  windows, but no `.deb`, Flatpak or release archive.
+- Packages: there is a systemd unit, a release archive and a per-user
+  install script (which installs the libraries it needs with apt), but no
+  `.deb` or Flatpak.

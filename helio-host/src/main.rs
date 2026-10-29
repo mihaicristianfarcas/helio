@@ -44,6 +44,15 @@ mod hosting;
 #[cfg(target_os = "macos")]
 #[path = "mac/icon.rs"]
 mod icon;
+#[cfg(target_os = "linux")]
+#[path = "linux/kwin.rs"]
+mod kwin;
+#[cfg(target_os = "linux")]
+#[path = "linux/mutter.rs"]
+mod mutter;
+#[cfg(target_os = "linux")]
+#[path = "linux/mutter_layout.rs"]
+mod mutter_layout;
 mod negotiate;
 mod netif;
 #[cfg(windows)]
@@ -89,6 +98,9 @@ mod video;
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 #[path = "unix/video.rs"]
 mod video;
+#[cfg(target_os = "linux")]
+#[path = "linux/virtual_display.rs"]
+mod virtual_display;
 mod web;
 
 use std::process::ExitCode;

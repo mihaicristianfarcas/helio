@@ -480,8 +480,8 @@ impl HelioApp {
         } else {
             (
                 "The host runs as your user, so turning it on asks for nothing.",
-                "On Wayland, your desktop asks you to share the screen when a device first \
-                 connects.",
+                "On GNOME and KDE each device gets a display of its own; on other Wayland \
+                 desktops, yours asks you to share the screen when a device first connects.",
             )
         };
         div()

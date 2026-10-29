@@ -1,22 +1,25 @@
-//! The Linux host's side of a session (see `session`): the screen as it is
-//! (no virtual display: the picture is scaled to the client's size and
-//! letterboxed), encoded with FFmpeg (VA-API, NVENC or x264), and the sound
-//! through PulseAudio (or PipeWire's server for its clients). Helio Host runs in
-//! the user's desktop session, as the user.
+//! The Linux host's side of a session (see `session`): a virtual display
+//! at the client's mode where the desktop makes one (`virtual_display`:
+//! GNOME, KDE), else the screen as it is (the picture scaled to the
+//! client's size and letterboxed); encoded with FFmpeg (VA-API, NVENC or
+//! x264), and the sound through PulseAudio (or PipeWire's server for its
+//! clients). Helio Host runs in the user's desktop session, as the user.
 //!
-//! Under X11 the screen comes through MIT-SHM and input goes in through
-//! XTest; under Wayland both go through the desktop portal (`portal`), the
-//! screen by PipeWire.
+//! Under Wayland the screen comes by PipeWire and input goes to the
+//! compositor: its own interfaces for a virtual display, the desktop portal
+//! (`portal`) for the screen as it is. Under X11 the screen comes through
+//! MIT-SHM and input goes in through XTest.
 
 use std::os::fd::OwnedFd;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use helio_capture::pipewire::PipeWireCapture;
+use helio_capture::pipewire::{self, PipeWireCapture};
 use helio_capture::pulse::PulseCapture;
 use helio_capture::x11::X11Capture;
 use helio_capture::{CaptureError, Frame, Grab, PixelOrder};
+use helio_display::DisplayMode;
 use helio_encode::ffmpeg::{self, Backend, FfmpegEncoder, Image};
 use helio_encode::{Codec, EncodeError, EncodedFrame, EncoderConfig};
 use helio_input::x11::XTestSink;
@@ -29,11 +32,12 @@ use helio_transport::{Endpoint, Peer};
 use crate::audio::AudioHandle;
 use crate::config::HostConfig;
 use crate::negotiate::Negotiated;
-use crate::portal::Portal;
+use crate::portal::{KeepAwake, Portal};
 use crate::power::Awake;
 use crate::remote_input::RemoteSink;
 use crate::session::Shared;
 use crate::video::VideoParams;
+use crate::virtual_display::{self, VirtualDisplay};
 
 pub const HOST_KIND: u8 = control::host::LINUX;
 
@@ -46,8 +50,14 @@ const PORTAL_WAIT: Duration = Duration::from_secs(60);
 pub enum VideoSource {
     /// The X screen.
     X11,
-    /// A portal's screen cast: its PipeWire connection and stream.
-    PipeWire { fd: Arc<OwnedFd>, node: u32 },
+    /// A screen cast: the portal's PipeWire connection (else the
+    /// session's PipeWire), the stream, and the one mode to ask it for (a
+    /// virtual monitor that takes its size from the stream).
+    PipeWire {
+        fd: Option<Arc<OwnedFd>>,
+        node: u32,
+        mode: Option<pipewire::Mode>,
+    },
 }
 
 enum SinkKind {
@@ -87,10 +97,20 @@ impl InputSink for Sink {
 pub struct Display {
     source: VideoSource,
     picture: (u32, u32, u32, u32),
+    screen: Screen,
+}
+
+/// What a session streams, held for as long as it does.
+enum Screen {
+    /// The X screen, kept on.
+    X11 { _awake: Box<Awake> },
     /// Wayland: the portal session (screen, input, the screen kept on).
-    portal: Option<SharedScreen>,
-    /// X11: the screen kept on.
-    _awake: Option<Awake>,
+    Portal(SharedScreen),
+    /// Wayland: a virtual display of the desktop's own, the screen kept on.
+    Virtual {
+        display: VirtualDisplay,
+        _awake: KeepAwake,
+    },
 }
 
 /// A screen the desktop shares through its portal.
@@ -133,7 +153,13 @@ impl Platform {
                 "no video encoder: FFmpeg has none of VA-API, NVENC or libx264 working here"
             );
         }
-        if wayland {
+        let virtual_display = wayland.then(virtual_display::offered).flatten();
+        if let Some(desktop) = virtual_display {
+            tracing::info!(
+                ?desktop,
+                "a Wayland session: sessions get a virtual display of the desktop's own"
+            );
+        } else if wayland {
             tracing::info!("a Wayland session: the screen and input go through the desktop portal");
             // Ask now, while someone is likely at the machine, rather than
             // when a client first connects from afar.
@@ -207,12 +233,50 @@ impl Platform {
     pub fn display(
         &mut self,
         n: &Negotiated,
-        _req: &SessionStart,
-        _keep: bool,
+        req: &SessionStart,
+        keep_host_displays: bool,
         _cfg: &HostConfig,
     ) -> Result<Display, AckStatus> {
         let (width, height) = (n.width, n.height);
         let (w, h) = (width as u32, height as u32);
+        // Looked for at each session: the desktop may have started after
+        // the host.
+        if let Some(desktop) = self.wayland.then(virtual_display::offered).flatten() {
+            let mode = DisplayMode {
+                width,
+                height,
+                refresh_mhz: n.fps_mhz,
+            };
+            match virtual_display::make(desktop, mode, req.scale_pct, keep_host_displays) {
+                Ok(made) => {
+                    tracing::info!(
+                        ?desktop,
+                        width,
+                        height,
+                        fps = n.fps_mhz as f64 / 1000.0,
+                        client_scale_pct = req.scale_pct,
+                        keep_host_displays,
+                        "streaming a virtual display"
+                    );
+                    return Ok(Display {
+                        source: VideoSource::PipeWire {
+                            fd: None,
+                            node: made.node,
+                            mode: made.mode,
+                        },
+                        picture: (0, 0, w, h),
+                        screen: Screen::Virtual {
+                            display: made.display,
+                            _awake: crate::portal::keep_awake(),
+                        },
+                    });
+                }
+                Err(e) => {
+                    tracing::warn!(error = %e, "no virtual display; streaming the desktop's \
+                        shared screen")
+                }
+            }
+        }
         if self.wayland {
             let (portal, granted) = Portal::open(&self.data_dir, PORTAL_WAIT).map_err(|e| {
                 tracing::error!(error = %e, "the desktop did not share its screen");
@@ -225,16 +289,16 @@ impl Platform {
             tracing::info!(stream = ?(width, height), ?picture, input = granted.input, "streaming the desktop's shared screen");
             return Ok(Display {
                 source: VideoSource::PipeWire {
-                    fd: Arc::new(granted.fd),
+                    fd: Some(Arc::new(granted.fd)),
                     node: granted.node,
+                    mode: None,
                 },
                 picture,
-                portal: Some(SharedScreen {
+                screen: Screen::Portal(SharedScreen {
                     portal,
                     size: granted.size,
                     input: granted.input,
                 }),
-                _awake: None,
             });
         }
         let (conn, screen) = x11rb::connect(None).map_err(|e| {
@@ -248,8 +312,9 @@ impl Platform {
         Ok(Display {
             source: VideoSource::X11,
             picture,
-            portal: None,
-            _awake: Some(Awake::hold()),
+            screen: Screen::X11 {
+                _awake: Box::new(Awake::hold()),
+            },
         })
     }
 
@@ -276,14 +341,15 @@ impl Platform {
     }
 
     pub fn input_sink(&self, d: &Display, _width: u16, _height: u16) -> Sink {
-        let inner = match &d.portal {
-            Some(SharedScreen {
+        let inner = match &d.screen {
+            Screen::Virtual { display, .. } => SinkKind::Remote(display.sink(d.picture)),
+            Screen::Portal(SharedScreen {
                 portal,
                 size,
                 input: true,
             }) => SinkKind::Remote(portal.sink(d.picture, *size)),
-            Some(_) => SinkKind::None,
-            None => XTestSink::new(None, d.picture)
+            Screen::Portal(_) => SinkKind::None,
+            Screen::X11 { .. } => XTestSink::new(None, d.picture)
                 .map_or(SinkKind::None, |s| SinkKind::X11(Box::new(s))),
         };
         Sink { inner, received: 0 }
@@ -384,7 +450,8 @@ pub fn host_input_idle() -> Option<Duration> {
     })
 }
 
-/// The X screen is streamed as it is: someone at the host sees it.
+/// The host's monitors stay as they are (a virtual display extends the
+/// desktop): someone at the host sees them.
 pub fn isolates_host_displays(_req: &SessionStart, _cfg: &HostConfig) -> bool {
     false
 }
@@ -466,11 +533,13 @@ pub fn open_video(params: &VideoParams) -> Result<(Capture, Encoder), String> {
         VideoSource::X11 => Capture::X11(Box::new(
             X11Capture::new(None, true).map_err(|e| e.to_string())?,
         )),
-        VideoSource::PipeWire { fd, node } => {
+        VideoSource::PipeWire { fd, node, mode } => {
             let fd = fd
-                .try_clone()
+                .as_ref()
+                .map(|fd| fd.try_clone())
+                .transpose()
                 .map_err(|e| format!("the PipeWire connection: {e}"))?;
-            Capture::PipeWire(PipeWireCapture::new(fd, *node).map_err(|e| e.to_string())?)
+            Capture::PipeWire(PipeWireCapture::new(fd, *node, *mode).map_err(|e| e.to_string())?)
         }
     };
     let enc = FfmpegEncoder::new(params.encoder).map_err(|e| e.to_string())?;

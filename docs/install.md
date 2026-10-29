@@ -101,8 +101,9 @@ Helio-VERSION-linux-x86_64/install.sh
 ```
 
 `install.sh` puts Helio (`helio-app`) and the host's engine (`helio-host`)
-in `~/.local/bin`, Helio's launcher entry with its icon, and the host's user
-service, installed but not turned on (see
+in `~/.local/bin`, Helio's launcher entry with its icon, the host's own
+entry (hidden from the launcher: KDE gives the host a virtual display only
+through it), and the host's user service, installed but not turned on (see
 [Hosting on Linux](#hosting-on-linux)). It names any library the system is
 missing. Run from a newer download, it updates them, and restarts the
 host if hosting is on. `install.sh --uninstall` turns hosting off and
@@ -290,9 +291,13 @@ Details: [platforms/linux.md](platforms/linux.md).
 
 Turn hosting on in Helio (or run `helio host enable`: `systemctl --user
 enable --now helio-host`). Helio Host runs in your desktop session, as you,
-started at each login. Under Wayland, the desktop asks once whether Helio Host
-may share the screen (on GNOME, switch on **Allow Remote Interaction** for
-the keyboard and mouse). Helio's This computer pages show the host. Its
+started at each login. On GNOME and KDE under Wayland, each session gets a
+virtual display at the device's own size and rate, made by the desktop
+itself, with nothing to answer; on GNOME it is the whole desktop for the
+session, your own monitors off, unless **Keep this PC's monitors on while
+streaming** is on. Elsewhere under Wayland, the desktop asks once whether
+Helio Host may share the screen (switch on remote interaction, where the
+dialog offers it, for the keyboard and mouse). Helio's This computer pages show the host. Its
 hosting switch, as `helio host enable` and `disable` do, runs the host's
 program, `helio-host`, which it finds beside Helio or on the `PATH`. Data and logs are in `~/.config/helio-host`.
 Details: [platforms/linux.md](platforms/linux.md).
@@ -317,7 +322,7 @@ anywhere ([networking.md](networking.md)). Next: [usage.md](usage.md).
 | Homebrew | `brew uninstall --cask helio`: it quits Helio, `helio` goes with the app, and the host, finding the app gone, turns hosting off itself 15 s later (its LaunchAgent and copy removed); `--zap` stops it at once and also deletes the data folders, Helio's and the host's, Helio's start at login and `/etc/paths.d/helio` (the line that put `helio` on the `PATH`) |
 | macOS | Turn hosting off in Helio (or run `helio host disable`), quit Helio, then delete Helio.app: `helio` goes with it. Deleted with hosting on, the host notices and, 15 s later, turns hosting off itself. Your data is in `~/Library/Application Support/Helio` and `~/Library/Application Support/Helio Host` (the host's identity and pairings), and `/etc/paths.d/helio` names the folder `helio` was in, if you installed it (`sudo rm /etc/paths.d/helio`) |
 | Windows | **Settings > Apps > Installed apps**, **Helio**, **Uninstall** (or `unins000.exe` in `%LOCALAPPDATA%\Programs\Helio`). While hosting is on, it turns it off first (HelioHost, its firewall rules and the host's copy go), and Windows asks for an administrator; if you say no, Helio stays installed. It takes `helio` off your `PATH`, if you put it there, and Helio's start at login. It leaves your hosts and settings, the host's identity and pairings, and the firewall rule Windows made when it asked about Helio (only an administrator can remove it, and it lets nothing in once Helio is gone): delete `%APPDATA%\Helio` and `C:\ProgramData\Helio Host` too to remove them. A copy run from the extracted zip: turn hosting off in it, then delete the folder |
-| Linux | `install.sh --uninstall` from the download, or `tools/linux/install-apps --uninstall`: it turns hosting off first, then removes the programs, the `helio` link (if you installed it), the host's unit and the launcher entry. Then `~/.config/helio` and `~/.config/helio-host` |
+| Linux | `install.sh --uninstall` from the download, or `tools/linux/install-apps --uninstall`: it turns hosting off first, then removes the programs, the `helio` link (if you installed it), the host's unit and the launcher entries. Then `~/.config/helio` and `~/.config/helio-host` |
 
 Unpair a device on the other side too (Helio: the host's menu > Unpair; the host:
 **This computer → Devices**).

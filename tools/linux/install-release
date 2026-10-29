@@ -8,7 +8,9 @@
 # - not `helio`, the command line, on the PATH: Helio's Settings > General
 #   links ~/.local/bin/helio to helio-app (helio-app/src/command.rs), and the
 #   uninstall removes that link;
-# - the launcher entry, with its icon;
+# - the launcher entry, with its icon, and the host's own entry, hidden,
+#   which KDE needs to give the host a virtual display
+#   (dev.mihaicristian.helio.host.desktop);
 # - the host's user unit (helio-host.service), installed but not enabled: hosting
 #   is off until the app's switch turns it on (`helio-host enable`). An update
 #   while hosting is on (the unit enabled) restarts the host on the new
@@ -28,10 +30,12 @@ UNITS=$CONFIG/systemd/user
 # WM_CLASS).
 ID=dev.mihaicristian.helio
 
-# Menus and docks pick the entry up (or drop it) without logging out.
+# Menus and docks pick the entry up (or drop it) without logging out, and
+# KDE's service cache, which KWin looks the host's entry up in.
 refresh_launcher() {
     command -v update-desktop-database >/dev/null && update-desktop-database -q "$DATA/applications" || true
     command -v gtk-update-icon-cache >/dev/null && gtk-update-icon-cache -q -t "$DATA/icons/hicolor" 2>/dev/null || true
+    command -v kbuildsycoca6 >/dev/null && kbuildsycoca6 >/dev/null 2>&1 || true
 }
 
 if [[ ${1:-} == --uninstall ]]; then
@@ -47,7 +51,8 @@ if [[ ${1:-} == --uninstall ]]; then
         rm -f "$BIN/helio"
     fi
     rm -f "$UNITS/helio-host.service" "$BIN/helio-host" "$BIN/helio-app" \
-        "$DATA/applications/$ID.desktop" "$DATA"/icons/hicolor/*/apps/"$ID".{png,svg}
+        "$DATA/applications/$ID.desktop" "$DATA/applications/$ID.host.desktop" \
+        "$DATA"/icons/hicolor/*/apps/"$ID".{png,svg}
     systemctl --user daemon-reload 2>/dev/null || true
     refresh_launcher
     echo "uninstalled; your hosts, pairings and settings stay in $CONFIG/helio and $CONFIG/helio-host"
@@ -96,6 +101,14 @@ while IFS= read -r line; do
         *) printf '%s\n' "$line" ;;
     esac
 done < "$HERE/$ID.desktop" > "$DATA/applications/$ID.desktop"
+# The host's entry, naming the engine by its whole path: KWin matches it to
+# the running program's (kwin's serviceutils.h).
+while IFS= read -r line; do
+    case $line in
+        Exec=*) printf 'Exec="%s/helio-host" host\n' "${BIN//%/%%}" ;;
+        *) printf '%s\n' "$line" ;;
+    esac
+done < "$HERE/$ID.host.desktop" > "$DATA/applications/$ID.host.desktop"
 for icon in "$HERE"/hicolor/*/apps/"$ID".*; do
     install -Dm644 "$icon" "$DATA/icons/${icon#"$HERE"/}"
 done
