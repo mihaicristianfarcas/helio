@@ -253,8 +253,9 @@ second copy is the one that goes stale.
 ## Commits and pull requests
 
 - `main` takes changes only through pull requests, and a pull request
-  merges once CI (`.github/workflows/ci.yml`: formatting, clippy and the
-  tests on macOS, Windows and Linux) passes. Work on a branch.
+  merges by rebase once CI (`.github/workflows/ci.yml`: formatting, clippy
+  and the tests on macOS, Windows and Linux) passes and its conversations
+  are resolved. Work on a branch.
 - A review agent checks each change, and the maintainer reads it, before it
   merges ([docs/verification.md](docs/verification.md#how-changes-are-reviewed)).
 - One logical change per commit. Keep formatting, refactors and behaviour
