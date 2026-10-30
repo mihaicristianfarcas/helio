@@ -272,7 +272,15 @@ Without the API key the app is signed but not notarized; without
 `HELIO_SIGN_IDENTITY` it is signed as a development build is (below).
 
 `main` takes changes only through pull requests: work on a branch, push it,
-and open one (`gh pr create`).
+and open one (`gh pr create`). They merge by rebase, the only method the
+repository allows (`gh pr merge --rebase`), with their conversations
+resolved.
+
+A ruleset keeps `v*` tags from being moved or deleted once they are made, for
+administrators too: a release that went wrong gets a new version, not the same
+tag again. It cannot keep others from making one: on a personal account's
+repository, GitHub takes no GitHub Actions bypass, which the release workflow
+would need.
 
 ### Windows signing
 

@@ -17,9 +17,21 @@ Every change reaches `main` through a pull request. A review agent checks
 it, then the maintainer reads it, and it merges once CI passes.
 
 GitHub enforces the pull request and the four CI checks below, for
-administrators too. It does not enforce the review: branch protection asks
-for no approvals, and the reviews happen outside GitHub, so none of the 51
-pull requests shows one.
+administrators too. A pull request merges by rebase only, with its
+conversations resolved, so `main`'s history is linear, and `main` takes no
+force push or deletion. GitHub does not enforce the review: branch
+protection asks for no approvals, and the reviews happen outside GitHub, so
+none of the 51 pull requests shows one.
+
+The rest of what protects a release:
+
+| What | Rule |
+|---|---|
+| Actions | Only GitHub's own and `Swatinem/rust-cache` may run, each pinned to a commit |
+| Version tags | Once made, a `v*` tag cannot be moved or deleted |
+| The `release` environment, with the Windows signing secrets | Deploys from `main` only |
+| Secrets in a push | Secret scanning and push protection are on |
+| Vulnerable dependencies | Dependabot alerts are on |
 
 ## How changes are tested
 
