@@ -89,6 +89,11 @@ html {
   background: var(--bg);
 }
 
+/* Nothing to download on a phone or tablet (layouts/Base.astro). */
+html[data-phone] #install {
+  display: none;
+}
+
 /* While the page returns to where the reader was (layouts/Base.astro). */
 html[data-restore] body {
   visibility: hidden;

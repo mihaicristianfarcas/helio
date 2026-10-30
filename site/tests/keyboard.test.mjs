@@ -231,32 +231,42 @@ for (const [agent, system, button, listed] of [
   });
 }
 
-for (const [device, agent, touch] of [
-  ['a phone', 'Mozilla/5.0 (iPhone; CPU iPhone OS 26_0 like Mac OS X)', 5],
-  ['an Android tablet', 'Mozilla/5.0 (Linux; Android 15; Pixel Tablet)', 5],
-  ['an iPad, which says it is a Mac', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)', 5],
+const device = (window, agent, touch) => {
+  Object.defineProperty(window.navigator, 'userAgent', { value: agent, configurable: true });
+  Object.defineProperty(window.navigator, 'maxTouchPoints', { value: touch, configurable: true });
+  const alerts = [];
+  window.alert = (message) => alerts.push(message);
+  return alerts;
+};
+
+for (const [name, agent] of [
+  ['a phone', 'Mozilla/5.0 (iPhone; CPU iPhone OS 26_0 like Mac OS X)'],
+  ['an Android tablet', 'Mozilla/5.0 (Linux; Android 15; Pixel Tablet)'],
+  ['an iPad, which says it is a Mac', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)'],
 ]) {
-  test(`${device} is told to open the page on a computer, and offered no download`, async () => {
-    const { window, document, run, stops, close } = page(['layouts/Base.astro']);
+  test(`${name} has no downloads, and each download button says why`, async () => {
+    const { window, document, run, stops, close } = page();
     try {
-      Object.defineProperty(window.navigator, 'userAgent', { value: agent, configurable: true });
-      Object.defineProperty(window.navigator, 'maxTouchPoints', { value: touch, configurable: true });
-      run('components/Install.astro');
-      assert.equal(document.querySelector('[data-on-phone]').hidden, false);
-      assert.ok([...document.querySelectorAll('[data-on-computer]')].every((part) => part.hidden));
+      const alerts = device(window, agent, 5);
+      run('layouts/Base.astro');
       assert.equal(stops().filter((stop) => stop.dataset?.file).length, 0);
+      const links = [...document.querySelectorAll('a[href$="#install"]')];
+      assert.ok(links.length >= 2);
+      for (const link of links) link.click();
+      assert.equal(alerts.length, links.length);
+      assert.equal(alerts[0], 'Please open this page on a macOS, Windows or Linux device.');
     } finally { await close(); }
   });
 }
 
-test('a Mac, with no touch screen, keeps its download at any width', async () => {
-  const { window, document, run, close } = page(['layouts/Base.astro'], 390);
+test('a Mac, with no touch screen, keeps its downloads at any width', async () => {
+  const { window, document, run, stops, close } = page([], 390);
   try {
-    Object.defineProperty(window.navigator, 'userAgent', { value: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)', configurable: true });
-    Object.defineProperty(window.navigator, 'maxTouchPoints', { value: 0, configurable: true });
-    run('components/Install.astro');
-    assert.equal(document.querySelector('[data-on-phone]').hidden, true);
-    assert.ok([...document.querySelectorAll('[data-on-computer]')].every((part) => !part.hidden));
+    const alerts = device(window, 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)', 0);
+    run('layouts/Base.astro');
+    assert.ok(stops().some((stop) => stop.dataset?.file));
+    document.querySelector('a[href$="#install"]').click();
+    assert.deepEqual(alerts, []);
   } finally { await close(); }
 });
 
