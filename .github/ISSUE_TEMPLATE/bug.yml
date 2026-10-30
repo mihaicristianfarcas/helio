@@ -1,0 +1,95 @@
+name: Bug report
+description: Something in Helio or Helio Host does not work as it should.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        A security problem goes privately instead: see [SECURITY.md](https://github.com/mihaicristianfarcas/helio/blob/main/SECURITY.md).
+        Where the logs are, and how to turn on debug logging: [Collecting logs for a bug report](https://github.com/mihaicristianfarcas/helio/blob/main/docs/logs.md).
+  - type: input
+    id: helio-version
+    attributes:
+      label: Helio version
+      description: The first line of `helio.log` says it.
+      placeholder: 1.0.0
+    validations:
+      required: true
+  - type: input
+    id: client-os
+    attributes:
+      label: Client OS and version
+      description: The computer you sit at.
+      placeholder: macOS 26.1
+    validations:
+      required: true
+  - type: input
+    id: host-os
+    attributes:
+      label: Host OS and version
+      description: The computer you stream. On Linux, the desktop too.
+      placeholder: Windows 11 25H2
+    validations:
+      required: true
+  - type: input
+    id: gpu
+    attributes:
+      label: GPU and driver
+      description: The host's, and the client's if the problem is in decoding or showing the picture.
+      placeholder: NVIDIA RTX 3070 Ti, driver 580.97
+    validations:
+      required: true
+  - type: dropdown
+    id: codec
+    attributes:
+      label: Codec
+      description: The statistics overlay shows it (Ctrl+Alt+Shift+S).
+      options:
+        - H.264
+        - HEVC
+        - AV1
+        - Not sure
+    validations:
+      required: true
+  - type: input
+    id: mode
+    attributes:
+      label: Resolution and frame rate
+      placeholder: 3024x1890 at 120 fps
+    validations:
+      required: true
+  - type: dropdown
+    id: network
+    attributes:
+      label: Network
+      options:
+        - LAN (wired at both ends)
+        - Wi-Fi (at either end)
+        - Internet (not on the same network)
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: >-
+        From both sides, around the time it happened. Logs never contain a PIN,
+        password, key or token, but they do contain host names and addresses:
+        edit them out if you like.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: statistics
+    attributes:
+      label: Screenshot of the statistics overlay
+      description: Press Ctrl+Alt+Shift+S during the stream, take a screenshot, and drag it here.
+    validations:
+      required: false

@@ -1,0 +1,59 @@
+name: Tester report
+description: You tried Helio. Say how it went, in under two minutes.
+title: "Tester report: "
+body:
+  - type: dropdown
+    id: result
+    attributes:
+      label: Did it work?
+      options:
+        - It worked
+        - It didn't
+    validations:
+      required: true
+  - type: dropdown
+    id: client
+    attributes:
+      label: Client
+      description: The computer you sat at.
+      options:
+        - macOS
+        - Windows
+        - Linux
+    validations:
+      required: true
+  - type: dropdown
+    id: host
+    attributes:
+      label: Host
+      description: The computer you streamed.
+      options:
+        - macOS
+        - Windows
+        - Linux
+    validations:
+      required: true
+  - type: dropdown
+    id: network
+    attributes:
+      label: Network
+      options:
+        - LAN (wired at both ends)
+        - Wi-Fi (at either end)
+        - Internet (not on the same network)
+    validations:
+      required: true
+  - type: input
+    id: gpu
+    attributes:
+      label: Host GPU
+      placeholder: NVIDIA RTX 3070 Ti
+    validations:
+      required: false
+  - type: textarea
+    id: notes
+    attributes:
+      label: Anything to add?
+      description: A sentence is plenty. If something broke, a [bug report](https://github.com/mihaicristianfarcas/helio/issues/new?template=bug.yml) has room for the details.
+    validations:
+      required: false
