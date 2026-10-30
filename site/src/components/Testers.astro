@@ -1,0 +1,53 @@
+---
+//! The call to try it, closing the FAQ: the tester form says how it went in
+//! under two minutes (.github/ISSUE_TEMPLATE/tester-report.yml), Discussions
+//! takes the rest.
+import { DISCUSSIONS, TESTER_REPORT } from '../lib/repo';
+---
+
+<div class="box" id="testers">
+  <div>
+    <h3>Try it and tell me what breaks</h3>
+    <p>Helio is young, and every setup finds something new. Your report is how the less-tested ones get better.</p>
+  </div>
+  <div class="actions">
+    <a class="button primary" href={TESTER_REPORT}>Send a tester report</a>
+    <a class="button secondary" href={DISCUSSIONS}>Open Discussions</a>
+  </div>
+</div>
+
+<style>
+  .box {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 24px 48px;
+    margin-top: var(--gap-part);
+    padding: clamp(24px, 4vw, 32px);
+    border: 1px solid var(--line-2);
+    border-radius: var(--radius);
+    background: var(--surface);
+  }
+
+  .box > div:first-child {
+    flex: 1 1 28rem;
+    min-width: 0;
+  }
+
+  h3 {
+    font-size: clamp(1.25rem, 1.1rem + 0.6vw, 1.5rem);
+    letter-spacing: -0.02em;
+  }
+
+  p {
+    margin-top: 8px;
+    font-size: 0.9375rem;
+  }
+
+  .actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+</style>

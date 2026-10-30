@@ -1,10 +1,20 @@
 ---
+//! Latency: the comparison with Moonlight + Apollo first, the same machines
+//! and settings on both; then a breakdown of the pipeline from a run on
+//! loopback, which shows where the time goes and says nothing of a network.
+//! Each measure has its own unit, so each gets its own pair of bars, starting
+//! at zero; a range is drawn to its worse end. The breakdown's stages are
+//! averaged one by one; its total is measured end to end, and what is left
+//! between the stages is shown as such.
 import Video from './Video.astro';
-import { RECORDING as R } from '../lib/facts';
+import { RECORDING as R, VERSUS } from '../lib/facts';
+import { onGitHub } from '../lib/repo';
 
-// Where the time goes between the host's capture and the client's screen.
-// The stages are averaged one by one; the total is measured end to end,
-// and what is left between the stages is shown as such.
+const worse = (v: string, better: string) => {
+  const ends = v.split('–').map(Number);
+  return better === 'lower' ? Math.max(...ends) : Math.min(...ends);
+};
+
 const stages = [
   { name: 'Host', what: 'capture, encode, encrypt, send', ms: R.hostMs, fill: 'var(--data-1)' },
   { name: 'Network', what: 'and reassembly; loopback here', ms: R.networkMs, fill: 'var(--data-2)' },
@@ -34,67 +44,228 @@ const drawn = all
   <div class="wrap">
     <div class="head">
       <span class="eyebrow">Latency</span>
-      <h2 class="title">The host’s screen and the client’s, side by side</h2>
+      <h2 class="title">Matches Moonlight, on the same machines</h2>
       <p class="lede">
-        A real stream from a Linux host to a Linux client, both screens recorded at the same instants. The host
-        shows a running clock, so the two halves can be compared frame by frame: the client is one frame behind the
-        host throughout. Ping’s statistics put {total} ms of that between the host capturing a frame and the client’s
-        screen showing it, and {R.framesLost === 0 ? 'no frame was lost' : `${R.framesLost} frames were lost`}.
+        The same MacBook and PC at demanding settings: 3024×1890, 120 fps, 100 Mbit/s, HEVC and 7.1 sound, with the
+        host’s screen full of noise. Apollo uses Sunshine’s video path and, like Helio Host, a virtual display at the
+        client’s mode.
       </p>
     </div>
 
-    <figure class="screens">
-      <div class="stage">
-        <Video
-          src="media/stream-split.mp4"
-          poster="media/stream-split.jpg"
-          label="The host's screen and Ping's window side by side, both showing the same running clock and frame counter."
-          width={1968}
-          height={540}
-        />
-        <span class="bezel host" aria-hidden="true"></span>
-        <span class="bezel client" aria-hidden="true"></span>
-      </div>
-      <figcaption class="halves">
-        <span><strong>Host</strong> · the screen Pong captures</span>
-        <span><strong>Client</strong> · Ping’s window</span>
-      </figcaption>
-    </figure>
+    <div class="stats">
+      {VERSUS.map((v) => {
+        const ours = worse(v.ours, v.better);
+        const theirs = worse(v.theirs, v.better);
+        const max = Math.max(ours, theirs);
+        return (
+          <figure class="stat">
+            <figcaption>
+              {v.label}
+              <span class="better">{v.better} is better</span>
+            </figcaption>
+            <dl>
+              <div class="row">
+                <dt>Helio</dt>
+                <dd>
+                  <span class="track">
+                    <span class="b ours" style={`width: ${(ours / max) * 100}%`} />
+                  </span>
+                  <span class="v num">
+                    {v.ours} {v.unit}
+                  </span>
+                </dd>
+              </div>
+              <div class="row">
+                <dt>Moonlight + Apollo</dt>
+                <dd>
+                  <span class="track">
+                    <span class="b theirs" style={`width: ${(theirs / max) * 100}%`} />
+                  </span>
+                  <span class="v num">
+                    {v.theirs} {v.unit}
+                  </span>
+                </dd>
+              </div>
+            </dl>
+          </figure>
+        );
+      })}
+    </div>
 
-    <div class="budget">
-      <div class="budget-head">
-        <h3>Where the {total} ms go</h3>
-        <span class="note">Host capture to client screen, averaged over 32 s</span>
-      </div>
-      {/* One picture to a screen reader; the legend below says each part. */}
-      <div class="bar" role="img" aria-label={all.map((s) => `${s.name} ${ms(s.ms)}`).join(', ')}>
-        {drawn.map((s) => (
-          <span
-            class:list={['seg', { end: s.end }]}
-            style={`flex-grow: ${s.ms}; background: ${s.fill}`}
-            data-tip={`${s.name}: ${ms(s.ms)}`}
-          />
-        ))}
-      </div>
-      <ul class="legend">
-        {all.map((s) => (
-          <li>
-            <i style={`background: ${s.fill}`} aria-hidden="true" />
-            <strong>{s.name}</strong>
-            <span class="value num">{ms(s.ms)}</span>
-            <span class="what">{s.what}</span>
-          </li>
-        ))}
-      </ul>
-      <p class="note">
-        From Ping’s statistics: {R.mode}, encoded in software, host and client in one Linux container. On a real
-        network, add its round trip. On the benchmark machines, capture to encoded frame takes 2.2–2.6 ms at 1080p60.
+    <p class="note foot">
+      Client: a 14″ MacBook Pro (M4 Pro) on Wi-Fi. Host: Windows 11, RTX 3070 Ti, SudoVDA. Figures are each client’s
+      own: 30-second averages for Helio, end-of-stream for Moonlight. The two measure network round trip and
+      presentation differently, so those are left out.
+      <a href={onGitHub('docs/benchmarks.md#against-moonlight--apollo')}>Every figure, and how it was taken</a>
+    </p>
+
+    <div class="breakdown">
+      <h3>Pipeline breakdown</h3>
+      <p class="tag">Loopback in one container</p>
+      <p class="lede about">
+        Where the time goes with no network in the way: a Linux host and client in one container, at 1280×720 and
+        60 fps in software H.264. Both screens are recorded at the same instants, but a 60 fps clip cannot show less
+        than a frame, 16.7 ms. The stream’s own statistics put {total} ms between capture and the client’s screen,
+        with {R.framesLost === 0 ? 'no frame lost' : `${R.framesLost} frames lost`}.
       </p>
+
+      <figure class="screens">
+        <div class="stage">
+          <Video
+            src="media/stream-split.mp4"
+            poster="media/stream-split.jpg"
+            label="The host's screen and the client's window side by side, both showing the same running clock and frame counter."
+            width={1968}
+            height={540}
+          />
+          <span class="bezel host" aria-hidden="true"></span>
+          <span class="bezel client" aria-hidden="true"></span>
+        </div>
+        <figcaption class="halves">
+          <span><strong>Host</strong> · the screen Helio Host captures</span>
+          <span><strong>Client</strong> · Helio’s window</span>
+        </figcaption>
+      </figure>
+
+      <div class="budget">
+        <div class="budget-head">
+          <h4>Where the {total} ms go</h4>
+          <span class="note">Host capture to client screen, averaged over 32 s</span>
+        </div>
+        {/* One picture to a screen reader; the legend below says each part. */}
+        <div class="bar" role="img" aria-label={all.map((s) => `${s.name} ${ms(s.ms)}`).join(', ')}>
+          {drawn.map((s) => (
+            <span
+              class:list={['seg', { end: s.end }]}
+              style={`flex-grow: ${s.ms}; background: ${s.fill}`}
+              data-tip={`${s.name}: ${ms(s.ms)}`}
+            />
+          ))}
+        </div>
+        <ul class="legend">
+          {all.map((s) => (
+            <li>
+              <i style={`background: ${s.fill}`} aria-hidden="true" />
+              <strong>{s.name}</strong>
+              <span class="value num">{ms(s.ms)}</span>
+              <span class="what">{s.what}</span>
+            </li>
+          ))}
+        </ul>
+        <p class="note">
+          {R.mode}, encoded in software, over loopback: a real network adds its round trip. On the benchmark machines,
+          capture to encoded frame takes 2.2–2.6 ms at 1080p60.
+        </p>
+      </div>
     </div>
   </div>
 </section>
 
 <style>
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+  }
+
+  .stat {
+    min-width: 0;
+    margin: 0;
+    padding: 28px;
+    border: 1px solid var(--line-2);
+    border-radius: var(--radius);
+    background: var(--surface);
+  }
+
+  .stat figcaption {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    color: var(--text);
+    font-weight: 500;
+  }
+
+  .better {
+    color: var(--text-3);
+    font-size: 0.875rem;
+    font-weight: 400;
+  }
+
+  dl {
+    display: grid;
+    gap: 18px;
+    margin: 24px 0 0;
+  }
+
+  dt {
+    color: var(--text-2);
+    font-size: 0.875rem;
+  }
+
+  dd {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 6.5rem;
+    align-items: center;
+    gap: 12px;
+    margin: 6px 0 0;
+  }
+
+  .track {
+    display: block;
+  }
+
+  /* Bars grow from the left; square there, rounded at the value end. */
+  .b {
+    display: block;
+    height: 16px;
+    border-radius: 0 4px 4px 0;
+  }
+
+  .ours {
+    background: var(--data-2);
+  }
+
+  .theirs {
+    background: var(--data-muted);
+  }
+
+  .v {
+    color: var(--text);
+    font-size: 0.9375rem;
+    font-weight: 500;
+    white-space: nowrap;
+  }
+
+  .foot {
+    margin-top: var(--gap-note);
+  }
+
+  .breakdown {
+    margin-top: var(--gap-part);
+  }
+
+  .breakdown > h3 {
+    display: inline;
+    margin-right: 12px;
+    font-size: clamp(1.25rem, 1.1rem + 0.6vw, 1.5rem);
+    letter-spacing: -0.02em;
+  }
+
+  .tag {
+    display: inline-block;
+    padding: 1px 8px;
+    border: 1px solid rgb(var(--accent-rgb) / 0.4);
+    border-radius: 999px;
+    color: var(--accent);
+    font-size: 0.75rem;
+    vertical-align: 3px;
+  }
+
+  .about {
+    max-width: var(--measure);
+    margin-bottom: var(--gap-head);
+  }
+
   .screens {
     margin: 0;
   }
@@ -148,7 +319,7 @@ const drawn = all
   }
 
   .budget {
-    margin-top: clamp(48px, 6vw, 72px);
+    margin-top: var(--gap-part);
   }
 
   .budget-head {
@@ -160,8 +331,11 @@ const drawn = all
     margin-bottom: 16px;
   }
 
-  h3 {
+  h4 {
+    margin: 0;
+    color: var(--text);
     font-size: 1.0625rem;
+    font-weight: 600;
   }
 
   /* One bar, its parts in pipeline order, a 2px gap of the page between
@@ -219,7 +393,7 @@ const drawn = all
     display: grid;
     grid-template-columns: repeat(5, 1fr);
     gap: 16px;
-    margin: 24px 0;
+    margin: 24px 0 var(--gap-note);
     padding: 0;
     list-style: none;
   }
@@ -256,6 +430,12 @@ const drawn = all
     color: var(--text-3);
     font-size: 0.8125rem;
     line-height: 1.4;
+  }
+
+  @media (max-width: 860px) {
+    .stats {
+      grid-template-columns: 1fr;
+    }
   }
 
   @media (max-width: 760px) {

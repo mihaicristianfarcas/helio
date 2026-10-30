@@ -1,0 +1,20 @@
+---
+//! AI agents on your hosts, on a page of their own: the home page keeps one
+//! line and a link to it.
+import Base from '../layouts/Base.astro';
+import Agents from '../components/Agents.astro';
+import Footer from '../components/Footer.astro';
+import Nav from '../components/Nav.astro';
+
+const title = 'AI agents on your hosts: Helio';
+const description =
+  'Let an AI agent use your computer over Helio’s tunnel, the way you do. Watch it, take over or stop it at any point, held to rules the host enforces.';
+---
+
+<Base title={title} description={description}>
+  <Nav />
+  <main id="main">
+    <Agents />
+  </main>
+  <Footer />
+</Base>
