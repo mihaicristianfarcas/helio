@@ -134,14 +134,16 @@ run on macOS, Windows and Linux, over shared libraries (`helio-*`).
 
 ## Comments
 
-- **Every file starts with a `//!` module doc**: what the module is, what
-  it is for, and the non-obvious decisions (which platform API and why,
-  what Moonlight or Sunshine do).
+- **Every file starts with a `//!` module doc** (a script: a comment block
+  at its top): what the module is, what it is for, and the non-obvious
+  decisions (which platform API and why, what Moonlight or Sunshine do). A
+  new file has one before it is committed; a changed decision changes it.
 - **Say why, not what.** The code says what. A comment earns its place by
   explaining a reason, a constraint, a measurement or a trap ("looks
   removable, is not: …"). Delete comments that restate the code.
-- **Measurements are facts with conditions**: "3.9 s with the host's
-  monitor asleep", not "slow".
+- **Measurements are facts with conditions**: the value, its unit, and what
+  it was taken on and under. "3.9 s with the host's monitor asleep", not
+  "slow".
 - **References**: Moonlight and Sunshine (and Apollo, for what is its own)
   by source file; the design documents as `v1 design §5.1` or
   `v2 design §6.4` ([docs/design/](docs/design/README.md)); other docs by
@@ -150,45 +152,114 @@ run on macOS, Windows and Linux, over shared libraries (`helio-*`).
   tried", "used to", ticket or plan numbers. Git holds the history; a
   comment describes the code as it is. ("An earlier version did X, which
   caused Y" is fine when it stops someone from reintroducing X.)
-- **Keep comments true.** Change them with the code they describe.
+- **Keep comments true.** Change them with the code they describe: search
+  the comments and docs for every name you rename or remove. A comment that
+  no longer holds is a bug in the change that made it false.
 
 ## Documentation
+
+Documentation is part of the change, not a follow-up: a pull request is not
+finished until the pages a reader would open say what the code does. These
+rules hold for `README.md`, every page below and the issue forms in
+`.github/ISSUE_TEMPLATE/`.
 
 `docs/` is organised by what the reader wants to do:
 
 | File | For |
 |---|---|
-| `README.md` | What Helio is, what it can do, where to start |
-| `docs/install.md`, `docs/usage.md`, `docs/cli.md` | People installing and using it |
+| `README.md` | What Helio is, what it can do, where to start, its known limitations |
+| `docs/install.md`, `docs/usage.md`, `docs/cli.md`, `docs/logs.md` | People installing and using it, and reporting what goes wrong |
 | `docs/architecture.md`, `docs/networking.md`, `docs/platforms/*.md`, `docs/ai-agents.md`, `docs/ui.md` | How it works, and each platform's behaviour and limits |
-| `docs/benchmarks.md`, `docs/parity.md` | What it achieves, measured, against Moonlight + Sunshine/Apollo |
+| `docs/benchmarks.md`, `docs/parity.md`, `docs/verification.md` | What it achieves, measured, against Moonlight + Sunshine/Apollo; how it is built and verified |
 | `docs/development.md`, `AGENTS.md`, `CONTRIBUTING.md` | People changing it |
 | `docs/design/` | The design history. Frozen: fix links and typos only |
 
-- **Documentation changes with the code, in the same change.** A new
-  setting goes in the tables in [docs/usage.md](docs/usage.md); a new flag
-  or command in [docs/cli.md](docs/cli.md) and the command's own usage text;
-  a new environment variable in `docs/cli.md` (for users) or
-  `docs/development.md` (for tests); a new platform limit in
-  `docs/platforms/`.
+A new page gets a row here and a line in [docs/README.md](docs/README.md).
+
+### What goes where
+
+**Documentation changes with the code, in the same commit.** Every fact has
+one home, the page below. Other pages link to it and do not repeat it: a
+second copy is the one that goes stale.
+
+| When you change | Update |
+|---|---|
+| A setting, on either side | The tables in [docs/usage.md](docs/usage.md): what it does in a line, its default, its `config.toml` name |
+| A flag or command | [docs/cli.md](docs/cli.md) and the command's own usage text |
+| An environment variable | `docs/cli.md` (for users) or `docs/development.md` (for tests) |
+| Where a program logs, or what a level shows | [docs/logs.md](docs/logs.md) |
+| What a platform does or cannot do | Its page in `docs/platforms/`: under its limits, "Not verified yet" (built, not run) or "Not built yet" |
+| A limit someone meets on their first try | Also "Known limitations" in [README.md](README.md) |
+| A crate, a thread, the data path, the wire format | [docs/architecture.md](docs/architecture.md) |
+| Ports, discovery, the internet path | [docs/networking.md](docs/networking.md) |
+| Anything Moonlight, Sunshine or Apollo also do | Its row in [docs/parity.md](docs/parity.md), with its status word |
+| A user-visible result | [docs/benchmarks.md](docs/benchmarks.md), with its conditions |
+| Installing, packaging, downloads, signing | `docs/install.md`, and `docs/development.md` for how it is made |
+| What is kept, exposed, installed or run with privileges | [SECURITY.md](SECURITY.md) |
+| A CI job, a kind of test, a fuzz target, how changes are reviewed | [docs/verification.md](docs/verification.md) |
+| A page or state of the window | [docs/ui.md](docs/ui.md), and a `HELIO_UI_DEMO` step |
+
+### How it is written
+
 - **Write plainly**: present tense, short sentences, the reader's words
   ("the host", "the client", "your computer"). Address users as "you".
   Tables for reference, numbered steps for procedures, code blocks for
-  commands.
-- **Be exact and checkable**: real flag names, real paths, real defaults.
-  Numbers come with how and on what they were measured.
+  commands. A command block can be pasted as it stands: no prompt signs, and
+  what the reader replaces is in capitals (`HOST`) and explained in the text.
+- **One name for each thing.** **Helio** is the app, **Helio Host** the
+  host, `helio-host` its engine, `helio` the command line, and hosting the
+  switch that runs it. Words from the window are spelled as the window
+  spells them, in bold, with arrows for a path: **Settings → Hosting**.
+- **Be exact and checkable**: real flag names, real paths, real defaults,
+  each read from the code rather than remembered. Every claim can be checked
+  in this repository: in the code, in a test, or in a measurement. A
+  comparison or a superlative ("matches Moonlight", "fast", "best") comes
+  with its figures, their conditions and a link to them, or it goes.
+- **Numbers come with how and on what they were measured**: the machine,
+  the system, the settings, the build, the date. A number that ages (a test
+  count) also gives the commit it was taken at and the command that repeats
+  it.
+- **Say how far it was checked**: by CI, on real hardware, in a virtual
+  machine, in a container, or a type-check only. Nothing implies more than
+  that. What is built and has not run goes under "Not verified yet".
+- **Describe the release `main` is becoming.** A page reads as the reader of
+  that release finds it. No "soon", "planned", "for now", "recently" or
+  "it used to"; no TODO, TBD, stub, empty table cell or link to something
+  that does not exist. What is not built goes under "Not built yet", and git
+  and the release notes hold the history. Text written ahead of a release
+  (a certificate, a package, a website) merges only with what it describes:
+  its pull request lists what has to exist first.
+- **Never invent what only a measurement or the maintainer can give**: a
+  figure, a result, how the project is run. Measure it, or ask. A section
+  with no result yet gives its method, and no figure.
 - **No private details**: machine names, addresses, user names or paths
-  from someone's setup. Use `gaming-pc`, `192.168.1.20`, `203.0.113.7`
-  (documentation addresses) and `C:\path\to\...`.
-- Links are relative, so they work on GitHub and in a checkout.
+  from someone's setup, in text, in pasted logs or in pictures. Use
+  `gaming-pc`, `192.168.1.20`, `203.0.113.7` (documentation addresses) and
+  `C:\path\to\...`.
+- **Links are relative**, so they work on GitHub and in a checkout. The
+  issue forms are the exception: GitHub does not resolve relative links
+  there. Every link resolves: the file exists, and an `#anchor` is the one
+  GitHub derives from the heading. Renaming a heading means searching for
+  its anchor.
+- **Pictures** are in `docs/images/`, show sample data, and have alt text
+  that says what they show.
+- **The issue forms** pass GitHub's schemas
+  (`check-jsonschema --builtin-schema vendor.github-issue-forms` for a form,
+  `vendor.github-issue-config` for `config.yml`), and ask for what
+  [docs/logs.md](docs/logs.md) tells people to send.
+- **`docs/design/` is frozen**: the history of how it was designed. Fix links
+  and typos only. A design that changed is described in the living pages.
 
 ## Commits and pull requests
 
 - `main` takes changes only through pull requests, and a pull request
   merges once CI (`.github/workflows/ci.yml`: formatting, clippy and the
   tests on macOS, Windows and Linux) passes. Work on a branch.
+- A review agent checks each change, and the maintainer reads it, before it
+  merges ([docs/verification.md](docs/verification.md#how-changes-are-reviewed)).
 - One logical change per commit. Keep formatting, refactors and behaviour
-  changes in separate commits.
+  changes in separate commits. Documentation goes in the commit of the code
+  it describes; a `docs:` commit changes documentation only.
 - The summary line names the area and says what changed, in plain words:
   `Helio Host: input from whoever does not drive is seen and dropped`,
   `helio-agent: ANTHROPIC_BASE_URL and OPENAI_BASE_URL`, `docs: …`. The body
@@ -211,6 +282,20 @@ tools/linux-dev cargo clippy -p helio-host --all-targets
 Plus, as the change needs: the UI demo screenshots before and after, the
 Linux loopback test, a real stream with the statistics on.
 
+For anything that touches documentation, or should have:
+
+```sh
+git grep -nE 'TODO|TBD|FIXME|coming soon' -- '*.md' .github   # nothing new
+```
+
+- Every line in the diff was checked against the code, a test or a
+  measurement, and each page in [What goes where](#what-goes-where) that the
+  change touches is updated.
+- Every link you added or changed resolves, anchors included.
+- A procedure you wrote ran once as written, on that system, or the pull
+  request says it did not.
+- The names you changed are gone from the comments and the docs.
+
 The hooks in `.githooks/` check the cheap part as you go: nothing private
 and the formatting on commit, the summary line's shape, clippy on push.
 Enable them once per clone:
@@ -219,8 +304,10 @@ Enable them once per clone:
 git config core.hooksPath .githooks
 ```
 
-CI runs all of the above but the screenshots and the real stream, on every
-pull request; there it cannot be skipped.
+CI runs the formatting, clippy and the tests on every pull request, natively
+on each system, and packages the app; there they cannot be skipped. The
+screenshots, the Linux loopback test, the fuzz targets and a real stream
+are yours to run ([docs/verification.md](docs/verification.md#not-in-ci)).
 
 ## For AI agents
 
@@ -234,5 +321,11 @@ pull request; there it cannot be skipped.
 - Do not edit `docs/design/` beyond links and typos.
 - Do not add private details (machine names, addresses, paths from the
   environment you run in) to code, tests or docs.
+- Never write a number, a test result or a statement about how the project
+  is run that you did not take from the repository or the maintainer. Count
+  it, measure it, or ask.
+- Before writing what a release, download, package or website does, look at
+  the thing itself (`gh release view`, the URL), not at the workflow meant
+  to make it. If it does not exist yet, say so in the pull request.
 - Say what you verified and what you could not. "Builds on Windows" from
   `tools/xcheck-windows` is a type-check, not a run.
