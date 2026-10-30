@@ -192,8 +192,8 @@ Data and logs are in `~/.config/helio-host`.
   the window).
 - The wheel under Wayland: the nested test desktop gives X clients no wheel
   events at all, so the portal's scroll is sent but unseen.
-- KDE and wlroots desktops (Ubuntu 24.04's wlroots portal needs a GPU to
-  share the screen, and the container has none).
+- wlroots desktops (Ubuntu 24.04's wlroots portal needs a GPU to share the
+  screen, and the container has none).
 
 ## Not built yet
 

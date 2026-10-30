@@ -5,6 +5,7 @@
 - [install.md](install.md) — building and installing Helio, turning hosting on, and pairing devices
 - [usage.md](usage.md) — streaming, shortcuts, settings, the clipboard, Wake-on-LAN, troubleshooting
 - [cli.md](cli.md) — `helio` (`helio host` for this computer as a host), `helio-agent`, and environment variables
+- [logs.md](logs.md) — collecting logs for a bug report
 - [ai-agents.md](ai-agents.md) — AI agents on your hosts (computer use, MCP)
 
 **How it works**
@@ -12,9 +13,10 @@
 - [architecture.md](architecture.md) — the pieces, the data path, the wire format, pairing
 - [networking.md](networking.md) — reaching a host from anywhere
 - [platforms/macos.md](platforms/macos.md), [platforms/windows.md](platforms/windows.md), [platforms/linux.md](platforms/linux.md) — each system's behaviour and limits
-- [ui.md](ui.md) — the two windows, and checking them without clicking
+- [ui.md](ui.md) — the window, and checking it without clicking
 - [benchmarks.md](benchmarks.md) — what it costs, measured
 - [parity.md](parity.md) — against Moonlight + Sunshine/Apollo, feature by feature
+- [verification.md](verification.md) — how it's built and verified, and what has not been
 - [design/](design/README.md) — the design history
 
 **Changing Helio**

@@ -196,15 +196,9 @@ the host (`grants`: Screen Recording, Accessibility).
 ## Logs
 
 Each program writes its own, and never a PIN, password, key or token:
-
-| Program | Where |
-|---|---|
-| Helio | `~/Library/Logs/Helio/helio.log` (macOS), `%LOCALAPPDATA%\Helio\Logs\helio.log` (Windows), `~/.local/state/helio/helio.log` (Linux); the previous two launches' beside it |
-| Helio Host (the host) | `logs/helio-host.log.DATE` in its data folder (`C:\ProgramData\Helio Host\logs` for the service) |
-| `helio`, `helio-agent`, `Helio mcp` | stderr |
-
-`RUST_LOG` narrows or widens any of them (for example
-`RUST_LOG=info,helio_client::input=trace` logs each input event sent).
+[logs.md](logs.md) says where, and how to turn on debug logging. The app
+keeps its own under `helio_client::logging::logs_dir()`; This computer's
+**Logs** page reads the host's through its API.
 
 ## GPUI
 

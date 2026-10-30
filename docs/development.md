@@ -393,6 +393,16 @@ cd helio-proto/fuzz
 cargo +nightly fuzz run depacketize   # also: control, input
 ```
 
+The fuzz crate is not in the workspace, so neither CI nor `cargo check`
+builds it. After changing a fuzzed parser:
+
+```sh
+cargo check --manifest-path helio-proto/fuzz/Cargo.toml --bins
+```
+
+[verification.md](verification.md#fuzzing) lists what the targets cover and
+what they do not.
+
 ## Assets
 
 - The app's icon has one source, `helio-app/assets/icon.svg`: a lowercase h
