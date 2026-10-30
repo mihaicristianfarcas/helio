@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# The page's stream video: a real Pong-to-Ping stream recorded in the Linux
+# The page's stream video: a real stream from Helio Host to Helio, recorded in the Linux
 # container, both screens side by side, cut into a seamless loop for
-# public/media, and Ping's per-second statistics averaged for
+# public/media, and the client's per-second statistics averaged for
 # src/lib/facts.ts (RECORDING).
 #
 #   site/scripts/record-stream.sh
@@ -13,7 +13,7 @@ REPO=$(cd "$SITE/.." && pwd)
 RUN=$REPO/target/linux-out/site-stream
 MEDIA=$SITE/public/media
 
-"$REPO/tools/linux-dev" cargo build --locked --release -p pong -p ping-core --bin ping
+"$REPO/tools/linux-dev" cargo build --locked --release -p helio-host -p helio-cli
 "$REPO/tools/linux-dev" bash /src/site/scripts/stream-in-container.sh
 
 # A loop that does not jump: 23 s of the recording, from 7 s. The scene
@@ -31,12 +31,12 @@ ffmpeg -loglevel error -y -i "$RUN/both.mp4" -filter_complex "
     "$MEDIA/stream-split.mp4"
 ffmpeg -loglevel error -y -ss 11.2 -i "$MEDIA/stream-split.mp4" -frames:v 1 -q:v 3 "$MEDIA/stream-split.jpg"
 
-# Ping's per-second statistics over the recording (its first two seconds,
+# The client's per-second statistics over the recording (its first two seconds,
 # the stream settling, left out). Both sides run in one VM, so when the VM
 # is starved (the Mac busy elsewhere) host and client stall together and
 # the clip stutters: that is the VM, not the stream, and it is recorded
 # again rather than averaged in.
-stats=$(grep "second received_fps" "$RUN/ping.log" | sed -n '3,34p')
+stats=$(grep "second received_fps" "$RUN/helio.log" | sed -n '3,34p')
 echo "Averages over the recording, for src/lib/facts.ts:"
 echo "$stats" | awk '{
     for (i = 1; i <= NF; i++) { split($i, kv, "=");
