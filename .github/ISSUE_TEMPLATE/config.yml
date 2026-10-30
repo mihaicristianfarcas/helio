@@ -1,0 +1,10 @@
+# Blank issues stay on: CONTRIBUTING.md asks for a proposal to be opened as an
+# issue, and no form fits one.
+blank_issues_enabled: true
+contact_links:
+  - name: Question
+    url: https://github.com/mihaicristianfarcas/helio/discussions/categories/q-a
+    about: Ask how to set up or use Helio.
+  - name: Security problem
+    url: https://github.com/mihaicristianfarcas/helio/security/advisories/new
+    about: Report it privately, not in an issue.
