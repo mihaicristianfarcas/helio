@@ -39,7 +39,7 @@ const systems: { os: string; versions: string; client: [Status, string]; hosting
     </div>
 
     <div class="table-wrap">
-      <table aria-label="Where Helio runs, as a client and as a host">
+      <table role="table" aria-label="Where Helio runs, as a client and as a host">
         <thead>
           <tr>
             <th scope="col">System</th>
@@ -47,15 +47,15 @@ const systems: { os: string; versions: string; client: [Status, string]; hosting
             <th scope="col">Hosting</th>
           </tr>
         </thead>
-        <tbody>
+        <tbody role="rowgroup">
           {systems.map((s) => (
-            <tr>
-              <th scope="row">
+            <tr role="row">
+              <th scope="row" role="rowheader">
                 {s.os}
                 <span>{s.versions}</span>
               </th>
-              {[s.client, s.hosting].map(([status, text]) => (
-                <td>
+              {[['Client', s.client], ['Hosting', s.hosting]].map(([label, [status, text]]) => (
+                <td role="cell" data-label={label}>
                   <span class:list={['status', status === 'Best tested' && 'best']}>{status}</span>
                   <p>{text}</p>
                 </td>
@@ -97,7 +97,7 @@ const systems: { os: string; versions: string; client: [Status, string]; hosting
     padding: 20px 24px;
     text-align: left;
     vertical-align: top;
-    overflow-wrap: anywhere;
+    overflow-wrap: break-word;
   }
 
   thead th {
@@ -151,10 +151,50 @@ const systems: { os: string; versions: string; client: [Status, string]; hosting
     margin-top: var(--gap-note);
   }
 
+  /* Three columns do not fit a phone: each system is a block of its own, with
+     its columns named inside it. Display changes drop a table's meaning, which
+     is why the markup states its roles. */
   @media (max-width: 640px) {
+    table,
+    tbody,
+    tr,
     th,
     td {
-      padding: 14px 10px;
+      display: block;
+    }
+
+    thead {
+      display: none;
+    }
+
+    tbody tr {
+      padding: 20px 16px;
+    }
+
+    tbody th {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      gap: 2px 8px;
+      width: auto;
+      padding: 0;
+      font-size: 1.0625rem;
+    }
+
+    tbody th span {
+      margin-top: 0;
+    }
+
+    td {
+      width: auto;
+      padding: 14px 0 0;
+    }
+
+    td::before {
+      content: attr(data-label);
+      margin-right: 8px;
+      color: var(--text-3);
+      font-size: 0.8125rem;
     }
   }
 </style>
