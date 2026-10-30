@@ -158,6 +158,27 @@ pub fn window_options(
     }
 }
 
+/// Whether the window says which version it is. Not under HELIO_UI_DEMO, so
+/// a screenshot does not date with the next release: the website's badge is
+/// the one place people see the version.
+pub fn shows_version() -> bool {
+    std::env::var_os("HELIO_UI_DEMO").is_none()
+}
+
+/// How the window names a program: "Helio 0.9.7", or the bare name where
+/// [`shows_version`] says not to.
+pub fn name_with_version(name: &str, version: &str) -> String {
+    named(name, version, shows_version())
+}
+
+fn named(name: &str, version: &str, with_version: bool) -> String {
+    if with_version {
+        format!("{name} {version}")
+    } else {
+        name.to_string()
+    }
+}
+
 /// Save the window as a PNG (automated checks). On a Mac, through
 /// `screencapture` of this window alone; elsewhere unsupported.
 pub fn snapshot(window: &Window, path: &std::path::Path) -> Result<(), String> {
@@ -252,5 +273,16 @@ pub fn set_window_visible(window: &Window, visible: bool) {
                 window.minimize_window();
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::named;
+
+    #[test]
+    fn a_screenshot_names_a_program_without_its_version() {
+        assert_eq!(named("Helio", "1.0.0", true), "Helio 1.0.0");
+        assert_eq!(named("Helio", "1.0.0", false), "Helio");
     }
 }

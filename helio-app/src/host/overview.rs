@@ -73,43 +73,48 @@ impl HostPages {
                 );
         }
         content = content.child(self.session_card(&s, t, cx));
-        content = content.child(section("This host", t).child(rows(
-            [
-                info_row("Name", s.name.clone(), false, t),
-                info_row("Host ID", s.id.clone(), true, t),
-                info_row("Tunnel", format!("UDP {}", s.port), false, t),
-                info_row(
-                    "Internet",
-                    if !s.internet {
-                        "Off".to_string()
-                    } else if s.public.is_empty() {
-                        "On · finding its address…".to_string()
-                    } else {
-                        format!("On · {}", s.public.join(", "))
-                    },
-                    false,
-                    t,
-                ),
-                info_row(
-                    "Router",
-                    if s.internet && !s.port_mapping.is_empty() {
-                        s.port_mapping.clone()
-                    } else {
-                        "—".into()
-                    },
-                    false,
-                    t,
-                ),
-                info_row(
-                    "Devices",
-                    format!("{} paired · {} connected now", s.clients, s.tunnels),
-                    false,
-                    t,
-                ),
-                info_row("Version", format!("Helio Host {}", s.version), false, t),
-            ],
-            t,
-        )));
+        let mut about = vec![
+            info_row("Name", s.name.clone(), false, t),
+            info_row("Host ID", s.id.clone(), true, t),
+            info_row("Tunnel", format!("UDP {}", s.port), false, t),
+            info_row(
+                "Internet",
+                if !s.internet {
+                    "Off".to_string()
+                } else if s.public.is_empty() {
+                    "On · finding its address…".to_string()
+                } else {
+                    format!("On · {}", s.public.join(", "))
+                },
+                false,
+                t,
+            ),
+            info_row(
+                "Router",
+                if s.internet && !s.port_mapping.is_empty() {
+                    s.port_mapping.clone()
+                } else {
+                    "—".into()
+                },
+                false,
+                t,
+            ),
+            info_row(
+                "Devices",
+                format!("{} paired · {} connected now", s.clients, s.tunnels),
+                false,
+                t,
+            ),
+        ];
+        if helio_ui::shows_version() {
+            about.push(info_row(
+                "Version",
+                format!("Helio Host {}", s.version),
+                false,
+                t,
+            ));
+        }
+        content = content.child(section("This host", t).child(rows(about, t)));
         if !self.snap.log.is_empty() {
             let now = now_ms();
             let entries: Vec<LogEntry> = self.snap.log.iter().rev().take(40).cloned().collect();
