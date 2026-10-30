@@ -282,7 +282,7 @@ impl HelioApp {
                 .child("Looking for hosts…")
                 .into_any_element()
         } else {
-            format!("Helio {}", env!("CARGO_PKG_VERSION")).into_any_element()
+            helio_ui::name_with_version("Helio", env!("CARGO_PKG_VERSION")).into_any_element()
         };
         helio_ui::sidebar(t)
             .child(
