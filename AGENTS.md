@@ -305,9 +305,10 @@ git config core.hooksPath .githooks
 ```
 
 CI runs the formatting, clippy and the tests on every pull request, natively
-on each system, and packages the app; there they cannot be skipped. The
-screenshots, the Linux loopback test, the fuzz targets and a real stream
-are yours to run ([docs/verification.md](docs/verification.md#not-in-ci)).
+on each system, builds the fuzz targets and packages the app; there they
+cannot be skipped. The screenshots, the Linux loopback test, a run of the
+fuzz targets and a real stream are yours to run
+([docs/verification.md](docs/verification.md#not-in-ci)).
 
 ## For AI agents
 

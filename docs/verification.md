@@ -33,7 +33,7 @@ CI runs on every pull request and on `main` after each merge
 | Formatting | `ubuntu-latest` | `cargo fmt --all -- --check` |
 | macOS | `macos-15`, Apple silicon | clippy with warnings as errors, the tests, and the app packaged with the host and `helio` inside it |
 | Windows | `windows-latest`, x64 | The same, and the installer run for real: install, turn hosting on, install again, uninstall, each step checked. The drivers must be as they were afterwards; a driver the runner refuses is reported in the log, not a failure |
-| Linux | `ubuntu-24.04`, x86_64 | The same as macOS, the host's crate on its own |
+| Linux | `ubuntu-24.04`, x86_64 | The same as macOS, the host's crate on its own, and the fuzz targets built |
 
 The release workflow ([release.yml](../.github/workflows/release.yml)) also
 builds for Intel Macs. It signs and notarizes the macOS apps, signs the
@@ -76,7 +76,7 @@ These run by hand, when a change needs them, so a pull request's green
 checks say nothing about them:
 
 - the 9 ignored tests;
-- the fuzz targets;
+- running the fuzz targets: CI only builds them;
 - the loopback and virtual display tests;
 - the UI screenshots;
 - a real stream between real machines;

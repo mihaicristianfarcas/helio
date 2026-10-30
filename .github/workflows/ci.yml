@@ -134,6 +134,10 @@ jobs:
       # different async runtimes (docs/development.md).
       - run: cargo clippy --workspace --exclude helio-host --all-targets -- -D warnings
       - run: cargo clippy -p helio-host --all-targets -- -D warnings
+      # Outside the workspace, so nothing else builds it: a parser's signature
+      # changed once and the input target stopped compiling, unnoticed.
+      - name: The fuzz targets build
+        run: cargo check --manifest-path helio-proto/fuzz/Cargo.toml --bins
       # The GPUI apps linked two at a time at most: more can run the runner
       # out of memory.
       - run: cargo test --workspace --exclude helio-host -j 2 --no-fail-fast
