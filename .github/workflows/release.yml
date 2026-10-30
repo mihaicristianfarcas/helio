@@ -33,6 +33,10 @@
 # engine is then built to require (helio-host/src/hosting/signature.rs). With
 # neither, the Windows release is unsigned and says so; with only one of
 # them, it fails.
+#
+# Actions are pinned to commits, with the version beside each: a tag can be
+# moved, and these jobs hold the signing secrets. Version tags are protected
+# by a repository ruleset that lets only this workflow make them.
 name: Release
 
 on:
@@ -72,10 +76,10 @@ jobs:
             arch: x86_64
     runs-on: ${{ matrix.runner }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
       - name: Rust
         run: rustup toolchain install stable --profile minimal && rustup default stable
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           key: release
       # The certificate in a keychain of this run's own, and the API key
@@ -133,7 +137,7 @@ jobs:
         run: |
           security delete-keychain "$RUNNER_TEMP/signing.keychain-db" 2>/dev/null || true
           rm -f "$RUNNER_TEMP/AuthKey.p8"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: dist-macos-${{ matrix.arch }}
           path: target/dist/*.zip
@@ -146,7 +150,7 @@ jobs:
     name: Windows
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
       - name: Rust
         run: rustup toolchain install stable --profile minimal && rustup default stable
       # As in ci.yml: FFmpeg's current shared build (its DLLs go beside
@@ -165,7 +169,7 @@ jobs:
           $dir = Join-Path $env:RUNNER_TEMP ($asset -replace '\.zip$', '')
           "FFMPEG_DIR=$dir" >> $env:GITHUB_ENV
           "LIBCLANG_PATH=C:\Program Files\LLVM\bin" >> $env:GITHUB_ENV
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           key: release
       # On main, with the publisher set, the engine refuses to turn hosting
@@ -181,7 +185,7 @@ jobs:
           } else {
             ./tools/package-windows.ps1 -StageOnly
           }
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: windows-unsigned
           path: target/stage/Helio/
@@ -199,7 +203,7 @@ jobs:
     # The signing secrets, on main only; a branch's run has none to read.
     environment: ${{ github.ref == 'refs/heads/main' && 'release' || '' }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
       - name: Signing or not
         id: signing
         shell: pwsh
@@ -220,7 +224,7 @@ jobs:
           } else {
             "sign=true" >> $env:GITHUB_OUTPUT
           }
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: windows-unsigned
           path: target/stage/Helio
@@ -279,7 +283,7 @@ jobs:
           } else {
             ./tools/windows/test-install.ps1 -Setup $setup
           }
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: dist-windows-x86_64
           path: |
@@ -291,7 +295,7 @@ jobs:
     name: Linux
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
       - name: Rust
         run: rustup toolchain install stable --profile minimal && rustup default stable
       # tools/linux/Dockerfile's build packages, as in ci.yml.
@@ -304,12 +308,12 @@ jobs:
             libx11-dev libx11-xcb-dev libxkbcommon-dev libxkbcommon-x11-dev libwayland-dev \
             libxcursor-dev libxrandr-dev libxi-dev libfontconfig-dev libfreetype-dev libxcb1-dev \
             libpipewire-0.3-dev libspa-0.2-dev libdbus-1-dev
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           key: release
       - name: Build and package
         run: tools/linux/package
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: dist-linux-x86_64
           path: target/dist/*.tar.gz
@@ -321,9 +325,9 @@ jobs:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
       # The packages, not the unsigned Windows files they were made from.
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           pattern: dist-*
           path: dist
@@ -340,7 +344,7 @@ jobs:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
       - name: Is the version new
         id: version
         run: |
@@ -351,7 +355,7 @@ jobs:
           else
             echo "new=true" >> "$GITHUB_OUTPUT"
           fi
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         if: steps.version.outputs.new
         with:
           pattern: dist-*
