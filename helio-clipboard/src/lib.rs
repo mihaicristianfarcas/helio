@@ -41,6 +41,11 @@ const TICK: Duration = Duration::from_millis(5);
 const READ_TRIES: u32 = 10;
 /// Copies done lately, whose late chunks are answered "all in".
 const DONE_KEPT: usize = 8;
+/// How long ending the sharing waits for the worker: longer than it sleeps
+/// between looks. A look can take far longer: through XWayland, reads of a
+/// selection that does not answer held a Plasma 6.6 host's worker for 54 s,
+/// and the session's end, and so the next session, with it.
+const STOP_WITHIN: Duration = Duration::from_secs(1);
 
 pub struct Options {
     /// Where files copied on the other end land: a folder of this end's,
@@ -98,6 +103,8 @@ pub struct ClipSync {
     stop: Arc<AtomicBool>,
     /// `Directions::to_bits`, read by the worker each turn.
     directions: Arc<AtomicU8>,
+    /// Nothing is sent on it: it closes as the worker ends.
+    ended: Receiver<()>,
     thread: Option<JoinHandle<()>>,
 }
 
@@ -107,11 +114,15 @@ impl ClipSync {
         let (inbox, rx) = crossbeam_channel::bounded(8192);
         let stop = Arc::new(AtomicBool::new(false));
         let directions = Arc::new(AtomicU8::new(opts.directions.to_bits()));
+        let (worker_ended, ended) = crossbeam_channel::bounded(0);
         let thread = {
             let (stop, directions) = (stop.clone(), directions.clone());
             std::thread::Builder::new()
                 .name("clipboard".into())
-                .spawn(move || Worker::new(opts, Box::new(send)).run(rx, &stop, &directions))
+                .spawn(move || {
+                    let _ended: Sender<()> = worker_ended;
+                    Worker::new(opts, Box::new(send)).run(rx, &stop, &directions)
+                })
                 .map_err(|e| tracing::warn!(error = %e, "cannot start clipboard sharing"))
                 .ok()
         };
@@ -119,6 +130,7 @@ impl ClipSync {
             inbox,
             stop,
             directions,
+            ended,
             thread,
         }
     }
@@ -139,6 +151,12 @@ impl ClipSync {
 impl Drop for ClipSync {
     fn drop(&mut self) {
         self.stop.store(true, Ordering::Relaxed);
+        if self.ended.recv_timeout(STOP_WITHIN) == Err(crossbeam_channel::RecvTimeoutError::Timeout)
+        {
+            // It ends when its read does, sending no more than a cancel.
+            tracing::info!("the clipboard is not answering; not waiting for it");
+            return;
+        }
         if let Some(t) = self.thread.take() {
             let _ = t.join();
         }
@@ -639,6 +657,42 @@ mod tests {
         for d in [Directions::BOTH, w.directions] {
             assert_eq!(Directions::from_bits(d.to_bits()), d);
         }
+    }
+
+    /// A worker held up, here in `send`, as a read of a clipboard that does
+    /// not answer holds it.
+    #[test]
+    fn ending_the_sharing_does_not_wait_for_a_worker_held_up() {
+        use helio_proto::HEADER_LEN;
+        let dir = tempfile::tempdir().unwrap();
+        let (held_up, entered) = crossbeam_channel::bounded(1);
+        let (_release, stuck) = crossbeam_channel::bounded::<()>(0);
+        let sync = ClipSync::start(
+            Options {
+                files_dir: dir.path().join("in"),
+                rate: 1 << 20,
+                offer_current: false,
+                peer: "test".into(),
+                directions: Directions {
+                    send: false,
+                    receive: false,
+                },
+            },
+            move |_: &[u8]| {
+                let _ = held_up.try_send(());
+                let _ = stuck.recv_timeout(Duration::from_secs(30));
+            },
+        );
+        // Refused, and the refusal is what holds it up.
+        let bytes = clip::encode_items(&[Item::Text("copied".into())]);
+        let mut copy = Outgoing::new(9, bytes, 1 << 20, Instant::now());
+        for p in copy.poll(Instant::now()) {
+            sync.deliver(&p[HEADER_LEN..]);
+        }
+        entered.recv_timeout(Duration::from_secs(10)).unwrap();
+        let ending = Instant::now();
+        drop(sync);
+        assert!(ending.elapsed() < STOP_WITHIN * 5);
     }
 
     #[test]
