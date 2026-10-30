@@ -393,8 +393,9 @@ cd helio-proto/fuzz
 cargo +nightly fuzz run depacketize   # also: control, input
 ```
 
-The fuzz crate is not in the workspace, so neither CI nor `cargo check`
-builds it. After changing a fuzzed parser:
+The fuzz crate is not in the workspace, so `cargo build` and `cargo check`
+leave it out. CI builds it, on Linux, and runs none of it. To build it
+yourself after changing a fuzzed parser:
 
 ```sh
 cargo check --manifest-path helio-proto/fuzz/Cargo.toml --bins
