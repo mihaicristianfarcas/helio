@@ -1,8 +1,8 @@
 {
-  "name": "pingpong-site",
+  "name": "helio-site",
   "private": true,
   "type": "module",
-  "description": "pingpong's landing page",
+  "description": "Helio's landing page",
   "scripts": {
     "dev": "astro dev",
     "build": "astro check && astro build",

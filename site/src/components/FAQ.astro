@@ -1,6 +1,7 @@
 ---
 //! Answers for people choosing a streaming setup. Platform and network
 //! limits follow README.md, docs/parity.md and docs/networking.md.
+import Testers from './Testers.astro';
 import { onGitHub } from '../lib/repo';
 ---
 
@@ -13,90 +14,76 @@ import { onGitHub } from '../lib/repo';
 
     <div class="questions">
       <details>
-        <summary><h3>Can I use pingpong for remote desktop gaming?</h3></summary>
+        <summary><h3>Can I use Helio for remote desktop gaming?</h3></summary>
         <p>
-          Yes. Pong streams the host’s desktop, including games, to Ping on another computer. It supports up to
-          4K and 120 fps, HEVC, H.264 or AV1 video, HDR and 4:4:4 colour, and stereo to 7.1 sound. Controllers and rumble work with Windows
-          hosts; macOS hosts do not support controllers yet. Your hardware and network affect performance.
-          See the <a href="#latency">benchmarks and their test conditions</a>.
+          Yes. Helio Host streams the desktop, games included, to Helio on another computer: measured at 3024×1890 and
+          120 fps, with HEVC, H.264 or AV1, HDR, 4:4:4 colour and up to 7.1 sound. Controllers and rumble need a Windows
+          host. See the <a href="#latency">benchmarks and their test conditions</a>.
         </p>
       </details>
       <details>
-        <summary><h3>Is pingpong an alternative to Moonlight and Sunshine/Apollo?</h3></summary>
+        <summary><h3>Is Helio an alternative to Moonlight and Sunshine/Apollo?</h3></summary>
         <p>
-          Yes. Ping takes the client’s role and Pong takes the host’s role. Install them together: pingpong uses
-          its own protocol, so Ping does not connect to Sunshine or Apollo, and Moonlight does not
-          connect to Pong. Read the <a href={onGitHub('docs/parity.md')}>feature comparison with Moonlight and
-          Sunshine/Apollo</a>
-          for the supported features and limits.
+          Yes, with its own protocol, so install it on both computers: it does not connect to Sunshine or Apollo, and
+          Moonlight does not connect to Helio Host. See the
+          <a href={onGitHub('docs/parity.md')}>feature comparison with Moonlight and Sunshine/Apollo</a>.
         </p>
       </details>
       <details>
         <summary><h3>Which computers can host and receive a stream?</h3></summary>
         <p>
-          Both apps run on macOS 14 or later, Windows 10 and 11, and Linux under X11 or Wayland. A Windows host
-          is best with an NVIDIA GPU and SudoVDA; without them it streams its main display in H.264. A MacBook host
-          keeps streaming with its lid closed. Linux hosts stream a scaled screen without a virtual display; on
-          sway and Hyprland, the client cannot send keyboard or mouse input. Phones, tablets and TVs are out of
-          scope. Check the <a href="#platforms">platform requirements</a> before downloading.
+          macOS 14 or later, Windows 10 and 11, and Linux under X11 or Wayland, as client and as host; phones, tablets
+          and TVs are out of scope. On a Linux host under sway or Hyprland, the client cannot send keyboard or mouse
+          input. See the <a href="#platforms">platform requirements</a>.
         </p>
       </details>
       <details>
         <summary><h3>Do I need a VPN or port forwarding to stream over the internet?</h3></summary>
         <p>
-          Usually neither. Pair Ping and Pong once on your local network, or through a VPN such as Tailscale
-          when you are away from the host: Ping then links Pong’s web UI to type the PIN in. Streaming over the
-          internet is on by default. pingpong finds paired hosts through sealed records on the BitTorrent DHT and
-          connects directly by punching through NATs. It has no relay fallback: symmetric NAT on both sides can
-          prevent a connection. In that case, forward UDP port 47800 to the host. See
+          Usually neither. Pair once on your local network, or through a VPN such as Tailscale when away from the host:
+          Helio then links the host’s web UI to type the PIN in. Internet streaming is on by default, finding paired
+          hosts through sealed records on the BitTorrent DHT and connecting directly. There is no relay: if symmetric NAT
+          on both sides blocks it, forward UDP port 47800 to the host. See
           <a href={onGitHub('docs/networking.md')}>internet setup and network limits</a>.
         </p>
       </details>
       <details>
-        <summary><h3>How do Ping and Pong stay up to date?</h3></summary>
+        <summary><h3>How does Helio stay up to date?</h3></summary>
         <p>
-          They ask GitHub once a day whether there is a new release, and say so in the window. Choose
-          <strong>Install and Restart</strong> and the app downloads it, checks it against the checksum GitHub
-          keeps for it (on a Mac, also against the developer’s signature), installs it the way you installed
-          the app, Homebrew included, and opens again. Nothing downloads until you choose to. See
+          The window says when a release is out. <strong>Install and Restart</strong> downloads it from GitHub, checks
+          it, installs it the way you installed the app and opens Helio again. Nothing downloads until you choose. See
           <a href={onGitHub('docs/usage.md#updates')}>how each system installs an update</a>.
         </p>
       </details>
       <details>
-        <summary><h3>How do I uninstall Ping or Pong?</h3></summary>
+        <summary><h3>How do I uninstall Helio?</h3></summary>
         <p>
-          On Windows, from <strong>Settings &gt; Apps &gt; Installed apps</strong>: choose Ping or Pong, then
-          <strong>Uninstall</strong>. With Homebrew, <code>brew uninstall --cask ping pong</code>; on Linux,
-          <code>install.sh --uninstall</code> from the download. Your pairings and settings stay, so a later
-          install picks up where you left off. See
-          <a href={onGitHub('docs/install.md#uninstalling')}>what to delete to remove them too</a>, and the rest
-          of an install from the zip on a Mac.
+          On Windows, <strong>Settings &gt; Apps &gt; Installed apps</strong>, then Helio, then
+          <strong>Uninstall</strong>. With Homebrew, <code>brew uninstall --cask helio</code>; on Linux,
+          <code>install.sh --uninstall</code> from the download. Pairings and settings stay for a later install. See
+          <a href={onGitHub('docs/install.md#uninstalling')}>what to delete to remove them too</a>, and the rest of a
+          DMG install on a Mac.
         </p>
       </details>
       <details>
-        <summary><h3>Is pingpong free and open source?</h3></summary>
+        <summary><h3>Is Helio free and open source?</h3></summary>
         <p>
-          Yes. Ping and Pong are free to download and use, with their source code available under the GPL-3.0
-          license. Install Pong on the computer you stream from and Ping on the one you sit at.
-          <a href="#install">Download Ping and Pong</a> for your system.
+          Yes. Helio is free to download and use, and its source is under the GPL-3.0 license.
+          <a href="#install">Download Helio</a> for your system.
         </p>
       </details>
     </div>
+    <Testers />
   </div>
 </section>
 
 <style>
   .questions {
-    max-width: 48rem;
+    max-width: var(--measure);
   }
 
   details {
-    border-top: 1px solid var(--line-2);
-    padding-block: 20px;
-  }
-
-  details:last-child {
-    border-bottom: 1px solid var(--line-2);
+    padding-block: 12px;
   }
 
   summary {

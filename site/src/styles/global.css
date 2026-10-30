@@ -1,39 +1,59 @@
 /*
- * pingpong's page: a black-to-blue mesh behind everything, cool greys for
- * text, one blue accent for links and data, and nothing that moves but the
- * stream video. The screenshots are the apps' dark appearance, so the page
- * is dark too.
+ * Helio's page: the ink of the logo's h behind everything (ACCENT_INK in
+ * helio-ui/src/theme.rs), plain where the text is and quietly waved along the
+ * window's edges (lib/sky.js), cool greys for text, and the app's soft blue for the one
+ * main action, links and data (ACCENT, ACCENT_LIGHT, ACCENT_DEEP). Nothing
+ * moves but the stream video. The screenshots are the app's dark appearance,
+ * so the page is dark too.
  */
 
 :root {
   color-scheme: dark;
 
-  --bg: #03050a;
+  --bg: #16213a;
+  --bg-rgb: 22 33 58;
   /* Panels let the background through. */
-  --surface: rgb(255 255 255 / 0.035);
-  --surface-2: rgb(255 255 255 / 0.06);
+  --surface: rgb(255 255 255 / 0.04);
+  --surface-2: rgb(255 255 255 / 0.07);
 
   --text: #eef1f7;
-  --text-2: #bec5d5;
+  --text-2: #c6cedd;
   /* The faintest text that still clears 4.5:1 on the bluest of the
      background, and on a panel there. */
-  --text-3: #adb5c8;
+  --text-3: #bcc4d4;
 
   --line: rgb(255 255 255 / 0.09);
   --line-2: rgb(255 255 255 / 0.16);
 
-  --accent: #8db2ff;
-  /* Data: an ordinal blue ramp, light to dark, and a grey for the rest;
-     each at least 2:1 on the bluest of the background. */
-  --data-1: #86b6ef;
-  --data-2: #5598e7;
-  --data-3: #2a78d6;
-  --data-4: #1c5cab;
-  --data-muted: #646b7d;
+  /* The app's, exactly. */
+  --accent: #c2d6f6;
+  --accent-rgb: 194 214 246;
+  --accent-hover: #d1dff6;
+  --accent-deep: #92b6f0;
+  --on-accent: #16213a;
+  /* Data: an ordinal ramp down from the accent, light to dark, and a grey
+     for the rest; each at least 2:1 on the bluest of the background. */
+  --data-1: #c2d6f6;
+  --data-2: #92b6f0;
+  --data-3: #6a93d6;
+  --data-4: #5a86cb;
+  --data-muted: #7a8399;
 
   /* Geist and its metric-matched fallbacks (astro.config.mjs, fonts). */
   --font: var(--font-geist);
   --mono: var(--font-geist-mono);
+
+  /* One line length for running text, so paragraphs wrap at the same place. */
+  --measure: 44rem;
+  --title-size: clamp(1.75rem, 1.3rem + 1.6vw, 2.5rem);
+  /* The space, by eye, from a title to its lede and from a block to the note
+     under it. A title's own leading grows with it, hence the share of its size
+     here: with a fixed margin the two drift apart as the window narrows. */
+  --gap-note: calc(14px + var(--title-size) / 3);
+  /* From a heading and its text to what they introduce. */
+  --gap-head: clamp(36px, 5vw, 56px);
+  /* Between the parts of a section. */
+  --gap-part: clamp(56px, 7vw, 80px);
 
   --radius: 12px;
   --radius-sm: 8px;
@@ -65,36 +85,8 @@
 html {
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
-  scroll-padding-top: calc(var(--nav-height, var(--nav)) + 16px);
+  scroll-padding-top: var(--nav-height, var(--nav));
   background: var(--bg);
-}
-
-/* A mesh of black, navy, blue and indigo, black at the top and deep blue
-   below, under a fine grain: fixed to the window, so every part of the page
-   sits on the same sky. The grain is one tile of noise, drawn once. */
-body::before,
-body::after {
-  content: '';
-  position: fixed;
-  inset: 0;
-  z-index: -1;
-  pointer-events: none;
-}
-
-body::before {
-  background:
-    linear-gradient(180deg, #020309 0%, rgb(2 3 9 / 0.85) 22%, rgb(2 3 9 / 0) 58%),
-    radial-gradient(55% 50% at 12% 92%, rgb(37 84 214 / 0.42), transparent 72%),
-    radial-gradient(42% 46% at 90% 38%, rgb(29 64 175 / 0.45), transparent 72%),
-    radial-gradient(48% 42% at 62% 102%, rgb(67 56 202 / 0.38), transparent 72%),
-    radial-gradient(60% 48% at 40% 66%, rgb(12 28 82 / 0.85), transparent 75%),
-    radial-gradient(45% 40% at 96% 18%, rgb(16 30 78 / 0.55), transparent 70%),
-    linear-gradient(180deg, #020309 0%, #050b1f 50%, #0a1640 100%);
-}
-
-body::after {
-  opacity: 0.09;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 1.4 -.35'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
 }
 
 /* While the page returns to where the reader was (layouts/Base.astro). */
@@ -147,7 +139,7 @@ a:hover {
    alone. */
 :is(p, figcaption, li) a {
   text-decoration: underline;
-  text-decoration-color: rgb(141 178 255 / 0.45);
+  text-decoration-color: rgb(var(--accent-rgb) / 0.45);
   text-underline-offset: 3px;
 }
 
@@ -184,7 +176,7 @@ a:hover {
 }
 
 ::selection {
-  background: rgb(141 178 255 / 0.35);
+  background: rgb(var(--accent-rgb) / 0.35);
   color: #fff;
 }
 
@@ -219,8 +211,8 @@ kbd {
 
 /* A section's opening: a label, a title, a sentence or two. */
 .head {
-  max-width: 44rem;
-  margin-bottom: clamp(36px, 5vw, 56px);
+  max-width: var(--measure);
+  margin-bottom: var(--gap-head);
 }
 
 .eyebrow {
@@ -232,7 +224,7 @@ kbd {
 }
 
 .title {
-  font-size: clamp(1.75rem, 1.3rem + 1.6vw, 2.5rem);
+  font-size: var(--title-size);
   letter-spacing: -0.025em;
   line-height: 1.15;
 }
@@ -242,7 +234,57 @@ kbd {
   font-size: clamp(1rem, 0.96rem + 0.2vw, 1.125rem);
 }
 
+/* A numbered row: the steps to a first stream, and the host's rules for agents. */
+.steps {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 32px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: step;
+}
+
+.steps li {
+  display: grid;
+  grid-template-columns: 28px 1fr;
+  align-content: start;
+  column-gap: 16px;
+  counter-increment: step;
+}
+
+.steps li::before {
+  content: counter(step);
+  grid-row: span 2;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--line-2);
+  border-radius: 50%;
+  color: var(--text);
+  font-size: 0.8125rem;
+}
+
+.steps h3 {
+  font-size: 1rem;
+  line-height: 28px;
+}
+
+.steps p {
+  margin-top: 2px;
+  font-size: 0.9375rem;
+}
+
+@media (max-width: 860px) {
+  .steps {
+    grid-template-columns: 1fr;
+    gap: 24px;
+  }
+}
+
 .note {
+  max-width: var(--measure);
   color: var(--text-3);
   font-size: 0.875rem;
   line-height: 1.55;
@@ -281,13 +323,14 @@ kbd {
   text-decoration: none;
 }
 
+/* The app's one main action on a page. */
 .button.primary {
-  background: var(--text);
-  color: var(--bg);
+  background: var(--accent);
+  color: var(--on-accent);
 }
 
 .button.primary:hover {
-  background: #fff;
+  background: var(--accent-hover);
 }
 
 .button.secondary {

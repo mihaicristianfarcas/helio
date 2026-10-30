@@ -1,9 +1,13 @@
 ---
 // AI agents on your hosts (docs/ai-agents.md): the real windows, what you
-// keep control of, clef's screen checks, and the host's own rules.
-import { Image } from 'astro:assets';
+// keep control of, clef's screen checks, and the host's own rules. Behind the
+// agent's window in the hero is the very screen that window shows.
+import PageHero from './PageHero.astro';
 import { onGitHub } from '../lib/repo';
-import ask from '../assets/shots/ping-ask.webp';
+import session from '../assets/hero/agent.webp';
+import screen from '../assets/hero/agent-screen.webp';
+
+const base = import.meta.env.BASE_URL.replace(/\/?$/, '/');
 
 const rules = [
   ['Never over a person', 'An agent is refused while a person streams.'],
@@ -14,30 +18,33 @@ const rules = [
 ];
 ---
 
-<section class="section" id="agents">
+<PageHero
+  id="agents"
+  badge={{ text: 'AI agents' }}
+  title="Let an AI agent use your host"
+  actions={[
+    { label: 'Download', href: `${base}#install`, primary: true },
+    { label: 'How agents work', href: onGitHub('docs/ai-agents.md') },
+  ]}
+  shots={[
+    {
+      src: screen,
+      alt: 'What the agent sees: a Windows desktop with File Explorer on the Downloads folder, its two biggest files selected.',
+      place: 'back',
+    },
+    {
+      src: session,
+      alt: "An agent session in Helio: the conversation about the Downloads folder, the agent waiting for a go-ahead to empty the Recycle Bin with Allow and Don't buttons, a screenshot of the Windows desktop it saw after its last step, with File Explorer on Downloads, and its plan.",
+      place: 'front',
+    },
+  ]}
+>
+  An agent sees the screen and uses the keyboard and mouse as you do through Helio: over the same tunnel, from anywhere.
+  Watch it, take over or stop it at any point.
+</PageHero>
+
+<section class="section page">
   <div class="wrap">
-    <div class="head">
-      <span class="eyebrow">AI agents</span>
-      <h2 class="title">Let an AI agent use your host</h2>
-      <p class="lede">
-        An agent sees the screen and uses the keyboard and mouse the way you do through Ping: over the same tunnel,
-        from anywhere. You can watch it, take over or stop it at any point.
-      </p>
-    </div>
-
-    <figure class="capture">
-      <Image
-        src={ask}
-        alt="An agent session in Ping: the conversation about the Downloads folder, the agent waiting for a go-ahead to empty the Recycle Bin with Allow and Don't buttons, the screen it saw after its last step, and its plan."
-        widths={[640, 960, 1280, 1880]}
-        sizes="(max-width: 1168px) 94vw, 1120px"
-      />
-      <figcaption class="note">
-        An agent session in Ping: the screen it saw after each step, its plan, and a go-ahead it waits for before it
-        empties the Recycle Bin.
-      </figcaption>
-    </figure>
-
     <ul class="points">
       <li>
         <h3>Watch it, or take over</h3>
@@ -51,64 +58,60 @@ const rules = [
       <li>
         <h3>It asks first</h3>
         <p>
-          Before it deletes, spends, sends, installs or types a password. Rules catch <code>rm -rf</code>,
-          <code>git push --force</code> and <code>DROP TABLE</code> whether it asked or not.
+          By default it stops for your go-ahead before anything risky, like deleting files, sending messages or
+          installing software. If it forgets to ask, rules catch the most dangerous commands.
         </p>
       </li>
       <li>
         <h3>Cloudflare’s clef checks the screen</h3>
         <p>
           Turn on <a href={onGitHub('docs/ai-agents.md#screen-checks-cloudflare-clef')}>screen checks</a> and clef
-          looks first: a click that deletes, spends, sends or installs waits for your go-ahead, and so does typing into
-          a password field. A screen showing personal information reaches the model only if you agree; say no, and it
-          gets no picture and is told to stop.
+          looks first: a click that deletes, spends, sends or installs waits for your go-ahead, as does typing into a
+          password field. A screen showing personal information reaches the model only if you agree.
         </p>
       </li>
       <li>
         <h3>Your model, or your agent</h3>
         <p>
           Claude Code or Codex on your plan, an Anthropic, OpenAI or OpenRouter key, or a local model. Or give any MCP
-          client your hosts as tools with <code>Ping mcp</code>; <code>Ping mcp install</code> adds them to Claude Code,
+          client your hosts as tools with <code>Helio mcp</code>; <code>Helio mcp install</code> adds them to Claude Code,
           Codex and others.
         </p>
       </li>
     </ul>
 
     <div class="rules">
-      <h3>Rules the host holds every agent to</h3>
-      <ol>
+      <h2>Rules the host holds every agent to</h2>
+      <ol class="steps">
         {rules.map(([title, body]) => (
           <li>
-            <strong>{title}</strong>
-            <span>{body}</span>
+            <h3>{title}</h3>
+            <p>{body}</p>
           </li>
         ))}
       </ol>
       <p class="note">
-        An agent pairs like a device, and its role is sealed with the PIN’s key: the host knows it by its key, not by
-        what it claims. <a href={onGitHub('docs/ai-agents.md')}>How agents work</a>
+        An agent pairs like a device, its role sealed with the PIN’s key: the host knows it by that key, not by what
+        it claims. <a href={onGitHub('docs/ai-agents.md')}>How agents work</a>
       </p>
     </div>
   </div>
 </section>
 
 <style>
-  figcaption {
-    margin-top: 14px;
+  /* Under the hero, whose own space below is the gap. */
+  .page {
+    padding-top: 0;
+    border-top: 0;
   }
 
   .points {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
     gap: 40px;
-    margin: clamp(48px, 6vw, 72px) 0 0;
+    margin: 0;
     padding: 0;
     list-style: none;
-  }
-
-  .points li {
-    padding-top: 20px;
-    border-top: 1px solid var(--line-2);
   }
 
   .points h3 {
@@ -121,69 +124,25 @@ const rules = [
   }
 
   .rules {
-    margin-top: clamp(48px, 6vw, 72px);
-    padding: 28px;
-    border: 1px solid var(--line-2);
-    border-radius: var(--radius);
-    background: var(--surface);
+    margin-top: var(--gap-part);
   }
 
-  .rules h3 {
-    font-size: 1rem;
+  .rules h2 {
+    font-size: clamp(1.25rem, 1.1rem + 0.6vw, 1.5rem);
+    letter-spacing: -0.02em;
   }
 
-  ol {
-    display: grid;
-    grid-template-columns: repeat(5, 1fr);
-    gap: 24px;
-    margin: 24px 0;
-    padding: 0;
-    list-style: none;
-    counter-reset: rule;
-  }
-
-  ol li {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    font-size: 0.875rem;
-    counter-increment: rule;
-  }
-
-  ol li::before {
-    content: counter(rule);
-    color: var(--text-3);
-    font-family: var(--mono);
-    font-size: 0.8125rem;
-  }
-
-  ol strong {
-    color: var(--text);
-    font-weight: 500;
+  .steps {
+    margin-top: var(--gap-head);
   }
 
   .rules > .note {
-    padding-top: 20px;
-    border-top: 1px solid var(--line);
+    margin-top: var(--gap-note);
   }
 
   @media (max-width: 900px) {
     .points {
       grid-template-columns: 1fr;
-    }
-
-    ol {
-      grid-template-columns: 1fr 1fr;
-    }
-  }
-
-  @media (max-width: 560px) {
-    ol {
-      grid-template-columns: 1fr;
-    }
-
-    .rules {
-      padding: 22px;
     }
   }
 </style>

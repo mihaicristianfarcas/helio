@@ -1,133 +1,81 @@
 ---
-//! Downloads: which computer (Ping for the one you sit at, Pong for the one
-//! you stream from) and its system pick one of six panels. Every choice is
-//! a native button in the Tab order. Without script all six downloads are
-//! shown. Script announces selections and reads release data from latest.json.
+//! Downloads: one button, for the system the browser says it is on, and a
+//! line of links to the other platforms under the steps beside it. Without
+//! script, or on a system with no download (a phone), all the systems are shown
+//! and the line closes the card. Script also reads the sizes and the build from
+//! latest.json.
 import Command from './Command.astro';
 import Icon from './Icon.astro';
 import { REPO, TAP, onGitHub } from '../lib/repo';
-import { CHECKSUMS, MANIFEST, archive, type App, type System } from '../lib/downloads';
-import pingIcon from '../assets/icons/ping.svg';
-import pongIcon from '../assets/icons/pong.svg';
+import { CHECKSUMS, FILES, MANIFEST, type File, type System } from '../lib/downloads';
 
 interface Panel {
-  app: App;
   system: System;
+  name: string;
   needs: string;
-  files: { arch: string; label: string }[];
+  file: File;
+  /** What the button says under the system's name, when there is a choice. */
+  detail?: string;
   /** HTML: the steps hold names in bold, paths and links. */
   steps: string[];
   commands: { label: string; lines: string[] }[];
-  /** What the system may do about the download, under its buttons. */
+  /** What the system may do about the download, under its button. */
   caveat?: string;
 }
 
-const roles: { app: App; icon: string; who: string; what: string }[] = [
-  { app: 'Ping', icon: pingIcon.src, who: 'The computer you sit at', what: 'Ping, the client' },
-  { app: 'Pong', icon: pongIcon.src, who: 'The computer you stream from', what: 'Pong, the host' },
-];
-
-const systems: { id: System; name: string }[] = [
-  { id: 'macos', name: 'macOS' },
-  { id: 'windows', name: 'Windows' },
-  { id: 'linux', name: 'Linux' },
-];
-
-const mac = [
-  { arch: 'arm64', label: 'Apple silicon' },
-  { arch: 'x86_64', label: 'Intel' },
-];
-const one = [{ arch: 'x86_64', label: 'Download' }];
-// Windows 11's Smart App Control blocks unsigned programs it does not know,
-// with no way to allow one.
-const smartAppControl =
-  'Where Smart App Control is on, as on some new Windows 11 PCs, Windows blocks programs that are not signed, these among them.';
-const unpack = (app: App) => [
-  `curl -L ${archive(app, 'linux', 'x86_64').url} | tar xz`,
-  `${app}-*-linux-x86_64/install.sh`,
-];
-
 const panels: Panel[] = [
   {
-    app: 'Ping',
     system: 'macos',
+    name: 'macOS',
     needs: 'macOS 14 or later',
-    files: mac,
+    file: FILES.macArm,
+    detail: 'Apple silicon',
     steps: [
-      'Open the zip and move <strong>Ping</strong> to Applications.',
-      'Open Ping, and let it find devices on your local network when it asks.',
+      'Open the DMG and drag <strong>Helio</strong> to Applications.',
+      'Open Helio, and let it find devices on your local network when it asks.',
     ],
-    commands: [{ label: 'Or with Homebrew', lines: [TAP, 'brew install --cask ping'] }],
+    commands: [{ label: 'Or with Homebrew', lines: [TAP, 'brew install --cask helio'] }],
   },
   {
-    app: 'Pong',
-    system: 'macos',
-    needs: 'macOS 14 or later',
-    files: mac,
-    steps: [
-      'Open the zip and move <strong>Pong</strong> and <strong>Pong Control</strong> to Applications.',
-      'Open Pong Control and choose <strong>Start Pong</strong>: the host then runs whenever you are logged in.',
-      'Allow Screen Recording and Accessibility when macOS asks: Pong needs the first to stream your screen, the second for the keyboard and mouse of whoever streams it.',
-    ],
-    commands: [{ label: 'Or with Homebrew', lines: [TAP, 'brew install --cask pong'] }],
-  },
-  {
-    app: 'Ping',
     system: 'windows',
+    name: 'Windows',
     needs: 'Windows 10 or 11, 64-bit',
-    files: one,
+    file: FILES.windows,
     steps: [
-      'Extract the zip and double-click <strong>Install Ping.cmd</strong>. It is not signed yet, so Windows asks whether to run it. Ping installs for you, with no administrator needed, and opens.',
-      'Let Ping on private networks when Windows Firewall asks.',
-      'Ping is in the Start menu, and in <strong>Settings &gt; Apps</strong>, which uninstalls it.',
+      'Open the installer. It installs Helio for you, with no administrator needed.',
+      'Allow Helio on private networks when Windows Firewall asks.',
+      'Helio is in the Start menu, and in <strong>Settings &gt; Apps &gt; Installed apps</strong>, which uninstalls it.',
     ],
     commands: [],
-    caveat: smartAppControl,
+    caveat:
+      'SmartScreen may say it prevented an unrecognized app from starting: choose More info, check the publisher, then Run anyway.',
   },
   {
-    app: 'Pong',
-    system: 'windows',
-    needs: 'Windows 10 or 11; best with an NVIDIA GPU and SudoVDA',
-    files: one,
-    steps: [
-      'Install <a href="https://github.com/SudoMaker/SudoVDA">SudoVDA</a>, the virtual display driver, and a current NVIDIA driver: Pong encodes with NVENC. Without them, Pong streams the PC’s main display in H.264, encoded in software. If Apollo is installed, it brought SudoVDA; stop its service while Pong runs.',
-      'Extract the zip and double-click <strong>Install Pong.cmd</strong>. It is not signed yet, so Windows asks whether to run it, then whether PowerShell may make changes. Pong then runs as a service from startup, before anyone signs in.',
-      'Open <strong>Pong</strong> from the Start menu to see the host and pair devices. It is in <strong>Settings &gt; Apps</strong> too, which uninstalls it.',
-    ],
-    commands: [],
-    caveat: smartAppControl,
-  },
-  {
-    app: 'Ping',
     system: 'linux',
+    name: 'Linux',
     needs: 'Ubuntu 24.04 or a distribution built on it, x86_64',
-    files: one,
+    file: FILES.linux,
     steps: [
-      'Unpack it and run <code>./install.sh</code> in its folder: Ping goes in <code>~/.local/bin</code> and in your launcher.',
-      'Open Ping from your launcher.',
+      'Unpack it and run <code>./install.sh</code> in its folder: Helio goes in <code>~/.local/bin</code> and in your launcher.',
+      'Open Helio from your launcher.',
     ],
-    commands: [{ label: 'Or in a terminal', lines: unpack('Ping') }],
-  },
-  {
-    app: 'Pong',
-    system: 'linux',
-    needs: 'Ubuntu 24.04 or a distribution built on it, x86_64',
-    files: one,
-    steps: [
-      'Unpack it and run <code>./install.sh</code> in its folder: Pong runs as a user service in your desktop session, now and at each login.',
-      'Under Wayland, let Pong share the screen when your desktop asks; on GNOME, switch on <strong>Allow Remote Interaction</strong> for the keyboard and mouse.',
-      'Open Pong from your launcher to pair devices.',
+    commands: [
+      {
+        label: 'Or in a terminal',
+        lines: [`curl -L ${FILES.linux.url} | tar xz`, 'Helio-*-linux-x86_64/install.sh'],
+      },
     ],
-    commands: [{ label: 'Or in a terminal', lines: unpack('Pong') }],
   },
 ];
 
+const list = Object.values(FILES);
+
 const steps = [
-  ['Install', 'Pong on the computer you stream from, Ping on the one you sit at.'],
-  ['Pair', 'Click the host in Ping and type the PIN it shows into Pong. You do this once, on your network or through a VPN such as Tailscale.'],
+  ['Install', 'Helio on both computers. Turn on hosting on the one with the games: setup asks, or Settings → Hosting.'],
+  ['Pair', 'Click the host in Helio and type the PIN it shows into the host’s Helio, under This computer → Devices. You do this once, on your network or through a VPN such as Tailscale.'],
   ['Stream', 'Click the host again, from anywhere. Ctrl+Alt+Shift+Q ends the stream.'],
 ];
-const panelId = (app: App, system: System) => `download-${app.toLowerCase()}-${system}`;
+const panelId = (system: System) => `download-${system}`;
 ---
 
 <section class="section" id="install">
@@ -135,104 +83,56 @@ const panelId = (app: App, system: System) => `download-${app.toLowerCase()}-${s
     <div class="head">
       <span class="eyebrow">Get started</span>
       <h2 class="title">Download, pair and stream</h2>
-      <p class="lede">Say which computer this is for and what it runs, and you get its download.</p>
+      <p class="lede">Install Helio on both computers, and turn on hosting on the one with the games.</p>
     </div>
 
     <div class="picker" data-picker data-manifest={MANIFEST} data-repo={REPO}>
-      <div class="choose">
-        <fieldset>
-          <legend>Which computer is this for?</legend>
-          <div class="roles">
-            {
-              roles.map((r, i) => (
-                <button
-                  type="button"
-                  class="role"
-                  data-select-app={r.app}
-                  aria-pressed={i === 0 ? 'true' : 'false'}
-                  aria-controls={systems.map((s) => panelId(r.app, s.id)).join(' ')}
-                >
-                  <img src={r.icon} width="40" height="40" alt="" />
-                  <span>
-                    <strong>{r.who}</strong>
-                    <span>{r.what}</span>
-                  </span>
-                </button>
-              ))
-            }
-          </div>
-        </fieldset>
-        <fieldset>
-          <legend>What does it run?</legend>
-          <div class="segmented">
-            {
-              systems.map((s, i) => (
-                <button
-                  type="button"
-                  data-select-os={s.id}
-                  aria-pressed={i === 0 ? 'true' : 'false'}
-                  aria-controls={roles.map((r) => panelId(r.app, s.id)).join(' ')}
-                >
-                  <span>{s.name}</span>
-                </button>
-              ))
-            }
-          </div>
-        </fieldset>
-      </div>
-      <p class="visually-hidden" role="status" aria-atomic="true" data-selection-status />
-
       {
-        panels.map((p) => {
-          const name = systems.find((s) => s.id === p.system)!.name;
-          return (
-            <article
-              class="panel"
-              id={panelId(p.app, p.system)}
-              aria-labelledby={`${panelId(p.app, p.system)}-title`}
-              data-app={p.app}
-              data-os={p.system}
-            >
-              <div class="get">
-                <h3 id={`${panelId(p.app, p.system)}-title`}>
-                  {p.app} for {name}
-                </h3>
-                <p class="needs">{p.needs}</p>
-                <div class="files">
-                  {p.files.map((f, i) => {
-                    const a = archive(p.app, p.system, f.arch);
-                    return (
-                      <a
-                        class:list={['button', i === 0 ? 'primary' : 'secondary']}
-                        href={a.url}
-                        data-file={a.id}
-                        aria-label={`Download ${p.app} for ${name}${p.files.length > 1 ? `, ${f.label}` : ''}`}
-                      >
-                        <Icon name="download" size={17} />
-                        {f.label}
-                        <span class="size num" data-size />
-                      </a>
-                    );
-                  })}
-                </div>
-                {p.caveat && <p class="caveat note">{p.caveat}</p>}
+        panels.map((p) => (
+          <article class="panel" id={panelId(p.system)} aria-labelledby={`${panelId(p.system)}-title`} data-os={p.system}>
+            <div class="get">
+              <h3 id={`${panelId(p.system)}-title`}>Helio for {p.name}</h3>
+              <p class="needs">{p.needs}</p>
+              <div class="files">
+                <a class="button primary" href={p.file.url} data-file={p.file.id}>
+                  <Icon name="download" size={17} />
+                  Download for {p.name}
+                  {p.detail && <span class="detail">{p.detail}</span>}
+                  <span class="size num" data-size />
+                </a>
               </div>
+              {p.caveat && <p class="caveat note">{p.caveat}</p>}
+            </div>
+            <div>
               <ol class="then">
                 {p.steps.map((s) => (
                   <li set:html={s} />
                 ))}
               </ol>
-              {p.commands.length > 0 && (
-                <div class="commands">
-                  {p.commands.map((c) => (
-                    <Command label={c.label} lines={c.lines} />
-                  ))}
-                </div>
-              )}
-            </article>
-          );
-        })
+            </div>
+            {p.commands.length > 0 && (
+              <div class="commands">
+                {p.commands.map((c) => (
+                  <Command label={c.label} lines={c.lines} />
+                ))}
+              </div>
+            )}
+          </article>
+        ))
       }
+
+      <p class="others note" data-others>
+        <span>Other platforms:</span>
+        {
+          list.map((f) => (
+            <span data-listed={f.id}>
+              <a href={f.url} data-file={f.id}>
+                {f.label}
+              </a>
+            </span>
+          ))
+        }
+      </p>
 
       <p class="build note">
         <span data-build>The newest build of the main branch.</span>
@@ -252,8 +152,7 @@ const panelId = (app: App, system: System) => `download-${app.toLowerCase()}-${s
       }
     </ol>
     <p class="note after">
-      The apps tell you when a new release is out, and install it when you choose to.
-      Any of them builds from source with Rust 1.96 or newer.
+      Helio offers each new release and installs it when you choose. Building from source takes Rust 1.96 or newer.
       <a href={onGitHub('docs/install.md')}>Installing, step by step</a>
     </p>
   </div>
@@ -266,139 +165,11 @@ const panelId = (app: App, system: System) => `download-${app.toLowerCase()}-${s
     background: var(--surface);
   }
 
-  .choose {
-    display: none;
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: 24px 40px;
-    padding: 24px;
-    border-bottom: 1px solid var(--line);
-  }
-
-  .picker[data-ready] .choose {
-    display: grid;
-  }
-
-  fieldset {
-    min-width: 0;
-    margin: 0;
-    padding: 0;
-    border: 0;
-  }
-
-  legend {
-    margin-bottom: 12px;
-    padding: 0;
-    color: var(--text-3);
-    font-size: 0.8125rem;
-  }
-
-  .roles {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 10px;
-  }
-
-  .role {
-    position: relative;
-    display: flex;
-    align-items: center;
-    gap: 14px;
-    padding: 14px 16px;
-    border: 1px solid var(--line);
-    border-radius: var(--radius-sm);
-    background: none;
-    color: var(--text-2);
-    font: inherit;
-    text-align: left;
-    cursor: pointer;
-    transition:
-      border-color 0.15s,
-      background-color 0.15s;
-  }
-
-  .role:hover {
-    border-color: var(--line-2);
-  }
-
-  .role[aria-pressed='true'] {
-    border-color: rgb(141 178 255 / 0.5);
-    background: rgb(141 178 255 / 0.07);
-  }
-
-  .role img {
-    flex-shrink: 0;
-  }
-
-  .role strong {
-    display: block;
-    color: var(--text);
-    font-size: 0.9375rem;
-    font-weight: 500;
-  }
-
-  .role span span {
-    color: var(--text-3);
-    font-size: 0.8125rem;
-  }
-
-  /* The apps' segmented control (pingpong-ui's Segmented): a faint track,
-     the chosen segment raised on it. */
-  .segmented {
-    display: inline-flex;
-    gap: 2px;
-    padding: 3px;
-    border-radius: 10px;
-    background: rgb(255 255 255 / 0.06);
-  }
-
-  .segmented button {
-    position: relative;
-    display: flex;
-    align-items: center;
-    min-height: 38px;
-    padding: 6px 16px;
-    border: 1px solid transparent;
-    border-radius: 7px;
-    background: none;
-    color: var(--text-2);
-    font: inherit;
-    font-size: 0.9rem;
-    font-weight: 500;
-    cursor: pointer;
-    transition: color 0.15s;
-  }
-
-  .segmented button:hover {
-    color: var(--text);
-  }
-
-  .segmented button[aria-pressed='true'] {
-    border-color: rgb(255 255 255 / 0.14);
-    background: rgb(255 255 255 / 0.1);
-    box-shadow: 0 1px 2px rgb(0 0 0 / 0.3);
-    color: var(--text);
-  }
-
-  @media (forced-colors: active) {
-    :is(.role, .segmented button)[aria-pressed='true'] {
-      border-color: Highlight;
-    }
-
-    :is(.role, .segmented button)[aria-pressed='true']:not(:focus-visible) {
-      outline: 2px solid Highlight;
-      outline-offset: -4px;
-    }
-  }
-
   .panel {
     display: grid;
     grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
     gap: 28px 48px;
     padding: 28px 24px;
-  }
-
-  .panel + .panel {
-    border-top: 1px solid var(--line);
   }
 
   .get h3 {
@@ -419,7 +190,8 @@ const panelId = (app: App, system: System) => `download-${app.toLowerCase()}-${s
     margin-top: 20px;
   }
 
-  .size:not(:empty) {
+  .size:not(:empty),
+  .detail {
     font-weight: 400;
     opacity: 0.7;
   }
@@ -432,6 +204,13 @@ const panelId = (app: App, system: System) => `download-${app.toLowerCase()}-${s
   .files [data-missing] {
     pointer-events: none;
     opacity: 0.45;
+  }
+
+  /* A long label on a narrow phone wraps inside the button. */
+  .files .button {
+    flex-wrap: wrap;
+    max-width: 100%;
+    white-space: normal;
   }
 
   .then {
@@ -483,13 +262,31 @@ const panelId = (app: App, system: System) => `download-${app.toLowerCase()}-${s
     gap: 16px;
   }
 
+  .others {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px 14px;
+    margin: 14px 0 0;
+  }
+
+  .picker > .others {
+    margin: 0;
+    padding: 0 24px 20px;
+  }
+
+  .others [data-missing] {
+    color: var(--text-3);
+    text-decoration: none;
+    pointer-events: none;
+  }
+
   .build {
     display: flex;
     flex-wrap: wrap;
     gap: 6px 20px;
+    max-width: none;
     margin: 0;
-    padding: 16px 24px;
-    border-top: 1px solid var(--line);
+    padding: 0 24px 20px;
   }
 
   .build span {
@@ -497,116 +294,35 @@ const panelId = (app: App, system: System) => `download-${app.toLowerCase()}-${s
   }
 
   .steps {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 32px;
-    margin: 56px 0 0;
-    padding: 0;
-    list-style: none;
-    counter-reset: step;
-  }
-
-  .steps li {
-    display: grid;
-    grid-template-columns: 28px 1fr;
-    align-content: start;
-    column-gap: 16px;
-    counter-increment: step;
-  }
-
-  .steps li::before {
-    content: counter(step);
-    grid-row: span 2;
-    display: grid;
-    place-items: center;
-    width: 28px;
-    height: 28px;
-    border: 1px solid var(--line-2);
-    border-radius: 50%;
-    color: var(--text);
-    font-size: 0.8125rem;
-  }
-
-  .steps h3 {
-    font-size: 1rem;
-    line-height: 28px;
-  }
-
-  .steps p {
-    margin-top: 2px;
-    font-size: 0.9375rem;
+    margin-top: var(--gap-part);
   }
 
   .after {
-    margin-top: 32px;
+    margin-top: var(--gap-note);
   }
 
   @media (max-width: 860px) {
-    .choose,
     .panel {
       grid-template-columns: 1fr;
-    }
-
-    .steps {
-      grid-template-columns: 1fr;
-      gap: 24px;
     }
   }
 
   @media (max-width: 560px) {
-    .choose,
-    .panel {
-      padding-inline: 16px;
-    }
-
+    .panel,
+    .picker > .others,
     .build {
       padding-inline: 16px;
-    }
-
-    .roles {
-      grid-template-columns: 1fr;
-    }
-
-    .segmented {
-      display: flex;
-    }
-
-    .segmented button {
-      flex: 1;
-      justify-content: center;
-      padding: 0 8px;
     }
   }
 </style>
 
 <script>
-  // The visitor's system, chosen for them; then what latest.json says of
-  // the build: its version and commit, each file's size. A file it does not
-  // list is not built yet, and its button says so.
+  // The visitor's system, chosen for them: its panel and its one button,
+  // with the line of other platforms moved up under the steps. A browser
+  // that says none (a phone) keeps all of it. Then what latest.json says of
+  // the build: its commit and date, the button's size. A file it does not
+  // list is not built yet.
   const picker = document.querySelector<HTMLElement>('[data-picker]')!;
-  const apps = [...picker.querySelectorAll<HTMLButtonElement>('[data-select-app]')];
-  const systems = [...picker.querySelectorAll<HTMLButtonElement>('[data-select-os]')];
-  const choose = (buttons: HTMLButtonElement[], selected: HTMLButtonElement) => {
-    for (const button of buttons) button.setAttribute('aria-pressed', String(button === selected));
-  };
-  const show = (announce = false) => {
-    const app = picker.querySelector<HTMLButtonElement>('[data-select-app][aria-pressed="true"]')!.dataset.selectApp;
-    const os = picker.querySelector<HTMLButtonElement>('[data-select-os][aria-pressed="true"]')!.dataset.selectOs;
-    for (const panel of picker.querySelectorAll<HTMLElement>('.panel')) {
-      panel.hidden = panel.dataset.app !== app || panel.dataset.os !== os;
-      if (!panel.hidden && announce) {
-        const name = panel.querySelector('h3')!.textContent!.trim();
-        const needs = panel.querySelector('.needs')!.textContent!.trim();
-        picker.querySelector('[data-selection-status]')!.textContent = `Showing ${name} downloads. ${needs}.`;
-      }
-    }
-  };
-  for (const buttons of [apps, systems]) {
-    for (const button of buttons) button.addEventListener('click', () => {
-      choose(buttons, button);
-      show(true);
-    });
-  }
   const ua = navigator.userAgent;
   const system = /Windows/.test(ua)
     ? 'windows'
@@ -617,9 +333,17 @@ const panelId = (app: App, system: System) => `download-${app.toLowerCase()}-${s
         : /Linux|X11|CrOS/.test(ua)
           ? 'linux'
           : null;
-  if (system) choose(systems, systems.find((button) => button.dataset.selectOs === system)!);
-  show();
-  picker.dataset.ready = '';
+  if (system) {
+    for (const panel of picker.querySelectorAll<HTMLElement>('.panel')) {
+      panel.hidden = panel.dataset.os !== system;
+      if (panel.hidden) continue;
+      const shown = panel.querySelector<HTMLElement>('[data-file]')!.dataset.file;
+      for (const row of picker.querySelectorAll<HTMLElement>('[data-listed]')) {
+        row.hidden = row.dataset.listed === shown;
+      }
+      panel.querySelector('.then')!.after(picker.querySelector('[data-others]')!);
+    }
+  }
 
   interface Manifest {
     version: string;
@@ -636,27 +360,26 @@ const panelId = (app: App, system: System) => `download-${app.toLowerCase()}-${s
       const commit = m.commit.slice(0, 7);
       for (const link of picker.querySelectorAll<HTMLAnchorElement>('[data-file]')) {
         const file = m.files[link.dataset.file!];
+        const size = link.querySelector('[data-size]');
         if (!file) {
           link.dataset.missing = '';
           link.setAttribute('aria-disabled', 'true');
           link.removeAttribute('href');
           link.tabIndex = -1;
-          // The manifest may arrive while this button has focus. Return to
-          // the options instead of leaving focus on an unavailable action.
-          if (document.activeElement === link) {
-            picker.querySelector<HTMLButtonElement>('[data-select-os][aria-pressed="true"]')!.focus();
-          }
-          link.querySelector('[data-size]')!.textContent = 'not built yet';
+          // The manifest may arrive while this link has focus. Return to
+          // the section's next link instead of leaving focus on nothing.
+          if (document.activeElement === link) picker.querySelector<HTMLAnchorElement>('.build > a')!.focus();
+          if (size) size.textContent = 'not built yet';
           continue;
         }
         // The commit makes each build's link its own: a browser that kept
         // an earlier download does not hand it back.
         link.href = `${file.url}?${commit}`;
-        link.querySelector('[data-size]')!.textContent = megabytes(file.size);
+        if (size) size.textContent = megabytes(file.size);
       }
       const date = new Date(m.published).toLocaleDateString('en', { dateStyle: 'long' });
       const build = picker.querySelector('[data-build]')!;
-      build.textContent = `Version ${m.version}, built from `;
+      build.textContent = 'Built from ';
       const link = document.createElement('a');
       link.href = `${picker.dataset.repo}/commit/${m.commit}`;
       link.textContent = commit;
