@@ -1,7 +1,7 @@
 ---
-// One of the apps' own icons (pingpong-ui/assets/icons/): 24x24, 1.75 pt
+// One of the apps' own icons (helio-ui/assets/icons/): 24x24, 1.75 pt
 // round strokes in currentColor, so they take the text's colour here too.
-const icons = import.meta.glob<string>('../../../pingpong-ui/assets/icons/*.svg', {
+const icons = import.meta.glob<string>('../../../helio-ui/assets/icons/*.svg', {
   query: '?raw',
   import: 'default',
   eager: true,
@@ -14,8 +14,8 @@ interface Props {
 }
 
 const { name, size = 22, class: className } = Astro.props;
-const svg = icons[`../../../pingpong-ui/assets/icons/${name}.svg`];
-if (!svg) throw new Error(`pingpong-ui has no icon named "${name}"`);
+const svg = icons[`../../../helio-ui/assets/icons/${name}.svg`];
+if (!svg) throw new Error(`helio-ui has no icon named "${name}"`);
 
 const html = svg.replace(
   '<svg ',

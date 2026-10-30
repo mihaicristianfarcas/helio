@@ -4,6 +4,7 @@
 //! Scroll restoration waits for component layout and fonts, then tells the
 //! header to start visible at that position.
 import { Font } from 'astro:assets';
+import Sky from '../components/Sky.astro';
 import '../styles/global.css';
 
 interface Props {
@@ -17,6 +18,7 @@ const base = import.meta.env.BASE_URL.replace(/\/?$/, '/');
 const canonical = Astro.site ? new URL(Astro.url.pathname, Astro.site) : null;
 const card = `${base}og.jpg`;
 const cardUrl = Astro.site ? new URL(card, Astro.site).href : card;
+const cardAlt = 'Helio: remote desktop and game streaming, its Hosts window on macOS and Windows.';
 ---
 
 <!doctype html>
@@ -26,24 +28,24 @@ const cardUrl = Astro.site ? new URL(card, Astro.site).href : card;
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{title}</title>
     <meta name="description" content={description} />
-    <meta name="theme-color" content="#03050a" />
+    <meta name="theme-color" content="#16213a" />
     <link rel="icon" type="image/svg+xml" href={`${base}favicon.svg`} />
     {canonical && <link rel="canonical" href={canonical.href} />}
     <meta property="og:type" content="website" />
-    <meta property="og:site_name" content="pingpong" />
+    <meta property="og:site_name" content="Helio" />
     <meta property="og:locale" content="en_US" />
     <meta property="og:title" content={title} />
     <meta property="og:description" content={description} />
     <meta property="og:image" content={cardUrl} />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
-    <meta property="og:image:alt" content="pingpong: low-latency desktop streaming with Ping and Pong" />
+    <meta property="og:image:alt" content={cardAlt} />
     {canonical && <meta property="og:url" content={canonical.href} />}
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content={title} />
     <meta name="twitter:description" content={description} />
     <meta name="twitter:image" content={cardUrl} />
-    <meta name="twitter:image:alt" content="pingpong: low-latency desktop streaming with Ping and Pong" />
+    <meta name="twitter:image:alt" content={cardAlt} />
     {structuredData && (
       <script
         is:inline
@@ -81,6 +83,7 @@ const cardUrl = Astro.site ? new URL(card, Astro.site).href : card;
     </script>
   </head>
   <body>
+    <Sky />
     <a class="skip" href="#main">Skip to content</a>
     <slot />
     <script is:inline>
@@ -100,7 +103,6 @@ const cardUrl = Astro.site ? new URL(card, Astro.site).href : card;
             if (done) return;
             done = true;
             window.scrollTo(0, Number(saved));
-            window.dispatchEvent(new Event('pingpong:scroll-restored'));
             delete root.dataset.restore;
           };
           (document.fonts ? document.fonts.ready : Promise.resolve()).then(show, show);
