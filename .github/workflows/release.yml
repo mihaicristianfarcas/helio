@@ -35,8 +35,8 @@
 # them, it fails.
 #
 # Actions are pinned to commits, with the version beside each: a tag can be
-# moved, and these jobs hold the signing secrets. Version tags are protected
-# by a repository ruleset that lets only this workflow make them.
+# moved, and these jobs hold the signing secrets. A repository ruleset keeps
+# version tags from being moved or deleted once this workflow has made them.
 name: Release
 
 on:
