@@ -13,7 +13,8 @@ vulnerability"), not in a public issue. Include what an attacker needs
 to reproduce it. You will get an answer, and credit in the fix if you want
 it.
 
-Only the latest code on the default branch is supported.
+Only the latest code on the default branch is supported. Helio has not been
+externally audited ([docs/verification.md](docs/verification.md#not-audited)).
 
 ## The model
 
@@ -41,8 +42,8 @@ agent's API keys and the host's tokens are written readable only by their
 owner (0600). On Windows, Helio's files are in the user's own `%APPDATA%`,
 and the host makes its data folder (`C:\ProgramData\Helio Host`) private when it
 starts: only SYSTEM, Administrators and the folder's owner can read or write
-it, except `config.toml` and `web-cert.pem`, which Helio Host's window needs and
-every user may read; the host's tokens are closed to everyone but SYSTEM and
+it, except `config.toml` and `web-cert.pem`, which Helio's This computer pages
+need and every user may read; the host's tokens are closed to everyone but SYSTEM and
 Administrators. The host uses that folder only if SYSTEM or Administrators
 own it: any user may create it before the host first runs and put an
 account or a device of their own in it, so a folder someone else made is

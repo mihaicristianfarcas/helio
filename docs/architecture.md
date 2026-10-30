@@ -4,7 +4,10 @@ Helio streams a computer's desktop — picture, sound, keyboard, mouse,
 controllers and clipboard — to another computer, the way Moonlight and
 Sunshine do, with every byte inside one post-quantum WireGuard tunnel.
 **Helio** is the app: the client for everyone, and hosting as a switch in
-it, off by default, which runs **Helio Host**, the host.
+it, off by default, which runs **Helio Host**, the host. One install has
+both: the app carries the host's engine, and the switch decides whether it
+runs. The two are drawn apart below because they run apart: the host is a
+program of its own, which keeps running when you quit the app.
 
 This page is the map: what runs where, how a frame gets from the host's
 screen to the client's, and which crate does what. Why each piece is the way
@@ -85,7 +88,7 @@ So there is one client and one host, with a platform layer each:
 | Client audio out | CoreAudio | WASAPI | cpal |
 | Host display | `CGVirtualDisplay` at the client's mode | SudoVDA at the client's mode, installed with hosting (without it, the main display, scaled) | a virtual display at the client's mode, mutter's (GNOME) or KWin's (KDE); elsewhere the screen as it is, scaled |
 | Host capture | ScreenCaptureKit | Desktop Duplication | MIT-SHM (X11), PipeWire through the desktop portal (Wayland) |
-| Host encode | VideoToolbox | NVENC, else Media Foundation (H.264, software) | FFmpeg: VA-API, NVENC or x264 |
+| Host encode | VideoToolbox | NVENC, else Media Foundation (H.264, software) | FFmpeg: VA-API, NVENC, x264 or OpenH264 |
 | Host input | CoreGraphics events | `SendInput`, ViGEm pads | XTest (X11); under Wayland mutter's remote desktop (GNOME), KWin's fake input (KDE), else the RemoteDesktop portal |
 | Host sound | ScreenCaptureKit | WASAPI loopback of a virtual sink | PulseAudio / PipeWire monitor |
 
@@ -131,9 +134,9 @@ process runs:
 ## A frame, from the host's screen to the client's
 
 1. **Display.** The session gets a display at exactly the client's mode —
-   a virtual one on Windows and macOS, made primary, the host's own
-   monitors off (unless asked otherwise) so windows open where the client
-   can see them.
+   a virtual one on Windows, macOS, GNOME and KDE, made primary, the host's
+   own monitors off (unless asked otherwise; KDE keeps them on) so windows
+   open where the client can see them.
 2. **Capture**, paced to the negotiated frame rate — the client display's
    own, to the millihertz (59.94 Hz is not 60), as Sunshine takes
    Moonlight's: never faster, and a still desktop re-encoded at max(fps/5,
