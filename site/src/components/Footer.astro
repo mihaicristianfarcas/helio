@@ -1,15 +1,18 @@
 ---
 //! Project and documentation navigation, including the on-page FAQ.
 import Logo from './Logo.astro';
-import { REPO, onGitHub } from '../lib/repo';
+import { DISCUSSIONS, REPO, onGitHub } from '../lib/repo';
+
+const base = import.meta.env.BASE_URL.replace(/\/?$/, '/');
+const home = Astro.url.pathname.replace(/\/?$/, '/') === base ? '' : base;
 ---
 
 <footer class="footer">
-  <div class="wrap grid">
+  <div class="wrap columns">
     <div class="about">
       <Logo />
       <p>
-        pingpong follows the lead of <a href="https://moonlight-stream.org">Moonlight</a> and
+        Helio follows the lead of <a href="https://moonlight-stream.org">Moonlight</a> and
         <a href="https://github.com/LizardByte/Sunshine">Sunshine</a>/<a href="https://github.com/ClassicOldSong/Apollo">Apollo</a>:
         where it had to choose how streaming should behave, it chose what they do, and its virtual displays follow
         Apollo, the Sunshine fork that made them. It is a separate
@@ -18,27 +21,30 @@ import { REPO, onGitHub } from '../lib/repo';
         <a href="https://github.com/zed-industries/zed/tree/main/crates/gpui">GPUI</a>.
       </p>
     </div>
-    <nav aria-label="Documentation">
-      <h2>Documentation</h2>
-      <a href={onGitHub('docs/install.md')}>Installing</a>
-      <a href={onGitHub('docs/usage.md')}>Using Ping and Pong</a>
-      <a href={onGitHub('docs/networking.md')}>Reaching a host from anywhere</a>
-      <a href={onGitHub('docs/ai-agents.md')}>AI agents</a>
-      <a href={onGitHub('docs/benchmarks.md')}>Benchmarks</a>
-      <a href="#faq">Frequently asked questions</a>
-    </nav>
-    <nav aria-label="Project">
-      <h2>Project</h2>
-      <a href={REPO}>Source</a>
-      <a href={`${REPO}/releases`}>Releases</a>
-      <a href={onGitHub('CONTRIBUTING.md')}>Contributing</a>
-      <a href={onGitHub('SECURITY.md')}>Security</a>
-      <a href={onGitHub('LICENSE')}>GPL-3.0 License</a>
-    </nav>
+    <div class="links">
+      <nav aria-label="Documentation">
+        <h2>Documentation</h2>
+        <a href={onGitHub('docs/install.md')}>Installing</a>
+        <a href={onGitHub('docs/usage.md')}>Using Helio</a>
+        <a href={onGitHub('docs/networking.md')}>Reaching a host from anywhere</a>
+        <a href={`${base}agents/`}>AI agents</a>
+        <a href={onGitHub('docs/benchmarks.md')}>Benchmarks</a>
+        <a href={`${home}#faq`}>Frequently asked questions</a>
+      </nav>
+      <nav aria-label="Project">
+        <h2>Project</h2>
+        <a href={REPO}>Source</a>
+        <a href={`${REPO}/releases`}>Releases</a>
+        <a href={DISCUSSIONS}>Discussions</a>
+        <a href={onGitHub('CONTRIBUTING.md')}>Contributing</a>
+        <a href={onGitHub('SECURITY.md')}>Security</a>
+        <a href={onGitHub('LICENSE')}>GPL-3.0 License</a>
+      </nav>
+    </div>
   </div>
   <div class="wrap legal">
     <span>Licensed under the GPL-3.0.</span>
-    <span>Moonlight, Sunshine and Apollo are their authors’ projects; pingpong is not affiliated with them.</span>
+    <span>Moonlight, Sunshine and Apollo are their authors’ projects; Helio is not affiliated with them.</span>
   </div>
 </footer>
 
@@ -48,14 +54,25 @@ import { REPO, onGitHub } from '../lib/repo';
     border-top: 1px solid var(--line);
   }
 
-  .grid {
-    display: grid;
-    grid-template-columns: 2fr 1fr 1fr;
+  /* Two blocks held to the two edges, so the gap between them says they are
+     two: the links' right edge is the legal line's. */
+  .columns {
+    display: flex;
+    justify-content: space-between;
     gap: 48px;
   }
 
-  .about p {
+  .about {
     max-width: 30rem;
+  }
+
+  .links {
+    display: flex;
+    flex: none;
+    gap: 72px;
+  }
+
+  .about p {
     margin-top: 16px;
     font-size: 0.875rem;
   }
@@ -84,7 +101,6 @@ import { REPO, onGitHub } from '../lib/repo';
     font-weight: 500;
   }
 
-  /* The rule above spans the content, not the gutters. */
   .legal {
     display: flex;
     flex-wrap: wrap;
@@ -92,19 +108,23 @@ import { REPO, onGitHub } from '../lib/repo';
     gap: 8px 24px;
     margin-top: 56px;
     padding-block: 24px 32px;
-    background: linear-gradient(var(--line), var(--line)) var(--gutter) 0 / calc(100% - 2 * var(--gutter)) 1px
-      no-repeat;
     color: var(--text-3);
     font-size: 0.8125rem;
   }
 
-  @media (max-width: 760px) {
-    .grid {
-      grid-template-columns: 1fr 1fr;
+  @media (max-width: 860px) {
+    .columns {
+      flex-direction: column;
     }
 
     .about {
-      grid-column: 1 / -1;
+      max-width: none;
+    }
+
+    .links {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 32px;
     }
   }
 </style>
