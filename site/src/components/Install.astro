@@ -1,9 +1,10 @@
 ---
 //! Downloads: one button, for the system the browser says it is on, and a
-//! line of links to the other platforms under the steps beside it. Without
-//! script, or on a system with no download (a phone), all the systems are shown
-//! and the line closes the card. Script also reads the sizes and the build from
-//! latest.json.
+//! line of links to the other platforms under the steps beside it. A phone or
+//! tablet, where Helio does not run, is told to open the page on a computer
+//! instead. Without script, or on a system it cannot name, all the systems are
+//! shown and the line closes the card. Script also reads the sizes and the build
+//! from latest.json.
 import Command from './Command.astro';
 import Icon from './Icon.astro';
 import { REPO, TAP, onGitHub } from '../lib/repo';
@@ -80,13 +81,19 @@ const panelId = (system: System) => `download-${system}`;
 
 <section class="section" id="install">
   <div class="wrap">
-    <div class="head">
+    <div class="head" data-on-phone hidden>
+      <span class="eyebrow">Get started</span>
+      <h2 class="title">Open this page on a computer</h2>
+      <p class="lede">Helio runs on macOS, Windows and Linux. Open this page there to download it.</p>
+    </div>
+
+    <div class="head" data-on-computer>
       <span class="eyebrow">Get started</span>
       <h2 class="title">Download, pair and stream</h2>
       <p class="lede">Install Helio on both computers, and turn on hosting on the one with the games.</p>
     </div>
 
-    <div class="picker" data-picker data-manifest={MANIFEST} data-repo={REPO}>
+    <div class="picker" data-picker data-on-computer data-manifest={MANIFEST} data-repo={REPO}>
       {
         panels.map((p) => (
           <article class="panel" id={panelId(p.system)} aria-labelledby={`${panelId(p.system)}-title`} data-os={p.system}>
@@ -141,7 +148,7 @@ const panelId = (system: System) => `download-${system}`;
       </p>
     </div>
 
-    <ol class="steps">
+    <ol class="steps" data-on-computer>
       {
         steps.map(([t, d]) => (
           <li>
@@ -151,7 +158,7 @@ const panelId = (system: System) => `download-${system}`;
         ))
       }
     </ol>
-    <p class="note after">
+    <p class="note after" data-on-computer>
       Helio offers each new release and installs it when you choose. Building from source takes Rust 1.96 or newer.
       <a href={onGitHub('docs/install.md')}>Installing, step by step</a>
     </p>
@@ -318,15 +325,20 @@ const panelId = (system: System) => `download-${system}`;
 
 <script>
   // The visitor's system, chosen for them: its panel and its one button,
-  // with the line of other platforms moved up under the steps. A browser
-  // that says none (a phone) keeps all of it. Then what latest.json says of
-  // the build: its commit and date, the button's size. A file it does not
-  // list is not built yet.
+  // with the line of other platforms moved up under the steps. A phone or
+  // tablet gets the note instead, whatever the width: a narrow window on a
+  // computer can still download. Then what latest.json says of the build: its
+  // commit and date, the button's size. A file it does not list is not built
+  // yet.
   const picker = document.querySelector<HTMLElement>('[data-picker]')!;
   const ua = navigator.userAgent;
+  // An iPad says it is a Mac; only its touch screen gives it away.
+  const phone = /Android|iPhone|iPad/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
+  for (const part of document.querySelectorAll<HTMLElement>('[data-on-computer]')) part.hidden = phone;
+  document.querySelector<HTMLElement>('[data-on-phone]')!.hidden = !phone;
   const system = /Windows/.test(ua)
     ? 'windows'
-    : /Android|iPhone|iPad/.test(ua)
+    : phone
       ? null
       : /Macintosh/.test(ua)
         ? 'macos'
