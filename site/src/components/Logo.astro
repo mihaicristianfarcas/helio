@@ -1,9 +1,8 @@
 ---
-// The apps' own icons (ping-app/examples/make-icon.rs) with their ball and
-// trail in the page's blue, Ping's then Pong's, and the name.
-// public/favicon.svg is Ping's.
-import ping from '../assets/icons/ping.svg';
-import pong from '../assets/icons/pong.svg';
+// The app's icon as a rounded square, and the name. assets/helio.svg and
+// public/favicon.svg are the same picture, drawn by make-icon
+// (helio-app/examples/make-icon.rs) from helio-app/assets/icon.svg.
+import icon from '../assets/helio.svg';
 
 interface Props {
   size?: number;
@@ -12,11 +11,8 @@ const { size = 26 } = Astro.props;
 ---
 
 <span class="logo">
-  <span class="marks">
-    <img src={ping.src} width={size} height={size} alt="" />
-    <img src={pong.src} width={size} height={size} alt="" />
-  </span>
-  <span class="name">pingpong</span>
+  <img src={icon.src} width={size} height={size} alt="" />
+  <span class="name">Helio</span>
 </span>
 
 <style>
@@ -24,11 +20,6 @@ const { size = 26 } = Astro.props;
     display: inline-flex;
     align-items: center;
     gap: 10px;
-  }
-
-  .marks {
-    display: flex;
-    gap: 4px;
   }
 
   .name {

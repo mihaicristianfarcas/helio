@@ -1,133 +1,31 @@
 ---
-//! The streaming overview and primary download link. Screenshots show the
-//! apps on a real desktop, taken by hand.
-import { Image } from 'astro:assets';
+//! The release, what Helio is and the way to the downloads. The pictures are
+//! one window on macOS's and Windows' default wallpapers, as each desktop
+//! composites it (scripts/capture-hero.sh). The badge here is the one place the
+//! site says the version: the screenshots leave it out (HELIO_UI_DEMO).
+import PageHero from './PageHero.astro';
 import { REPO, VERSION } from '../lib/repo';
-import ping from '../assets/hero/ping.webp';
-import pong from '../assets/hero/pong.webp';
+import macos from '../assets/hero/macos.webp';
+import windows from '../assets/hero/windows.webp';
+
+const alt = (desktop: string) =>
+  `Helio on ${desktop}, on its default wallpaper: the Hosts page with three paired hosts, two online, and one more found on the network.`;
 ---
 
-<section class="hero" id="top">
-  <div class="wrap">
-    <div class="copy">
-      {VERSION && <a class="release" href={`${REPO}/releases`}>Version {VERSION}</a>}
-      <h1>Low-latency remote desktop and game streaming</h1>
-      <p class="lede">
-        Stream your computer’s desktop, games included, to another computer at up to 4K and 120 fps, in HDR, with the
-        latency of Moonlight and Sunshine/Apollo. Ping is the client; Pong is the host. Free and open source for macOS,
-        Windows and Linux, with every packet inside one post-quantum WireGuard tunnel.
-      </p>
-      <div class="actions">
-        <a class="button primary" href="#install">Download</a>
-        <a class="button secondary" href={REPO}>View on GitHub</a>
-      </div>
-    </div>
-    <div class="windows">
-      <figure class="back">
-        <Image
-          src={pong}
-          alt="Pong, the host: its Overview page, streaming to a MacBook Pro at 3024 by 1890 and 120 fps, with the session's live figures."
-          widths={[640, 960, 1280, 1600]}
-          sizes="(max-width: 1168px) 70vw, 800px"
-          loading="eager"
-        />
-      </figure>
-      <figure class="front">
-        <Image
-          src={ping}
-          alt="Ping, the client: its Hosts page, with three paired hosts, all online."
-          widths={[640, 960, 1280, 1600]}
-          sizes="(max-width: 1168px) 70vw, 800px"
-          loading="eager"
-          fetchpriority="high"
-        />
-      </figure>
-    </div>
-  </div>
-</section>
-
-<style>
-  .hero {
-    padding-top: clamp(56px, 8vw, 104px);
-    padding-bottom: clamp(48px, 6vw, 80px);
-  }
-
-  .copy {
-    max-width: 46rem;
-  }
-
-  .release {
-    display: inline-block;
-    margin-bottom: 20px;
-    padding: 3px 10px;
-    border: 1px solid var(--line-2);
-    border-radius: 999px;
-    color: var(--text-2);
-    font-size: 0.8125rem;
-  }
-
-  .release:hover {
-    border-color: rgb(255 255 255 / 0.28);
-    color: var(--text);
-    text-decoration: none;
-  }
-
-  h1 {
-    font-size: clamp(2.25rem, 1.5rem + 3vw, 3.75rem);
-    letter-spacing: -0.035em;
-    line-height: 1.05;
-  }
-
-  .lede {
-    max-width: 40rem;
-    margin-top: 20px;
-    font-size: clamp(1.0625rem, 1rem + 0.25vw, 1.1875rem);
-  }
-
-  .actions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 12px;
-    margin-top: 32px;
-  }
-
-  /* Pong's window behind, up and to the right; Ping's in front of it,
-     lower and to the left. Both in one grid cell, so the pair takes the
-     height it needs; the offset is a share of the width, so the pair keeps
-     its shape at every size. */
-  .windows {
-    display: grid;
-    margin-top: clamp(48px, 6vw, 72px);
-  }
-
-  .windows > figure {
-    grid-area: 1 / 1;
-    width: 66%;
-    margin: 0;
-  }
-
-  .windows :global(img) {
-    width: 100%;
-    height: auto;
-    border: 1px solid rgb(255 255 255 / 0.14);
-    border-radius: 14px;
-    box-shadow: 0 30px 80px -24px rgb(0 0 0 / 0.75);
-  }
-
-  .windows > .back {
-    justify-self: end;
-    align-self: start;
-  }
-
-  .windows > .front {
-    z-index: 1;
-    justify-self: start;
-    margin-top: 17%;
-  }
-
-  /* A deeper shadow lifts Ping's off Pong's. */
-  .front :global(img) {
-    border-color: rgb(255 255 255 / 0.2);
-    box-shadow: 0 40px 100px -20px rgb(0 0 0 / 0.9);
-  }
-</style>
+<!-- The best-tested setup: the Mac, the client, in front of the Windows host. -->
+<PageHero
+  id="top"
+  badge={VERSION ? { text: `Version ${VERSION}`, href: `${REPO}/releases` } : undefined}
+  title="Low-latency remote desktop and game streaming"
+  actions={[
+    { label: 'Download', href: '#install', primary: true },
+    { label: 'View on GitHub', href: REPO },
+  ]}
+  shots={[
+    { src: windows, alt: alt('Windows 11'), place: 'back' },
+    { src: macos, alt: alt('macOS'), place: 'front' },
+  ]}
+>
+  Stream a computer’s desktop and games to another, inside one post-quantum WireGuard tunnel. One app for macOS, Windows
+  and Linux, with hosting a switch you turn on. Free and open source.
+</PageHero>

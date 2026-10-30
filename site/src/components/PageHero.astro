@@ -1,0 +1,127 @@
+---
+//! The top of a page: a badge, the title, a line of what it is, two actions and
+//! two pictures, one behind the other. The home page and /agents share it, so
+//! the two stay alike.
+import type { ImageMetadata } from 'astro';
+import { Image } from 'astro:assets';
+
+interface Props {
+  id: string;
+  badge?: { text: string; href?: string };
+  title: string;
+  actions: { label: string; href: string; primary?: boolean }[];
+  shots: { src: ImageMetadata; alt: string; place: 'back' | 'front' }[];
+}
+
+const { id, badge, title, actions, shots } = Astro.props;
+---
+
+<section class="hero" id={id}>
+  <div class="wrap">
+    <div class="copy">
+      {badge && (badge.href ? <a class="badge" href={badge.href}>{badge.text}</a> : <span class="badge">{badge.text}</span>)}
+      <h1>{title}</h1>
+      <p class="lede"><slot /></p>
+      <div class="actions">
+        {actions.map((a) => (
+          <a class:list={['button', a.primary ? 'primary' : 'secondary']} href={a.href}>
+            {a.label}
+          </a>
+        ))}
+      </div>
+    </div>
+    <div class="windows">
+      {shots.map((s, i) => (
+        <figure class={s.place}>
+          <Image
+            src={s.src}
+            alt={s.alt}
+            widths={[640, 960, 1280, 1600]}
+            sizes="(max-width: 1168px) 70vw, 800px"
+            loading="eager"
+            fetchpriority={i === shots.length - 1 ? 'high' : undefined}
+          />
+        </figure>
+      ))}
+    </div>
+  </div>
+</section>
+
+<style>
+  .hero {
+    padding-top: clamp(56px, 8vw, 104px);
+    padding-bottom: clamp(48px, 6vw, 80px);
+  }
+
+  .copy {
+    max-width: var(--measure);
+  }
+
+  .badge {
+    display: inline-block;
+    margin-bottom: 20px;
+    padding: 3px 10px;
+    border: 1px solid var(--line-2);
+    border-radius: 999px;
+    color: var(--text-2);
+    font-size: 0.8125rem;
+  }
+
+  a.badge:hover {
+    border-color: rgb(255 255 255 / 0.28);
+    color: var(--text);
+    text-decoration: none;
+  }
+
+  h1 {
+    font-size: clamp(2.25rem, 1.5rem + 3vw, 3.75rem);
+    letter-spacing: -0.035em;
+    line-height: 1.05;
+  }
+
+  .lede {
+    margin-top: 20px;
+    font-size: clamp(1.0625rem, 1rem + 0.25vw, 1.1875rem);
+  }
+
+  .actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-top: 32px;
+  }
+
+  /* One picture behind, up and to the right; the other in front of it, lower
+     and to the left. Both in one grid cell, so the pair takes the height it
+     needs; the offset is a share of the width, so the pair keeps its shape
+     at every size. */
+  .windows {
+    display: grid;
+    margin-top: var(--gap-part);
+  }
+
+  .windows > figure {
+    grid-area: 1 / 1;
+    width: 78%;
+    margin: 0;
+  }
+
+  .windows > .back {
+    justify-self: end;
+    align-self: start;
+  }
+
+  .windows > .front {
+    z-index: 1;
+    justify-self: start;
+    margin-top: 13%;
+  }
+
+  .windows :global(img) {
+    width: 100%;
+    height: auto;
+    border: 1px solid rgb(255 255 255 / 0.16);
+    border-radius: 14px;
+    box-shadow: 0 30px 80px -24px rgb(0 0 0 / 0.75);
+  }
+</style>
