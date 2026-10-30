@@ -265,8 +265,12 @@ second copy is the one that goes stale.
   `helio-agent: ANTHROPIC_BASE_URL and OPENAI_BASE_URL`, `docs: …`. The body
   says why, and how it was verified (which platforms, which tests, what was
   measured).
-- A pull request says the same: what, why, how it was checked, and what was
-  not (a platform you could not run, hardware you do not have).
+- A pull request follows `.github/pull_request_template.md`: a summary of 120
+  words at most in a person's terms, evidence made for it (before and after,
+  from the same input), then how, verification and what it leaves out. It
+  says the same as the commits: what, why, how it was checked, and what was
+  not (a platform you could not run, hardware you do not have). Verification
+  gives results, not claims: "519 passed, 0 failed", not "tests pass".
 
 ## Before you finish
 
