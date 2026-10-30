@@ -13,7 +13,8 @@ vulnerability"), not in a public issue. Include what an attacker needs
 to reproduce it. You will get an answer, and credit in the fix if you want
 it.
 
-Only the latest code on the default branch is supported.
+Only the latest code on the default branch is supported. Helio has not been
+externally audited ([docs/verification.md](docs/verification.md#not-audited)).
 
 ## The model
 
@@ -41,8 +42,8 @@ agent's API keys and the host's tokens are written readable only by their
 owner (0600). On Windows, Helio's files are in the user's own `%APPDATA%`,
 and the host makes its data folder (`C:\ProgramData\Helio Host`) private when it
 starts: only SYSTEM, Administrators and the folder's owner can read or write
-it, except `config.toml` and `web-cert.pem`, which Helio Host's window needs and
-every user may read; the host's tokens are closed to everyone but SYSTEM and
+it, except `config.toml` and `web-cert.pem`, which Helio's This computer pages
+need and every user may read; the host's tokens are closed to everyone but SYSTEM and
 Administrators. The host uses that folder only if SYSTEM or Administrators
 own it: any user may create it before the host first runs and put an
 account or a device of their own in it, so a folder someone else made is
@@ -84,8 +85,7 @@ downloads the release's package for your system from the repository's
 releases, keeps it only if it is the file GitHub's SHA-256 says, and then
 only if it is signed by Helio's maker: on macOS with the same team's
 Developer ID as the app it replaces; on Windows, the installer with
-Helio's Authenticode certificate (required by releases built once Helio
-had one; before that the SHA-256 is the only check). On Windows, while
+Helio's Authenticode certificate. On Windows, while
 hosting is on, the host's engine in Program Files is replaced only by the
 new engine's own `enable`, which checks the signature of its copy there
 as turning hosting on does. The check can be turned off

@@ -273,6 +273,15 @@ present on decode:
 Controller rumble, the game's XInputSetState to Helio's haptics call: ~7 ms
 (the two machines' clocks differ by ~207 ms, corrected with time.apple.com).
 
+## Glass to glass
+
+From a change on the host's screen to the same change on the client's
+screen, as a person sees it. It is measured from outside both computers,
+with a photodiode or a 240 fps camera on both screens, so no clock of
+Helio's is involved. Unlike [capture to glass](#capture-to-glass), it
+includes the host compositor's time from an application's present to the
+capture, and the client panel's scanout and pixel response.
+
 ## Capture to glass
 
 The overlay's last line, "Host capture to screen", measures it directly:

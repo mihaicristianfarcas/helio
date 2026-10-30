@@ -83,8 +83,8 @@ the site publishes (`latest/SHA256SUMS`) or GitHub shows beside the file on
 the release page:
 
 ```powershell
-Get-FileHash $HOME\Downloads\Helio-*-windows-x86_64-setup.exe -Algorithm SHA256
-(Get-AuthenticodeSignature $HOME\Downloads\Helio-*-windows-x86_64-setup.exe).SignerCertificate.Subject
+Get-FileHash $HOME\Downloads\Helio-*windows-x86_64-setup.exe -Algorithm SHA256
+(Get-AuthenticodeSignature $HOME\Downloads\Helio-*windows-x86_64-setup.exe).SignerCertificate.Subject
 ```
 
 The second line names who signed it; `Status` (without the
@@ -97,8 +97,8 @@ it has them (FFmpeg 6, PipeWire): they run on Ubuntu 24.04 and the
 distributions built on it. Elsewhere, [build from source](#building-from-source).
 
 ```sh
-tar xzf Helio-VERSION-linux-x86_64.tar.gz
-Helio-VERSION-linux-x86_64/install.sh
+tar xzf Helio-*linux-x86_64.tar.gz
+Helio-*-linux-x86_64/install.sh
 ```
 
 `install.sh` puts Helio (`helio-app`) and the host's engine (`helio-host`)

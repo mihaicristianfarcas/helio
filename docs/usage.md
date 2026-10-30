@@ -42,9 +42,7 @@ puts it. Helio sends the mouse's relative motion, which is what games read,
 and the host's pointer follows it with the host's own pointer speed.
 Ctrl+Alt+Shift+M switches to sending positions instead (Moonlight's
 "remote desktop" mouse), which suits the desktop and breaks most games;
-press it again to go back. Against an older Helio Host, which leaves the
-pointer to the client, Helio draws it and switches between the two modes
-by itself, as earlier versions did.
+press it again to go back.
 
 **Screenshots.** Your computer's screenshot shortcuts stay your
 computer's while you stream, and the tool they open gets the pointer:
@@ -151,7 +149,7 @@ Turning hosting on or off does this on each system:
 | | On (`helio host enable`) | Off (`helio host disable`) |
 |---|---|---|
 | macOS | Copies the app bundle the host's program is in (`Helio.app/Contents/Helpers/Helio Host.app`) to `~/Library/Application Support/Helio Host/Helio Host.app`, and writes the LaunchAgent `~/Library/LaunchAgents/dev.mihaicristian.helio.host.plist`, which runs the host from that copy whenever you are logged in, and starts it now. The host's program outside an app bundle refuses: macOS's Screen Recording and Accessibility permissions belong to that helper app, not to Helio (and for Screen Recording, only to a copy outside Helio.app: [platforms/macos.md](platforms/macos.md#hosting-from-helio-and-its-menu-bar-icon)) | Stops the host, deletes the LaunchAgent and the copy |
-| Windows | As administrator: copies `helio-host.exe` to `C:\Program Files\Helio Host` (only administrators can change that folder), checks its signature, and runs it as **HelioHost**, which starts at boot, before anyone signs in, with Windows Firewall rules for it | As administrator: stops and deletes HelioHost, its firewall rules and the copy in `C:\Program Files\Helio Host` |
+| Windows | As administrator: copies `helio-host.exe` to `C:\Program Files\Helio Host` (only administrators can change that folder), checks its signature, installs the drivers the PC lacks (SudoVDA, ViGEmBus: [platforms/windows.md](platforms/windows.md#the-drivers-hosting-installs)), and runs it as **HelioHost**, which starts at boot, before anyone signs in, with Windows Firewall rules for it | As administrator: stops and deletes HelioHost, its firewall rules, the drivers it installed and the copy in `C:\Program Files\Helio Host` |
 | Linux | `systemctl --user enable --now helio-host`: the host runs in your desktop session, now and at each login (the unit comes with the install, not turned on) | `systemctl --user disable --now helio-host` |
 
 On Windows the service runs as SYSTEM, the only account that can show and
@@ -267,9 +265,7 @@ only**; for an agent, **See and control**, **Only while watched** or **See
 only**. It starts from what the device gets otherwise: the first device
 paired with the host may do everything, and later ones see only, as Apollo
 gives its first client every permission and later ones only watching.
-Choose **Everything** for a device of your own. An agent may see and act,
-as agents could before permissions. Devices paired before permissions keep
-what they could do.
+Choose **Everything** for a device of your own. An agent may see and act.
 
 What the device hears:
 
@@ -292,7 +288,7 @@ that change at its next start.
 ## Updates
 
 Helio says when there is something newer than the copy that runs: a line at
-the foot of the sidebar ("Helio 0.7.0 is available"), and, while hosting is
+the foot of the sidebar ("Helio 1.0.1 is available"), and, while hosting is
 on, its icon's menu. Clicking it says what it is, with
 **Install and Restart**: the app downloads the release from GitHub, checks
 it, installs it and opens again. Nothing is downloaded or installed until
@@ -311,8 +307,7 @@ How each system installs it:
 The download is checked against the SHA-256 GitHub records for the
 release's file, then for who made it: on a Mac the new app must be signed
 with the same team's Developer ID as the one it replaces, and on Windows
-the installer with Helio's code-signing certificate (once Helio's
-releases are signed; until then the SHA-256 is all there is to check). A
+the installer with Helio's code-signing certificate. A
 copy built from source, or one not installed the way the downloads
 install it (a Windows copy unpacked by hand), does not update itself:
 download those updates yourself. Your hosts, pairings and settings, the
@@ -391,8 +386,8 @@ same.
   Hosting** on the host; on Windows, `HelioHost` in Services)? Is this device still paired (the host's
   **Devices**)?
 - **The host ignores your keyboard or mouse**, and Helio says so: this
-  device may not use them there. In Helio Host on the host, **Devices**, give it
-  **Keyboard** and **Mouse** (or choose **Everything**).
+  device may not use them there. In Helio on the host, under **This computer
+  → Devices**, give it **Keyboard** and **Mouse** (or choose **Everything**).
 - **"… does not let this device stream."** Its **See the screen**
   permission is off: turn it on in Helio on the host, under **This computer → Devices**.
 - **"… did not answer this device's AI agent."** The agent is paired on its
@@ -417,8 +412,7 @@ same.
 - **Stutter every 20–30 s on a Mac on Wi-Fi**: AWDL (AirDrop, Continuity) is
   a common cause; see [benchmarks.md](benchmarks.md#long-sessions-and-loss).
 - **Logs** say what happened (never a PIN, password, key or token):
-  [ui.md](ui.md#logs) lists where each program writes. `RUST_LOG` widens
-  them, e.g. `RUST_LOG=info,helio_client::stats=debug` for a line of
-  statistics a second.
+  [logs.md](logs.md) says where they are, how to turn on debug logging, and
+  what to send with a bug report.
 
 The command line (`helio`, and `helio-agent` for AI agents) is in [cli.md](cli.md).
