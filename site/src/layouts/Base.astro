@@ -65,6 +65,15 @@ const cardAlt = 'Helio: remote desktop and game streaming, its Hosts window on m
       (() => {
         // Script runs: the phone's menu button replaces the row of links.
         document.documentElement.classList.add('js');
+        // Helio does not run on phones or tablets. That is the device, not the
+        // width: a narrow window on a computer can still download. An iPad
+        // says it is a Mac; only its touch screen gives it away. Here, before
+        // the first paint, so the downloads never flash up.
+        const agent = navigator.userAgent;
+        document.documentElement.toggleAttribute(
+          'data-phone',
+          /Android|iPhone|iPad/.test(agent) || (/Macintosh/.test(agent) && navigator.maxTouchPoints > 1),
+        );
         const key = 'scroll:' + location.pathname;
         try {
           history.scrollRestoration = 'manual';
@@ -117,6 +126,15 @@ const cardAlt = 'Helio: remote desktop and game streaming, its Hosts window on m
       // a section loses it once the browser has scrolled there, for the
       // same reason. Focus moves to the first visible action at the
       // destination, so keyboard navigation continues through controls.
+      // Every way to the downloads, from this page or another, says why there
+      // are none on a phone. Capture, so the in-page jump below never sees it.
+      document.addEventListener('click', (e) => {
+        if (!document.documentElement.hasAttribute('data-phone')) return;
+        if (!(e.target as Element).closest('a[href$="#install"]')) return;
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        window.alert('Please open this page on a macOS, Windows or Linux device.');
+      }, { capture: true });
       const actions = 'a[href], button:not(:disabled), summary, input:not([type="hidden"]):not(:disabled), select:not(:disabled), textarea:not(:disabled), video[controls]';
       document.addEventListener('click', (e) => {
         const link = (e.target as Element).closest('a[href^="#"]');
