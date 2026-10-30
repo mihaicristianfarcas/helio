@@ -6,7 +6,12 @@
 //! OpenH264 is the last resort, which Sunshine has not: Fedora's FFmpeg
 //! (`ffmpeg-free`) leaves x264 out for its patents and carries Cisco's
 //! OpenH264 instead, and Fedora's Mesa encodes no H.264 through VA-API
-//! either, so on a stock Fedora it is the one H.264 encoder there is.
+//! either, so on a stock Fedora it is the one H.264 encoder there is. It
+//! is held to the bitrate on a picture of ordinary detail (20.0 Mbps at
+//! 20, 5.0 at 5, 1080p60 on a six-core Arm VM) and not on noise over most
+//! of the frame (164 Mbps at 20, whatever the highest QP asked for), and it
+//! adds IDRs of its own at scene changes, which FFmpeg has no option to
+//! turn off.
 //!
 //! Images come in as BGRX or RGBX at the screen's size; swscale turns them into the
 //! encoder's 4:2:0 (BT.709, limited range) at the stream's size, scaled to
@@ -22,6 +27,13 @@ use std::time::Duration;
 use ffmpeg_sys_next as ff;
 
 use crate::{Codec, EncodeError, EncodedFrame, EncoderConfig, FrameKind};
+
+/// The fewest slices OpenH264 gets: it threads by slice, so one slice is one
+/// core however many threads it is given. Four take 1080p60 at 20 Mbps from
+/// 94 to 212 fps on a six-core Arm VM, at the same bitrate (19.8 Mbps). As
+/// Sunshine gives a software encoder at least `min_threads` slices
+/// (`video.cpp`).
+const OPENH264_SLICES: i32 = 4;
 
 /// An image to encode: 4 bytes a pixel, `stride` bytes a row.
 pub struct Image<'a> {
@@ -274,6 +286,8 @@ impl FfmpegEncoder {
                 }
                 (Backend::OpenH264, false) => {
                     (*e.ctx).pix_fmt = ff::AVPixelFormat::AV_PIX_FMT_YUV420P;
+                    (*e.ctx).slices = (config.slices as i32).max(OPENH264_SLICES);
+                    (*e.ctx).thread_count = 0;
                     ff::AVPixelFormat::AV_PIX_FMT_YUV420P
                 }
             };
@@ -344,8 +358,11 @@ impl FfmpegEncoder {
                     self.opt(c"tune", "zerolatency");
                     self.opt(c"forced-idr", "1");
                 }
-                // Held to the bitrate, never skipping a frame to stay under
-                // it; an IDR when a frame is marked I (`libopenh264enc.c`).
+                // Never skipping a frame to stay under the bitrate: on noise
+                // over most of the frame, skipping holds the rate (23 Mbps
+                // of 20) by keeping 1 picture in 8. OpenH264's warning that
+                // the rate needs skipping is true only of such pictures. An
+                // IDR when a frame is marked I (`libopenh264enc.c`).
                 Backend::OpenH264 => {
                     self.opt(c"rc_mode", "bitrate");
                     self.opt(c"allow_skip_frames", "0");
@@ -567,13 +584,15 @@ impl FfmpegEncoder {
     }
 
     /// x264 and NVENC take a new rate between frames; VA-API keeps the one
-    /// it opened with.
+    /// it opened with, and so does OpenH264 (`libopenh264enc.c` reads it
+    /// only then: asked for 5 Mbps at 20, it stays at 20).
     pub fn set_bitrate(&mut self, bitrate_bps: u32) -> Result<(), EncodeError> {
-        if self.backend == Backend::Vaapi {
+        if matches!(self.backend, Backend::Vaapi | Backend::OpenH264) {
             if !self.told_fixed_rate {
                 tracing::info!(
+                    backend = ?self.backend,
                     mbps = bitrate_bps / 1_000_000,
-                    "VA-API keeps its bitrate for the session"
+                    "the encoder keeps its bitrate for the session"
                 );
                 self.told_fixed_rate = true;
             }
@@ -692,6 +711,17 @@ mod tests {
                 .next(Duration::ZERO)
                 .expect("a frame for each picture")
                 .unwrap();
+            // SPS and PPS with every IDR, each picture cut into slices.
+            let nals: Vec<u8> = f
+                .data
+                .windows(4)
+                .filter(|w| w[..3] == [0, 0, 1])
+                .map(|w| w[3] & 31)
+                .collect();
+            if f.kind == FrameKind::Idr {
+                assert_eq!(nals[..3], [7, 8, 5]);
+            }
+            assert!(nals.len() >= OPENH264_SLICES as usize);
             kinds.push(f.kind);
         }
         use FrameKind::*;
