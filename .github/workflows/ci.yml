@@ -8,6 +8,10 @@
 #
 # workflow_dispatch: to run it by hand on a branch. Such a run does not count
 # for a pull request's checks: only the pull request's own run does.
+#
+# Actions are pinned to commits, with the version beside each: a tag can be
+# moved, a commit cannot. The repository allows only GitHub's own actions and
+# Swatinem/rust-cache (docs/verification.md).
 name: CI
 
 on:
@@ -28,7 +32,7 @@ jobs:
     name: Formatting
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
       - name: Rust
         run: rustup toolchain install stable --profile minimal --component rustfmt && rustup default stable
       - run: cargo fmt --all -- --check
@@ -37,10 +41,10 @@ jobs:
     name: macOS
     runs-on: macos-15
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
       - name: Rust
         run: rustup toolchain install stable --profile minimal --component clippy && rustup default stable
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace --no-fail-fast
       # Helio.app with Helio Host.app inside, signed ad hoc, inside out.
@@ -60,7 +64,7 @@ jobs:
     name: Windows
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
       - name: Rust
         run: rustup toolchain install stable --profile minimal --component clippy && rustup default stable
       # The client decodes with FFmpeg (docs/install.md): a shared build of
@@ -81,7 +85,7 @@ jobs:
           "FFMPEG_DIR=$dir" >> $env:GITHUB_ENV
           "LIBCLANG_PATH=C:\Program Files\LLVM\bin" >> $env:GITHUB_ENV
           (Join-Path $dir 'bin') >> $env:GITHUB_PATH
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace --no-fail-fast
       - name: The app, packaged
@@ -112,7 +116,7 @@ jobs:
     name: Linux
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
       - name: Rust
         run: rustup toolchain install stable --profile minimal --component clippy && rustup default stable
       # tools/linux/Dockerfile's build packages.
@@ -125,7 +129,7 @@ jobs:
             libx11-dev libx11-xcb-dev libxkbcommon-dev libxkbcommon-x11-dev libwayland-dev \
             libxcursor-dev libxrandr-dev libxi-dev libfontconfig-dev libfreetype-dev libxcb1-dev \
             libpipewire-0.3-dev libspa-0.2-dev libdbus-1-dev
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
       # The host on its own: it and the GPUI apps ask one dependency for
       # different async runtimes (docs/development.md).
       - run: cargo clippy --workspace --exclude helio-host --all-targets -- -D warnings
