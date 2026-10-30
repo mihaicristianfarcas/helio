@@ -231,13 +231,32 @@ for (const [agent, system, button, listed] of [
   });
 }
 
-test('a phone keeps every system, since it has no download of its own', async () => {
-  const { window, document, run, close } = page(['layouts/Base.astro']);
+for (const [device, agent, touch] of [
+  ['a phone', 'Mozilla/5.0 (iPhone; CPU iPhone OS 26_0 like Mac OS X)', 5],
+  ['an Android tablet', 'Mozilla/5.0 (Linux; Android 15; Pixel Tablet)', 5],
+  ['an iPad, which says it is a Mac', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)', 5],
+]) {
+  test(`${device} is told to open the page on a computer, and offered no download`, async () => {
+    const { window, document, run, stops, close } = page(['layouts/Base.astro']);
+    try {
+      Object.defineProperty(window.navigator, 'userAgent', { value: agent, configurable: true });
+      Object.defineProperty(window.navigator, 'maxTouchPoints', { value: touch, configurable: true });
+      run('components/Install.astro');
+      assert.equal(document.querySelector('[data-on-phone]').hidden, false);
+      assert.ok([...document.querySelectorAll('[data-on-computer]')].every((part) => part.hidden));
+      assert.equal(stops().filter((stop) => stop.dataset?.file).length, 0);
+    } finally { await close(); }
+  });
+}
+
+test('a Mac, with no touch screen, keeps its download at any width', async () => {
+  const { window, document, run, close } = page(['layouts/Base.astro'], 390);
   try {
-    Object.defineProperty(window.navigator, 'userAgent', { value: 'Mozilla/5.0 (iPhone; CPU iPhone OS 26_0 like Mac OS X)', configurable: true });
+    Object.defineProperty(window.navigator, 'userAgent', { value: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)', configurable: true });
+    Object.defineProperty(window.navigator, 'maxTouchPoints', { value: 0, configurable: true });
     run('components/Install.astro');
-    assert.equal(document.querySelectorAll('[data-picker] .panel[hidden]').length, 0);
-    assert.equal(document.querySelectorAll('[data-listed][hidden]').length, 0);
+    assert.equal(document.querySelector('[data-on-phone]').hidden, true);
+    assert.ok([...document.querySelectorAll('[data-on-computer]')].every((part) => !part.hidden));
   } finally { await close(); }
 });
 
