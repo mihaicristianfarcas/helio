@@ -111,7 +111,10 @@ portal`).
   references). swscale converts to BT.709 4:2:0 and
   scales (`helio-encode/src/ffmpeg.rs`); to 4:4:4 for a client that asks
   for it, where NVENC or x264 encodes (VA-API takes 4:2:0 only). No HDR:
-  the X server and the portal share SDR pictures.
+  the X server and the portal share SDR pictures. OpenH264 and VA-API keep
+  the bitrate a session opened with. OpenH264 also adds IDRs of its own at
+  scene changes, and goes over the bitrate on a picture of noise, so use
+  it on a wired network or a generous bitrate.
 - **Input.** XTest: keys by position, text by the layout's own keys (spare
   key codes remapped only for characters the layout lacks), the wheel as
   buttons 4–7 (`helio-input/src/x11.rs`).
@@ -162,18 +165,23 @@ Data and logs are in `~/.config/helio-host`.
 | GNOME's virtual display: Ubuntu 26.04's mutter 50.1, headless (no GPU), to a client in the same VM, x264 in software, release build | a 1600x900@60 monitor made for the session and removed at its end; the host's monitor off for the session and back after it; 2.9 ms capture to encoded (p50), 4.2 ms capture to screen; a still desktop sends 12 fps; a click, keys and typed text reach a terminal opened on it |
 | The same with Ubuntu 24.04's mutter 46.2 (no `modes`), in the container, debug build | a 1440x900 monitor sized from the stream; arranged and restored the same |
 | KDE's virtual display: Fedora 44's Plasma 6.6.4 under Wayland (a virtual machine, virtio GPU), `kwin.rs`'s desktop tests | a 1280x800 output at 200 % made, its frames received at 1280x800, the pointer drawn where it was moved, the output gone with its stream; a Konsole opened on it receives `ls from Helio!` typed as keys and text |
+| A whole stream from that desktop: Helio Host installed by `install-apps` and running as its user service, OpenH264 in software, release build, a Linux client in a container on another computer, FFmpeg decoding in software | a 1600x900 output made for the session and gone within 2 s of its end; a click and typed text reach a Konsole on it; a terminal of random text scrolling, as fast as the VM draws: 23 fps, 11 Mbps of 15, 5.0 ms capture to encoded (p50; p99 6.8), no frame lost, no IDR after the first |
+| The same to a Mac, 1280x720, VideoToolbox decoding | 45 fps, 11 Mbps of 10, 3.0 ms capture to encoded (p50), 1.2 ms decode, 27 ms capture to screen, no frame lost |
+| OpenH264 alone: 1920x1080, 600 pictures, 60 fps asked for, six Arm cores of a VM (Fedora's OpenH264 2.6.0) | a smooth picture scrolling: 212 fps at 19.8 Mbps of 20 with the 4 slices it is given (94 fps with 1); 5.0 Mbps of 5; only the IDRs asked for. A fine texture scrolling 12 pixels a frame: an IDR of its own every 17 frames, 20.6 Mbps of 20, 9.9 of 5. Noise over most of the frame: 164 Mbps of 20 |
 
-`tools/linux/virtual-display-test` repeats the last row.
+`tools/linux/virtual-display-test` repeats the row for Ubuntu 24.04's mutter.
 
 `tools/linux/loopback-test` repeats the first row; see
 [../development.md](../development.md#linux).
 
 ## Not verified yet
 
-- A whole stream from a KDE host: its virtual display is checked on Plasma
-  6.6 by `kwin.rs`'s desktop tests (below), not yet with a client on it.
-- Encoding with OpenH264 (no FFmpeg here had it working: Ubuntu's leaves it
-  out, and Fedora's needs Cisco's library installed).
+- Sharing the clipboard from a KDE host: in the virtual machine above, once
+  a Konsole was open, each read of the clipboard through XWayland timed out
+  (`Time-out hit while reading the clipboard`, about a minute a look). A
+  session's end does not wait for it (`helio-clipboard`'s `STOP_WITHIN`);
+  whether a copy gets through, on that machine or on real hardware, is
+  untried.
 - GNOME's on a desktop with real monitors (the tests ran headless mutter,
   whose own monitor is virtual too), and a client's density there (Linux
   clients do not send one; the scale chosen is unit-tested).
