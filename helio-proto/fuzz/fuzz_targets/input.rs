@@ -7,5 +7,5 @@ use helio_proto::input;
 // control parser this one loops over a caller-supplied count, so a bounds slip
 // is a real possibility rather than a theoretical one.
 fuzz_target!(|data: &[u8]| {
-    let _ = input::decode(data, 0);
+    let _ = input::decode(data, 0, 0);
 });
