@@ -133,7 +133,7 @@ Each platform's page has the detail, with its measurements:
 
 Feature by feature, against Moonlight + Sunshine/Apollo:
 [parity.md](parity.md). What Helio does not do:
-[known limitations](../README.md).
+[known limitations](../README.md#known-limitations).
 
 ## Not audited
 
