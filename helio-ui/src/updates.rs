@@ -447,7 +447,7 @@ pub fn version_setting(
         format!("Up to date. Checked {}.", ago(status.checked_unix)).into()
     };
     setting(
-        format!("{} {}", app.name(), app.build.describe()),
+        crate::name_with_version(app.name(), &app.build.describe()),
         Some(detail),
         button("update-check-now", "Check for Updates…", t)
             .disabled(status.checking)

@@ -12,7 +12,7 @@ use super::{HelioApp, Page};
 /// HELIO_UI_DEMO drives the UI for automated checks and screenshots, a
 /// comma-separated list: `pair=HOST[:PORT]` opens the pairing sheet, `add`
 /// the add-host sheet, `alone` leaves out the hosts found on the network,
-/// `size=WxH` makes the window that size (points), to see a long page
+/// `hosts-sample` lists made-up hosts instead of the real ones, `size=WxH` makes the window that size (points), to see a long page
 /// whole, `unpair=NAME` its confirmation, `menu=NAME` a host's menu,
 /// `open=ID` opens the select with that id (`fps`, `codec`),
 /// `settings[=video|audio|input|agents]` a settings page,
@@ -260,6 +260,10 @@ impl HelioApp {
                 self.show_add_host(window, cx);
             } else if action == "alone" {
                 self.model.alone = true;
+                self.model.rebuild();
+            } else if action == "hosts-sample" {
+                self.model.sample = true;
+                self.model.searching = false;
                 self.model.rebuild();
             } else if let Some((w, h)) = action
                 .strip_prefix("size=")

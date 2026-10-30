@@ -229,7 +229,8 @@ The steps: `settings[=general|video|audio|input|agents|hosting|updates]`,
 `agents[=setup|sample|sample-live|sample-ask]`, `chat=MESSAGE` (to the open
 session, or a new one on the first host the agent may use), `login`,
 `pair=HOST:PORT`, `add`, `alone` (hosts found on the network are left
-out: the Hosts page as it is with none), `size=WxH` (the window that size,
+out: the Hosts page as it is with none), `hosts-sample` (made-up hosts
+instead of the real ones, one card of each state), `size=WxH` (the window that size,
 in points, to see a long page whole), `menu=NAME`, `open=ID` (the select
 with that id, open: `fps`, `codec`, `permissions-preset`), `unpair=NAME`,
 `stream=NAME`, `desktop` (that stream's page, while it runs),
@@ -261,13 +262,17 @@ paired device called NAME). `HELIO_HOST_DATA_DIR` points the app at a test host'
 data folder; `HELIO_HOST_APP_URL`, `HELIO_HOST_APP_CERT` and `HELIO_HOST_APP_TOKEN` at another
 host altogether; `HELIO_HOST_PROGRAM` at the `helio-host` the switch runs.
 `HELIO_UI_DEMO_SCREEN=PATH` gives the sample sessions a screenshot to show.
+`tools/capture-docs-images` makes the README's pictures this way;
+`tools/demo-gif/record` makes its GIF, from a real stream.
 
 With `HELIO_UI_DEMO` set, the update check asks GitHub nothing on its own
-(`update` makes up its answer), and the app runs beside a copy that is
-already running rather than showing it.
+(`update` makes up its answer), the app runs beside a copy that is already
+running rather than showing it, and the window names Helio and Helio Host
+without their version, so a screenshot does not date with the next release.
 
 Use an empty `HELIO_DATA_DIR` for checks, so they neither read nor change
-your own hosts and settings, and a throwaway `HELIO_HOST_DATA_DIR` with
+your own hosts and settings (`onboarded = true` in its `settings.toml` skips
+setup, which an empty folder opens on), and a throwaway `HELIO_HOST_DATA_DIR` with
 `internet_access = false` and `port_mapping = false` in its `config.toml`
 before turning the switch on for real. An occluded window is not redrawn, so
 the demo driver brings its window to the front first. A snapshot is the

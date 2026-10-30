@@ -1,0 +1,65 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Night Run</title>
+<style>html,body{margin:0;height:100%;background:#0a0f1c;overflow:hidden;cursor:none}canvas{display:block;width:100vw;height:100vh}</style></head>
+<body><canvas id="c"></canvas><script>
+// A small road game for the demo: it runs on the host, and the keys that
+// steer it come through the stream.
+const c = document.getElementById('c'), g = c.getContext('2d');
+let W, H; const size = () => { W = c.width = innerWidth; H = c.height = innerHeight; }; addEventListener('resize', size); size();
+const keys = {}; addEventListener('keydown', e => keys[e.key] = true); addEventListener('keyup', e => keys[e.key] = false);
+const SEG = 220, DRAW = 110; let z = 0, x = 0, speed = 0, score = 0, hit = 0;
+const curve = i => Math.sin(i / 34) * 1.1 + Math.sin(i / 91) * .8;
+const hill = i => Math.sin(i / 47) * 70;
+const cars = Array.from({ length: 14 }, (_, i) => ({ s: 40 + i * 42, lane: [-0.55, 0, 0.55][i % 3], hue: 190 + i * 13 }));
+const stars = Array.from({ length: 90 }, () => [Math.random(), Math.random() * .45, Math.random()]);
+let last = performance.now();
+function frame(now) {
+  const dt = Math.min((now - last) / 1000, .05); last = now;
+  speed += ((keys.ArrowUp ? 300 : 210) - speed) * dt * .9;
+  if (keys.ArrowLeft) x -= dt * 1.5; if (keys.ArrowRight) x += dt * 1.5;
+  x = Math.max(-.8, Math.min(.8, x));
+  z += speed * dt * 12; score += speed * dt * .12;
+  const base = Math.floor(z / SEG), part = (z % SEG) / SEG;
+  const sky = g.createLinearGradient(0, 0, 0, H * .62);
+  sky.addColorStop(0, '#0a0f1c'); sky.addColorStop(.55, '#1b2946'); sky.addColorStop(1, '#92b6f0');
+  g.fillStyle = sky; g.fillRect(0, 0, W, H);
+  g.fillStyle = '#c2d6f6';
+  for (const [a, b, r] of stars) g.fillRect(((a * W - curve(base) * 40) % W + W) % W, b * H, 1 + r * 1.6, 1 + r * 1.6);
+  g.fillStyle = '#ddc9a5'; g.beginPath(); g.arc(W * .5 - curve(base) * 60, H * .5, H * .1, 0, 7); g.fill();
+  g.fillStyle = '#16213a';
+  g.beginPath(); g.moveTo(0, H * .58);
+  for (let i = 0; i <= 24; i++) g.lineTo(i / 24 * W, H * .58 - (Math.sin(i * 1.3 - curve(base) * .4) + 1.2) * H * .05);
+  g.lineTo(W, H); g.lineTo(0, H); g.fill();
+  const pts = []; let dx = 0, ax = -curve(base) * part;
+  for (let n = 0; n < DRAW; n++) {
+    const i = base + n, depth = (n + 1 - part) * SEG, scale = 280 / depth;
+    pts.push({ i, X: W / 2 + (dx - x * 620) * scale, Y: H * .58 + (900 - hill(i) + hill(base)) * scale, w: 1500 * scale, depth });
+    dx += ax * 34; ax += curve(i);
+  }
+  for (let n = DRAW - 2; n >= 0; n--) {
+    const a = pts[n + 1], b = pts[n]; if (b.Y <= a.Y) continue; const alt = a.i % 2 === 0;
+    g.fillStyle = alt ? '#111a2e' : '#0e1626'; g.fillRect(0, a.Y, W, b.Y - a.Y + 1);
+    const quad = (x1, w1, x2, w2, col) => { g.fillStyle = col; g.beginPath(); g.moveTo(x1 - w1, a.Y); g.lineTo(x1 + w1, a.Y); g.lineTo(x2 + w2, b.Y + 1); g.lineTo(x2 - w2, b.Y + 1); g.fill(); };
+    quad(a.X, a.w * 1.1, b.X, b.w * 1.1, alt ? '#c2d6f6' : '#4a76bd');
+    quad(a.X, a.w, b.X, b.w, alt ? '#2a3550' : '#26304a');
+    if (alt) for (const l of [-.33, .33]) quad(a.X + a.w * l, a.w * .02, b.X + b.w * l, b.w * .02, '#92b6f0');
+    for (const car of cars) {
+      if (Math.floor(car.s) % 330 !== a.i % 330) continue;
+      const cw = a.w * .3, cx = a.X + a.w * car.lane - cw / 2, ch = cw * .55;
+      g.fillStyle = `hsl(${car.hue} 60% 62%)`; g.fillRect(cx, a.Y - ch, cw, ch);
+      g.fillStyle = '#0a0f1c'; g.fillRect(cx + cw * .12, a.Y - ch * .86, cw * .76, ch * .4);
+    }
+  }
+  for (const car of cars) { car.s += dt * 9; }
+  const pw = W * .16, ph = pw * .42, px = W / 2 - pw / 2 + (keys.ArrowLeft ? -10 : keys.ArrowRight ? 10 : 0), py = H * .9 - ph;
+  g.fillStyle = 'rgb(0 0 0 / .4)'; g.fillRect(px - 6, py + ph - 4, pw + 12, 12);
+  g.fillStyle = '#c2d6f6'; g.fillRect(px, py + ph * .42, pw, ph * .58);
+  g.fillStyle = '#16213a'; g.fillRect(px + pw * .16, py, pw * .68, ph * .46);
+  g.fillStyle = '#92b6f0'; g.fillRect(px + pw * .2, py + ph * .06, pw * .6, ph * .34);
+  g.fillStyle = '#ff6b5e'; g.fillRect(px + pw * .05, py + ph * .58, pw * .16, ph * .14); g.fillRect(px + pw * .79, py + ph * .58, pw * .16, ph * .14);
+  g.fillStyle = '#eef1f7'; g.font = '600 ' + Math.round(H * .045) + 'px system-ui, Segoe UI, sans-serif';
+  g.fillText(Math.round(speed) + ' km/h', W * .04, H * .09);
+  g.textAlign = 'right'; g.fillText(Math.round(score).toLocaleString('en') + ' m', W * .96, H * .09); g.textAlign = 'left';
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script></body></html>

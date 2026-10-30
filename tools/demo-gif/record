@@ -1,0 +1,65 @@
+#!/usr/bin/env bash
+# docs/images/helio-demo.gif: a real stream from a Windows VM to this Mac, with
+# real input. The Mac types into Notepad on the host, double-clicks a shortcut
+# and steers a small road game (game.html), all as scripted input through the
+# stream (HELIO_TEST_INPUT); what is recorded is the stream's window.
+#
+#   tools/demo-gif/record [SECONDS]
+#
+# First, on the host: Helio installed with hosting on, this Mac's helio paired
+# with it as gaming-pc (keep HELIO_DATA_DIR on a throwaway folder), the display
+# at 1440x900 at 125%, Windows 11's default wallpaper, game.html in
+# C:\pp\demo, and scene.ps1 run in the signed-in session for each take (it
+# makes the shortcut and opens an empty Notepad).
+#
+# A VM has no GPU, so the stream runs at about 20 fps, encoded in software.
+# Say so of the picture, and take no figure from it.
+#
+# The recording runs on past the end of the stream, showing whatever is behind
+# the window, so cut it at its last streamed frame: SECONDS is where (12.9 for
+# the input below), and it is the only part that reaches the GIF.
+set -euo pipefail
+REPO=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
+CLIENT=${HELIO:-$REPO/target/release/helio}
+KEEP=${1:-12.9}
+TMP=$(mktemp -d)
+trap 'rm -rf "$TMP"' EXIT
+cat >"$TMP/rect.swift" <<'SWIFT'
+import CoreGraphics
+let pid = Int(CommandLine.arguments[1])!
+let list = CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID) as! [[String: Any]]
+for w in list where (w[kCGWindowOwnerPID as String] as? Int) == pid && (w[kCGWindowLayer as String] as? Int) == 0 {
+    let b = w[kCGWindowBounds as String] as! [String: Any]
+    print(b["X"]!, b["Y"]!, b["Width"]!, b["Height"]!)
+    break
+}
+SWIFT
+swiftc -O "$TMP/rect.swift" -o "$TMP/rect"
+
+# A pointer that travels rather than jumps.
+travel() { # from-x from-y to-x to-y steps
+    python3 -I -c '
+import sys
+a, b, c, d, n = map(int, sys.argv[1:])
+for i in range(1, n + 1):
+    t = i / n
+    t = t * t * (3 - 2 * t)
+    print(f"abs {round(a + (c - a) * t)} {round(b + (d - b) * t)}; wait 14;", end=" ")
+' "$@"
+}
+# Scancodes: e048 up, e04b left, e04d right.
+export HELIO_TEST_INPUT="wait 1800; $(travel 1100 760 760 300 26) wait 150; click; wait 500; \
+text Typed on a Mac, running on this PC.; wait 1100; $(travel 760 300 46 262 30) wait 250; click; \
+wait 90; click; wait 2600; abs 1300 700; wait 40; abs 1400 860; wait 960; keydown e048; wait 900; \
+keydown e04b; wait 420; keyup e04b; wait 900; keydown e04d; wait 800; keyup e04d; wait 1000; \
+keydown e04b; wait 420; keyup e04b; wait 1800; keyup e048; wait 200; quit"
+
+"$CLIENT" stream gaming-pc --windowed --size 1280x800 --fps 60 >/dev/null 2>&1 &
+stream=$!
+sleep 2.2
+read -r x y w h <<<"$("$TMP/rect" "$stream")"
+screencapture -x -v -V 15 -R"$x,$y,$w,$h" "$TMP/take.mov"
+wait "$stream"
+ffmpeg -loglevel error -y -t "$KEEP" -i "$TMP/take.mov" -vf \
+    "fps=12,scale=840:-1:flags=lanczos,split[a][b];[a]palettegen=max_colors=192:stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=4:diff_mode=rectangle" \
+    -loop 0 "$REPO/docs/images/helio-demo.gif"
