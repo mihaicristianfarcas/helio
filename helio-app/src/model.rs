@@ -171,6 +171,47 @@ fn split(address: &str) -> Option<(String, u16)> {
     ))
 }
 
+/// `hosts-sample`: one card of each thing a host can say at rest, in the
+/// page's own order, on the documentation's addresses.
+fn sample_hosts() -> Vec<Item> {
+    let host =
+        |name: &str, os: &str, address: IpAddr, paired: bool, online: bool, can_wake: bool| {
+            let id = format!("{name}-sample");
+            Item {
+                id: id.clone(),
+                name: name.into(),
+                paired: paired.then(|| Paired {
+                    name: name.into(),
+                    id: id.clone(),
+                    key: id.clone(),
+                    address: join(address, pair::DEFAULT_PAIRING_PORT - 1),
+                    local_address: None,
+                    can_wake,
+                }),
+                found: online.then(|| Discovered {
+                    name: name.into(),
+                    id: id.clone(),
+                    address,
+                    port: pair::DEFAULT_PAIRING_PORT - 1,
+                    os: os.into(),
+                    pairing_port: pair::DEFAULT_PAIRING_PORT,
+                    web_port: pair::DEFAULT_PAIRING_PORT + 1,
+                    wake: Vec::new(),
+                    paired,
+                }),
+                online: Some(online),
+                pairing_at: None,
+            }
+        };
+    let lan = |last| IpAddr::from([192, 168, 1, last]);
+    vec![
+        host("gaming-pc", "windows", lan(20), true, true, true),
+        host("living-room", "windows", lan(21), true, false, true),
+        host("mac-studio", "macos", lan(22), true, true, false),
+        host("linux-box", "linux", lan(23), false, true, false),
+    ]
+}
+
 struct Poll {
     found: Vec<Discovered>,
     reach: Vec<Reachability>,
@@ -199,6 +240,9 @@ pub struct Model {
     /// Hosts found on the network are left out (HELIO_UI_DEMO's `alone`, so
     /// the page with no hosts can be seen on a network that has some).
     pub alone: bool,
+    /// Made-up hosts instead of this computer's (HELIO_UI_DEMO's
+    /// `hosts-sample`, so the page can be pictured with nothing paired).
+    pub sample: bool,
     /// This computer's own host (its short id), once hosting has been on:
     /// not one to play from here, so not in the list.
     own: Option<String>,
@@ -251,6 +295,7 @@ impl Model {
             paused,
             foreground,
             alone: false,
+            sample: false,
             own: None,
         };
         model.rebuild();
@@ -337,6 +382,10 @@ impl Model {
     }
 
     pub fn rebuild(&mut self) {
+        if self.sample {
+            self.items = sample_hosts();
+            return;
+        }
         let hosts = Hosts::load(&self.dir);
         let mut list: Vec<Item> = hosts
             .list()
@@ -560,6 +609,17 @@ fn leave_out_own(list: &mut Vec<Item>, own: Option<&str>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_sample_hosts_show_each_thing_a_host_can_say_at_rest() {
+        let hosts = sample_hosts();
+        assert!(hosts
+            .iter()
+            .any(|h| h.is_paired() && h.online == Some(true)));
+        assert!(hosts.iter().any(|h| h.offline_but_wakeable()));
+        assert!(hosts.iter().any(|h| h.is_mac()));
+        assert!(hosts.iter().any(|h| !h.is_paired()));
+    }
 
     #[test]
     fn this_computers_own_host_is_left_out_of_the_list() {
