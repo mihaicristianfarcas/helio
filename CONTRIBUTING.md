@@ -40,10 +40,10 @@ measurement is the best one.
    change touches, and [how it is written](AGENTS.md#how-it-is-written).
 4. Check it on every platform you can, and type-check the rest
    ([AGENTS.md, "Before you finish"](AGENTS.md#before-you-finish)).
-5. Open a pull request that says what changed, why, how you verified it, and
-   what you could not verify. `main` takes changes only through pull
-   requests, once CI passes (formatting, clippy and the tests on all three
-   systems).
+5. Open a pull request: its template asks what changed, why, how you
+   verified it, and what you could not verify, with evidence a reviewer can
+   see. `main` takes changes only through pull requests, once CI passes
+   (formatting, clippy and the tests on all three systems).
 
 Using an AI coding agent is fine; you are responsible for what it wrote, as
 if you had written it.
