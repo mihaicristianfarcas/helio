@@ -21,8 +21,9 @@
 # ID and notarized, helper and all, from five secrets: MACOS_CERTIFICATE_P12 (the Developer
 # ID Application certificate and its key, base64), MACOS_CERTIFICATE_PASSWORD,
 # and an App Store Connect API key: APPLE_API_KEY_P8 (the .p8 file),
-# APPLE_API_KEY_ID, APPLE_API_ISSUER. On main the release fails without them,
-# rather than publish an app macOS will not open.
+# APPLE_API_KEY_ID, APPLE_API_ISSUER, read on main only (the job's
+# environment is `release`, as the Windows job's is). On main the release
+# fails without them, rather than publish an app macOS will not open.
 #
 # The Windows programs and DLLs, the installer and its uninstaller are
 # signed on main only, never on a pull request or another branch, with
@@ -75,6 +76,8 @@ jobs:
           - runner: macos-15-intel
             arch: x86_64
     runs-on: ${{ matrix.runner }}
+    # The Developer ID secrets are read on main only, as the Windows ones are.
+    environment: ${{ github.ref == 'refs/heads/main' && 'release' || '' }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
@@ -86,14 +89,15 @@ jobs:
           key: release
       # The certificate in a keychain of this run's own, and the API key
       # notarytool asks Apple with; tools/package-macos reads both from the
-      # environment.
+      # environment. Off main the secrets are passed empty, so another
+      # branch's scripts never see them and its app is signed ad hoc.
       - name: Developer ID
         env:
-          CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE_P12 }}
-          CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
-          API_KEY: ${{ secrets.APPLE_API_KEY_P8 }}
-          API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
-          API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          CERTIFICATE: ${{ github.ref == 'refs/heads/main' && secrets.MACOS_CERTIFICATE_P12 || '' }}
+          CERTIFICATE_PASSWORD: ${{ github.ref == 'refs/heads/main' && secrets.MACOS_CERTIFICATE_PASSWORD || '' }}
+          API_KEY: ${{ github.ref == 'refs/heads/main' && secrets.APPLE_API_KEY_P8 || '' }}
+          API_KEY_ID: ${{ github.ref == 'refs/heads/main' && secrets.APPLE_API_KEY_ID || '' }}
+          API_ISSUER: ${{ github.ref == 'refs/heads/main' && secrets.APPLE_API_ISSUER || '' }}
         run: |
           if [[ -z $CERTIFICATE || -z $API_KEY ]]; then
             if [[ $GITHUB_REF == refs/heads/main ]]; then
