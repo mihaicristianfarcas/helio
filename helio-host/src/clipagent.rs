@@ -40,8 +40,11 @@ use windows::Win32::System::Environment::{CreateEnvironmentBlock, DestroyEnviron
 use windows::Win32::System::Pipes::CreatePipe;
 use windows::Win32::System::RemoteDesktop::{WTSGetActiveConsoleSessionId, WTSQueryUserToken};
 use windows::Win32::System::Threading::{
-    CreateProcessAsUserW, TerminateProcess, WaitForSingleObject, CREATE_NO_WINDOW,
-    CREATE_UNICODE_ENVIRONMENT, PROCESS_INFORMATION, STARTF_USESTDHANDLES, STARTUPINFOW,
+    CreateProcessAsUserW, DeleteProcThreadAttributeList, InitializeProcThreadAttributeList,
+    TerminateProcess, UpdateProcThreadAttribute, WaitForSingleObject, CREATE_NO_WINDOW,
+    CREATE_UNICODE_ENVIRONMENT, EXTENDED_STARTUPINFO_PRESENT, LPPROC_THREAD_ATTRIBUTE_LIST,
+    PROCESS_INFORMATION, PROC_THREAD_ATTRIBUTE_HANDLE_LIST, STARTF_USESTDHANDLES, STARTUPINFOEXW,
+    STARTUPINFOW,
 };
 
 const PACKET: u8 = 0;
@@ -198,6 +201,61 @@ unsafe fn pipe(child_reads: bool) -> Result<(HANDLE, HANDLE), String> {
     Ok((child, ours))
 }
 
+/// A process attribute list that names the only handles a child inherits.
+struct InheritOnly {
+    /// The list's memory, in `usize`s for its alignment.
+    memory: Vec<usize>,
+    /// The handles it names: read by CreateProcess, so kept, unmoved, for
+    /// as long as the list.
+    _handles: Box<[HANDLE; 2]>,
+}
+
+impl InheritOnly {
+    /// # Safety
+    /// `handles` are open and inheritable until the process is created.
+    unsafe fn new(handles: [HANDLE; 2]) -> Result<InheritOnly, String> {
+        let mut size = 0usize;
+        // SAFETY: the first call only says how large the list is (and fails
+        // for want of memory, as it must); the second initialises `memory`,
+        // which is at least that large; the handles are boxed, so their
+        // address holds until the list is deleted (`Drop`).
+        unsafe {
+            let _ = InitializeProcThreadAttributeList(None, 1, None, &mut size);
+            let mut memory = vec![0usize; size.div_ceil(std::mem::size_of::<usize>())];
+            let list = LPPROC_THREAD_ATTRIBUTE_LIST(memory.as_mut_ptr().cast());
+            InitializeProcThreadAttributeList(Some(list), 1, None, &mut size)
+                .map_err(|e| format!("InitializeProcThreadAttributeList: {e}"))?;
+            let mut only = InheritOnly {
+                memory,
+                _handles: Box::new(handles),
+            };
+            UpdateProcThreadAttribute(
+                only.list(),
+                0,
+                PROC_THREAD_ATTRIBUTE_HANDLE_LIST as usize,
+                Some(only._handles.as_ptr().cast()),
+                std::mem::size_of::<[HANDLE; 2]>(),
+                None,
+                None,
+            )
+            .map_err(|e| format!("UpdateProcThreadAttribute: {e}"))?;
+            Ok(only)
+        }
+    }
+
+    fn list(&mut self) -> LPPROC_THREAD_ATTRIBUTE_LIST {
+        LPPROC_THREAD_ATTRIBUTE_LIST(self.memory.as_mut_ptr().cast())
+    }
+}
+
+impl Drop for InheritOnly {
+    fn drop(&mut self) {
+        // SAFETY: the list was initialised in `new` (an `InheritOnly`
+        // exists only then) and is deleted once, here.
+        unsafe { DeleteProcThreadAttributeList(self.list()) };
+    }
+}
+
 /// Start `cmdline` as the console's user, its standard input and output
 /// piped to us: (process, its input, its output).
 unsafe fn spawn_as_user(cmdline: &str) -> Result<(Process, std::fs::File, std::fs::File), String> {
@@ -218,17 +276,33 @@ unsafe fn spawn_as_user(cmdline: &str) -> Result<(Process, std::fs::File, std::f
 
     let (child_in, our_in) = pipe(true)?;
     let (child_out, our_out) = pipe(false)?;
+    // Only the two pipe ends cross to the user's process. Inheritance
+    // alone would hand it every handle this SYSTEM process has open and
+    // inheritable at that moment (a library's, the console's), for the
+    // user to read or duplicate.
+    let mut inherit = match InheritOnly::new([child_in, child_out]) {
+        Ok(list) => list,
+        Err(e) => {
+            for h in [child_in, child_out, our_in, our_out, token] {
+                let _ = CloseHandle(h);
+            }
+            return Err(e);
+        }
+    };
     let mut env: *mut std::ffi::c_void = std::ptr::null_mut();
     let have_env = CreateEnvironmentBlock(&mut env, Some(token), false).is_ok();
     let mut desktop = wide("winsta0\\default");
-    let si = STARTUPINFOW {
-        cb: std::mem::size_of::<STARTUPINFOW>() as u32,
-        lpDesktop: PWSTR(desktop.as_mut_ptr()),
-        dwFlags: STARTF_USESTDHANDLES,
-        hStdInput: child_in,
-        hStdOutput: child_out,
-        hStdError: HANDLE::default(),
-        ..Default::default()
+    let si = STARTUPINFOEXW {
+        StartupInfo: STARTUPINFOW {
+            cb: std::mem::size_of::<STARTUPINFOEXW>() as u32,
+            lpDesktop: PWSTR(desktop.as_mut_ptr()),
+            dwFlags: STARTF_USESTDHANDLES,
+            hStdInput: child_in,
+            hStdOutput: child_out,
+            hStdError: HANDLE::default(),
+            ..Default::default()
+        },
+        lpAttributeList: inherit.list(),
     };
     let mut cmd = wide(cmdline);
     let mut pi = PROCESS_INFORMATION::default();
@@ -239,12 +313,13 @@ unsafe fn spawn_as_user(cmdline: &str) -> Result<(Process, std::fs::File, std::f
         None,
         None,
         true,
-        CREATE_UNICODE_ENVIRONMENT | CREATE_NO_WINDOW,
+        CREATE_UNICODE_ENVIRONMENT | CREATE_NO_WINDOW | EXTENDED_STARTUPINFO_PRESENT,
         have_env.then_some(env as *const std::ffi::c_void),
         None,
-        &si,
+        &si.StartupInfo,
         &mut pi,
     );
+    drop(inherit);
     if have_env {
         let _ = DestroyEnvironmentBlock(env);
     }
