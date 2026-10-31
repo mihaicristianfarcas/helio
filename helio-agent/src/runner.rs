@@ -228,6 +228,8 @@ fn run(ctx: &RunContext) -> Result<String, String> {
             // The model is ours to drive: connect here, and let every action
             // be seen as it happens.
             let mut config = Config::new(ctx.data_dir.clone());
+            config.default_host = Some(ctx.host.clone());
+            config.host_only = true;
             config.session.width = ctx.settings.width;
             config.session.height = ctx.settings.height;
             config.max_actions = Some(ctx.settings.max_actions);

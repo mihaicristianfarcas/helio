@@ -289,7 +289,7 @@ impl Server {
                         (Some(w), Some(h)) => Some((w as u16, h as u16)),
                         _ => None,
                     };
-                    computer.connect(text_arg(args, "host").as_deref(), size)
+                    computer.connect_for_model(text_arg(args, "host").as_deref(), size)
                 }
                 "disconnect" => {
                     computer.disconnect();
@@ -389,6 +389,7 @@ fn list_hosts(computer: &Computer) -> String {
 
 fn wake(computer: &Computer, host: Option<&str>) -> Result<Outcome, String> {
     let host = host.ok_or("host is required")?;
+    computer.may_use(host)?;
     let dir = &computer.config.data_dir;
     // The person's list knows the host's network adapters (from discovery)
     // when the agent's does not.
@@ -885,6 +886,8 @@ pub fn main(args: &[String]) -> std::process::ExitCode {
                 }
             }
             "--host" => config.default_host = it.next().cloned(),
+            // That host and no other (a run Helio started for it).
+            "--host-only" => config.host_only = true,
             "--size" => {
                 if let Some((w, h)) = it.next().and_then(|v| v.split_once('x')) {
                     config.session.width = w.parse().unwrap_or(config.session.width);
@@ -1022,6 +1025,71 @@ mod tests {
             .contains("paired"));
         let r = s.handle(&json!({"jsonrpc": "2.0", "id": 8, "method": "tools/call", "params": {"name": "list_hosts"}})).unwrap();
         assert_eq!(r["result"]["isError"], false);
+    }
+
+    #[test]
+    fn a_session_keeps_to_its_host_and_its_turns() {
+        let dir = tempfile::tempdir().unwrap();
+        // Two hosts the agent is paired with, whose keys are damaged: a
+        // connection to either fails at once, saying so.
+        let mut hosts =
+            helio_client::store::Hosts::load(&helio_client::store::agent_dir(dir.path()));
+        for name in ["host-a", "host-b"] {
+            hosts
+                .upsert(helio_client::store::KnownHost::by_hand(
+                    name,
+                    "127.0.0.1:9",
+                    name,
+                    name,
+                ))
+                .unwrap();
+        }
+        let conversation = crate::conversation::Conversation::open(
+            dir.path(),
+            "host-a",
+            &crate::providers::AgentSettings::default(),
+            Arc::new(|_| {}),
+            Arc::new(|_| {}),
+        )
+        .unwrap();
+        let computer = conversation.computer();
+        let mut s = Server {
+            computer: computer.clone(),
+            opts: Options {
+                image_dir: None,
+                events: None,
+            },
+            shots: 0,
+        };
+        let connect = |s: &mut Server, host: Option<&str>| {
+            let (content, error) = s.call("connect", &json!({ "host": host }));
+            assert!(error);
+            content[0]["text"].as_str().unwrap().to_string()
+        };
+        let until = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs()
+            + 600;
+        computer.lock().begin_turn(
+            10,
+            until,
+            dir.path().join("control"),
+            crate::providers::Approvals::Off,
+        );
+        // Another host: refused before anything is tried there.
+        let e = connect(&mut s, Some("host-b"));
+        assert!(!e.contains("damaged"), "{e}");
+        assert!(e.contains("host-a"), "{e}");
+        // Its own host is tried.
+        assert!(connect(&mut s, Some("HOST-A")).contains("damaged"));
+        // After the turn the model connects nowhere; the person still can.
+        computer.lock().end_turn();
+        let e = connect(&mut s, None);
+        assert!(e.contains("time is up"), "{e}");
+        let e = crate::conversation::connect(&computer).unwrap_err();
+        assert!(e.contains("damaged"), "{e}");
+        conversation.end();
     }
 
     #[test]

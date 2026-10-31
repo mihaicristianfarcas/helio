@@ -51,6 +51,7 @@ impl Conversation {
         std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
         let mut config = Config::new(data_dir.to_path_buf());
         config.default_host = Some(host.to_string());
+        config.host_only = true;
         config.session.width = settings.width;
         config.session.height = settings.height;
         config.full_screens = true;
