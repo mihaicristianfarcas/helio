@@ -155,49 +155,70 @@ struct File {
     clients: Vec<Client>,
 }
 
+/// The paired clients, as `clients.toml` held them when last read.
+///
+/// Two programs change the file: the running host (pairing, This
+/// computer, a client's rendezvous key) and `helio host` (add-client,
+/// remove-client, permissions). Each change re-reads the file under a lock
+/// shared by both (`clients.lock`), so neither saves a stale copy over the
+/// other's: a device removed from the command line is not brought back by
+/// the running host's next save, which that very device could otherwise
+/// trigger.
 pub struct Clients {
     path: PathBuf,
     list: Vec<Client>,
-    /// Why the file there could not be read, when it could not. It is left
-    /// as it is, and nothing is saved over it.
-    unreadable: Option<String>,
 }
 
 impl Clients {
     pub fn load(dir: &Path) -> Clients {
         let path = dir.join("clients.toml");
-        let (list, unreadable) = match read(&path) {
-            Ok(list) => (list, None),
-            Err(e) => {
-                tracing::error!(path = %path.display(), error = e, "the paired clients could not be \
-                    read: Helio Host goes on with none, and leaves the file as it is");
-                (Vec::new(), Some(e))
-            }
-        };
-        Clients {
-            path,
-            list,
-            unreadable,
-        }
+        let list = read(&path).unwrap_or_else(|e| {
+            tracing::error!(path = %path.display(), error = e, "the paired clients could not be \
+                read: Helio Host goes on with none, and leaves the file as it is");
+            Vec::new()
+        });
+        Clients { path, list }
     }
 
     pub fn list(&self) -> &[Client] {
         &self.list
     }
 
-    fn save(&self) -> std::io::Result<()> {
-        // Looks removable, is not: saving now would replace every pairing in
-        // the file with the few made since it could not be read.
-        if let Some(e) = &self.unreadable {
-            return Err(std::io::Error::other(format!(
+    /// Re-read the file under its lock, apply `f` (which says whether it
+    /// changed anything, and what to return), and save if it did. Refused
+    /// when the file cannot be read: saving would replace every pairing in
+    /// it with the few made since.
+    fn modify<T>(&mut self, f: impl FnOnce(&mut Vec<Client>) -> (bool, T)) -> std::io::Result<T> {
+        let _lock = self.lock()?;
+        self.list = read(&self.path).map_err(|e| {
+            std::io::Error::other(format!(
                 "Helio Host could not read {} ({e}) and will not save over it. Fix the file or \
-                    move it away, then restart Helio Host.",
+                    move it away, then try again.",
                 self.path.display()
-            )));
+            ))
+        })?;
+        let (changed, out) = f(&mut self.list);
+        if changed {
+            self.save()?;
         }
-        if let Some(dir) = self.path.parent() {
-            std::fs::create_dir_all(dir)?;
-        }
+        Ok(out)
+    }
+
+    /// The lock every change to the file holds, across processes: until
+    /// the file it returns is dropped.
+    fn lock(&self) -> std::io::Result<std::fs::File> {
+        let dir = self.path.parent().unwrap_or(Path::new("."));
+        std::fs::create_dir_all(dir)?;
+        let file = std::fs::OpenOptions::new()
+            .create(true)
+            .truncate(false)
+            .write(true)
+            .open(dir.join("clients.lock"))?;
+        file.lock()?;
+        Ok(file)
+    }
+
+    fn save(&self) -> std::io::Result<()> {
         let text = toml::to_string_pretty(&File {
             clients: self.list.clone(),
         })
@@ -229,29 +250,30 @@ impl Clients {
             .map(|d| d.as_secs())
             .unwrap_or(0);
         let rendezvous = rendezvous.map(|k| k.iter().map(|b| format!("{b:02x}")).collect());
-        // Pairing again replaces the entry: it does not count as a person
-        // already here when the default is worked out.
-        let others = self.list.iter().filter(|c| c.x25519 != x && !c.agent);
-        let permissions = permissions
-            .unwrap_or_else(|| Permissions::on_pairing(agent, others.count()))
-            .fit(agent);
-        let client = Client {
-            name: name.to_string(),
-            x25519: x.clone(),
-            mlkem: m,
-            paired_at: now,
-            rendezvous,
-            agent,
-            permissions,
-            // Paired again, by a person who entered its PIN: a new start.
-            stopped: false,
-        };
-        match self.list.iter_mut().find(|c| c.x25519 == x) {
-            Some(existing) => *existing = client.clone(),
-            None => self.list.push(client.clone()),
-        }
-        self.save()?;
-        Ok(client)
+        self.modify(|list| {
+            // Pairing again replaces the entry: it does not count as a
+            // person already here when the default is worked out.
+            let others = list.iter().filter(|c| c.x25519 != x && !c.agent);
+            let permissions = permissions
+                .unwrap_or_else(|| Permissions::on_pairing(agent, others.count()))
+                .fit(agent);
+            let client = Client {
+                name: name.to_string(),
+                x25519: x.clone(),
+                mlkem: m,
+                paired_at: now,
+                rendezvous,
+                agent,
+                permissions,
+                // Paired again, by a person who entered its PIN: a new start.
+                stopped: false,
+            };
+            match list.iter_mut().find(|c| c.x25519 == x) {
+                Some(existing) => *existing = client.clone(),
+                None => list.push(client.clone()),
+            }
+            (true, client)
+        })
     }
 
     /// A device a person paired with its PIN: what they chose, else what
@@ -282,24 +304,35 @@ impl Clients {
     /// client paired before pairing exchanged it). True if it changed.
     pub fn set_rendezvous(&mut self, x25519_b64: &str, key: [u8; 32]) -> std::io::Result<bool> {
         let hex: String = key.iter().map(|b| format!("{b:02x}")).collect();
-        let Some(c) = self.list.iter_mut().find(|c| c.x25519 == x25519_b64) else {
-            return Ok(false);
+        let known = |list: &[Client]| {
+            list.iter()
+                .find(|c| c.x25519 == x25519_b64)
+                .map(|c| c.rendezvous.as_deref() == Some(hex.as_str()))
         };
-        if c.rendezvous.as_deref() == Some(hex.as_str()) {
+        // Sent at every connection: nothing to read or write when it is
+        // the one already kept.
+        if known(&self.list) != Some(false) {
             return Ok(false);
         }
-        c.rendezvous = Some(hex);
-        self.save()?;
-        Ok(true)
+        self.modify(|list| {
+            let Some(c) = list.iter_mut().find(|c| c.x25519 == x25519_b64) else {
+                return (false, false);
+            };
+            if c.rendezvous.as_deref() == Some(hex.as_str()) {
+                return (false, false);
+            }
+            c.rendezvous = Some(hex.clone());
+            (true, true)
+        })
     }
 
     pub fn remove(&mut self, x25519_b64: &str) -> std::io::Result<Option<Client>> {
-        let Some(i) = self.list.iter().position(|c| c.x25519 == x25519_b64) else {
-            return Ok(None);
-        };
-        let removed = self.list.remove(i);
-        self.save()?;
-        Ok(Some(removed))
+        self.modify(
+            |list| match list.iter().position(|c| c.x25519 == x25519_b64) {
+                Some(i) => (true, Some(list.remove(i))),
+                None => (false, None),
+            },
+        )
     }
 
     /// Set what a client may do (only what its kind can be allowed). The
@@ -309,27 +342,28 @@ impl Clients {
         x25519_b64: &str,
         permissions: Permissions,
     ) -> std::io::Result<Option<Permissions>> {
-        let Some(c) = self.list.iter_mut().find(|c| c.x25519 == x25519_b64) else {
-            return Ok(None);
-        };
-        c.permissions = permissions.fit(c.agent);
-        let now = c.permissions;
-        self.save()?;
-        Ok(Some(now))
+        self.modify(|list| {
+            let Some(c) = list.iter_mut().find(|c| c.x25519 == x25519_b64) else {
+                return (false, None);
+            };
+            c.permissions = permissions.fit(c.agent);
+            (true, Some(c.permissions))
+        })
     }
 
     /// Stop an agent (its sessions are refused), or allow it again. True if
     /// that changed anything.
     pub fn set_stopped(&mut self, x25519_b64: &str, stopped: bool) -> std::io::Result<bool> {
-        let Some(c) = self.list.iter_mut().find(|c| c.x25519 == x25519_b64) else {
-            return Ok(false);
-        };
-        if c.stopped == stopped || (stopped && !c.agent) {
-            return Ok(false);
-        }
-        c.stopped = stopped;
-        self.save()?;
-        Ok(true)
+        self.modify(|list| {
+            let Some(c) = list.iter_mut().find(|c| c.x25519 == x25519_b64) else {
+                return (false, false);
+            };
+            if c.stopped == stopped || (stopped && !c.agent) {
+                return (false, false);
+            }
+            c.stopped = stopped;
+            (true, true)
+        })
     }
 
     /// A person stopped the agent with this key, and has not allowed it
@@ -455,6 +489,44 @@ mod tests {
             Some(Permissions::AGENT_ALL)
         );
         assert_eq!(c.set_permissions("nobody", all).unwrap(), None);
+    }
+
+    /// The running host's list and `helio host`'s, on one folder: a change
+    /// one makes is not undone by the other's next save, whoever triggers it
+    /// (here the removed device itself, sending a new rendezvous key).
+    #[test]
+    fn a_change_made_beside_the_running_host_is_not_saved_over() {
+        let dir = tempfile::tempdir().unwrap();
+        let (gone, narrowed, kept) = (
+            Identity::generate(),
+            Identity::generate(),
+            Identity::generate(),
+        );
+        let mut host = Clients::load(dir.path());
+        host.add("gone", gone.public(), None, false, None).unwrap();
+        host.add("narrowed", narrowed.public(), None, false, None)
+            .unwrap();
+        host.add("kept", kept.public(), None, false, None).unwrap();
+        let b64 = |id: &Identity| id.public().to_b64().0;
+
+        let mut cli = Clients::load(dir.path());
+        cli.remove(&b64(&gone)).unwrap();
+        cli.set_permissions(&b64(&narrowed), Permissions::NONE)
+            .unwrap();
+
+        // The host still has its own copy; the removed device and another
+        // change the host makes both save.
+        host.set_rendezvous(&b64(&gone), [7; 32]).unwrap();
+        host.set_rendezvous(&b64(&kept), [8; 32]).unwrap();
+        let file = Clients::load(dir.path());
+        assert_eq!(
+            file.role_of(&gone.public().x25519).1,
+            Permissions::NONE,
+            "the removed device came back"
+        );
+        assert_eq!(file.role_of(&narrowed.public().x25519).1, Permissions::NONE);
+        assert_eq!(file.list().len(), 2);
+        assert!(file.list().iter().any(|c| c.rendezvous.is_some()));
     }
 
     #[test]
