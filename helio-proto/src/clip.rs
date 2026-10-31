@@ -92,12 +92,10 @@ pub fn decode(body: &[u8]) -> Option<Msg<'_>> {
             })
         }
         OP_ACK => {
-            let bits = &body[9..];
-            (bits.len() <= ACK_BITS_BYTES).then_some(Msg::Ack {
-                id,
-                upto: u32_at(body, 5)?,
-                bits,
-            })
+            // A 5 to 8 byte ack has an id and no `upto`: `get`, not a slice.
+            let upto = u32_at(body, 5)?;
+            let bits = body.get(9..)?;
+            (bits.len() <= ACK_BITS_BYTES).then_some(Msg::Ack { id, upto, bits })
         }
         OP_CANCEL => Some(Msg::Cancel { id }),
         _ => None,
@@ -470,6 +468,31 @@ pub fn encode_items(items: &[Item]) -> Vec<u8> {
     out
 }
 
+/// Whether Windows takes `name` for a device (`NUL`, `COM1`, `CONOUT$`),
+/// whatever its extension (`NUL.txt`) and case: opening it writes to the
+/// device, not to a file. Refused on every platform, so a copy means the
+/// same everywhere. The list is Microsoft's "Naming Files, Paths, and
+/// Namespaces" page; `COM0`/`LPT0` and the superscript digits are included
+/// because current Windows 10 and 11 treat them as devices.
+fn is_device_name(name: &str) -> bool {
+    let stem = name.split('.').next().unwrap_or("").trim_end_matches(' ');
+    let upper = stem.to_ascii_uppercase();
+    if matches!(
+        upper.as_str(),
+        "CON" | "PRN" | "AUX" | "NUL" | "CONIN$" | "CONOUT$"
+    ) {
+        return true;
+    }
+    let Some(rest) = upper.strip_prefix("COM").or(upper.strip_prefix("LPT")) else {
+        return false;
+    };
+    let mut chars = rest.chars();
+    matches!(
+        (chars.next(), chars.next()),
+        (Some('0'..='9' | '\u{b9}' | '\u{b2}' | '\u{b3}'), None)
+    )
+}
+
 /// A relative path that stays under the folder it lands in, with names any
 /// system takes; None if it would not.
 pub fn safe_path(path: &str) -> Option<String> {
@@ -496,7 +519,7 @@ pub fn safe_path(path: &str) -> Option<String> {
             })
             .collect();
         let clean = clean.trim_end_matches(['.', ' ']);
-        if clean.is_empty() {
+        if clean.is_empty() || is_device_name(clean) {
             return None;
         }
         parts.push(clean.to_string());
@@ -675,6 +698,24 @@ mod tests {
     }
 
     #[test]
+    fn a_short_ack_is_refused_not_a_panic() {
+        for len in 0..9 {
+            let mut body = vec![OP_ACK, 1, 0, 0, 0, 0, 0, 0, 0];
+            body.truncate(len);
+            assert_eq!(decode(&body), None, "{len} bytes");
+        }
+        let ok = [OP_ACK, 1, 0, 0, 0, 5, 0, 0, 0];
+        assert_eq!(
+            decode(&ok),
+            Some(Msg::Ack {
+                id: 1,
+                upto: 5,
+                bits: &[]
+            })
+        );
+    }
+
+    #[test]
     fn items_round_trip() {
         let items = vec![
             Item::Text("héllo".into()),
@@ -720,5 +761,34 @@ mod tests {
         assert_eq!(safe_path("what?.txt").as_deref(), Some("what_.txt"));
         assert_eq!(safe_path("C:x").as_deref(), Some("C_x"));
         assert_eq!(safe_path("dots...").as_deref(), Some("dots"));
+        assert_eq!(safe_path("console.txt").as_deref(), Some("console.txt"));
+        assert_eq!(safe_path("COM10").as_deref(), Some("COM10"));
+        assert_eq!(safe_path("nullable").as_deref(), Some("nullable"));
+    }
+
+    #[test]
+    fn windows_device_names_are_refused() {
+        for bad in [
+            "NUL",
+            "nul",
+            "CON",
+            "PRN",
+            "AUX",
+            "COM1",
+            "com9",
+            "LPT1",
+            "COM0",
+            "LPT\u{b9}",
+            "CONIN$",
+            "CONOUT$",
+            "NUL.txt",
+            "COM1.log",
+            "a/NUL/b",
+            "NUL .txt",
+            "aux.tar.gz",
+            "nul...",
+        ] {
+            assert_eq!(safe_path(bad), None, "{bad}");
+        }
     }
 }
