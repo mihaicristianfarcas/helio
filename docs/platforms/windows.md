@@ -366,7 +366,4 @@ bindings): see [../install.md](../install.md#helio-on-windows).
 
 Not verified yet: keyboard, mouse and controllers streaming another machine
 (tests so far streamed the same PC, which feeds input back into itself),
-on-glass timing on a real monitor, HelioHost starting the host again at
-once after a change that restarts it, and the host's API answering on
-localhost only with `helio host pair` in an administrator terminal
-(type-checked; the restart, the API and `helio host pair` ran on a Mac).
+and on-glass timing on a real monitor.

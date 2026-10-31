@@ -176,9 +176,6 @@ Data and logs are in `~/.config/helio-host`.
 
 ## Not verified yet
 
-- The host starting again in its own process after a change that restarts
-  it (`helio-host/src/restart.rs`), its API on localhost only, and `helio
-  host pair`: the code a Mac host runs, which was run there.
 - Sharing the clipboard from a KDE host: in the virtual machine above, once
   a Konsole was open, each read of the clipboard through XWayland timed out
   (`Time-out hit while reading the clipboard`, about a minute a look). A

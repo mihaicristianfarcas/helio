@@ -91,7 +91,7 @@ it applies), **no** (not built, with the reason), **n/a** (does not apply).
 | Runs at boot, streams UAC prompts and the lock screen | Windows service; sessions also start while the host is locked (after sleep) | done |
 | Windows asked for streaming: 0.5-1 ms timer, DWM by MMCSS, Wi-Fi in media-streaming mode, Mouse Keys without a mouse | Same (1 ms), undone when the session ends | done |
 | Web UI: pairing, clients, settings, logs, ending a session, from any browser on the network | Helio's This computer pages on the host do the same; there is no web UI, and the host's API answers that computer only, so nothing on the network can sign in to it | n/a |
-| Settings that apply only after a restart: Sunshine's Apply restarts it at once | Helio Host restarts on its own, at once or when the stream that runs ends, for its name, ports and NVIDIA settings, devices changed with `helio host`, and Screen Recording allowed on a Mac; `helio host restart` ([usage.md](usage.md#this-computer)) | done (macOS host; Windows host type-checked) |
+| Settings that apply only after a restart: Sunshine's Apply restarts it at once | Helio Host restarts on its own, at once or when the stream that runs ends, for its name, ports and NVIDIA settings, devices changed with `helio host`, and Screen Recording allowed on a Mac; `helio host restart` ([usage.md](usage.md#this-computer)) | done |
 | Host shutting down or restarting mid-stream | Helio says so at once | done |
 | Host software restarting mid-stream | Helio resumes by itself (~10 s) | done |
 | Streams with its monitor asleep, off or unplugged | Yes; sessions end in under 0.1 s with no monitor (6 of 6) | done |
