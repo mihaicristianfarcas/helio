@@ -240,7 +240,8 @@ fn main() -> ExitCode {
 }
 
 /// `helio-host host`: run the host in this session until it is asked to stop.
-/// `args`: the command line (on a Mac, `--app PATH` from the LaunchAgent).
+/// `args`: the command line (on a Mac, `--app PATH` from the LaunchAgent; on
+/// Windows, `--stop-event NAME` from the service).
 /// `opened_by_hand`: the host's helper app opened by hand (a Mac), which
 /// brings its icon up too. `secured`: what making the data folder private did
 /// that the log should say.
@@ -259,7 +260,7 @@ fn run_host(
     if !hosting::watch_app(args) {
         return ExitCode::SUCCESS;
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "linux")]
     let _ = args;
     // Before the host: one already running (the LaunchAgent's) makes this
     // one fail to start, and the icon is still what was asked for.
@@ -281,8 +282,9 @@ fn run_host(
     #[cfg(windows)]
     {
         let h = host.clone();
+        let args = args.to_vec();
         std::thread::spawn(move || {
-            service::wait_for_stop_request();
+            service::wait_for_stop_request(&args);
             tracing::info!("the service asked the host to stop");
             h.shutdown();
         });
