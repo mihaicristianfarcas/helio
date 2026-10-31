@@ -297,6 +297,12 @@ impl Host {
         Ok(client.permissions)
     }
 
+    /// Allow an agent a person stopped to start sessions again. False if
+    /// it was not stopped.
+    pub fn allow_agent(&self, x25519_b64: &str) -> std::io::Result<bool> {
+        self.clients.lock().set_stopped(x25519_b64, false)
+    }
+
     /// Forget a client: it can no longer complete a handshake.
     pub fn remove_client(&self, x25519_b64: &str) -> std::io::Result<bool> {
         let removed = self.clients.lock().remove(x25519_b64)?;

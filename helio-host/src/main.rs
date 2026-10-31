@@ -52,6 +52,7 @@ mod config;
 mod endsession;
 #[cfg(windows)]
 mod gamepad;
+mod holds;
 mod host;
 mod hosting;
 #[cfg(target_os = "macos")]

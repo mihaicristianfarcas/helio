@@ -487,7 +487,7 @@ impl HostPages {
             ),
             Confirm::StopAgent => (
                 "Stop the agent?".into(),
-                "Its session ends.".into(),
+                "Its session ends, and it cannot start another until you allow it again.".into(),
                 "Stop Agent",
             ),
             Confirm::SignOut => (

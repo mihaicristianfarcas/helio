@@ -266,6 +266,13 @@ the runs and sessions Helio starts, and neither changes the other.
   keyboard or mouse to take over. Under **Settings > AI agents**:
   whether agents are allowed at all, and how long someone using the host's
   own keyboard or mouse holds an agent (10 s).
+- **A hold outlasts the agent's session.** A pause, a take-over and
+  someone at the host hold the agent's next session too, if it ends its
+  session and starts another: until you **Resume** or **Hand back**, or the
+  host's keyboard and mouse are left alone for the hold's length. They are
+  kept for as long as Helio Host runs. **Stop** ends the agent's session and
+  turns its next ones away, across restarts of the host, until you press
+  **Allow Again** on **This computer** (or pair it again).
 
 ## The rules the host holds agents to
 
@@ -279,8 +286,8 @@ Helio Host enforces these, whatever the agent or its model does:
    screen, a UAC prompt or Ctrl+Alt+Del, the agent's input is held.
 4. **Someone at the host comes first.** Input at the host itself holds the
    agent until 10 s after it stops. On a Windows host whose monitors the
-   session turned off, it ends the agent's session instead: the person there
-   would otherwise sit at a dark screen.
+   session turned off, it ends the agent's session instead, and refuses its
+   next until then: the person there would otherwise sit at a dark screen.
 5. **Permissions per agent.** Without **See the screen** it is refused.
    Without the keyboard or the mouse, an action that needs it is refused,
    and the model is told what it may use instead; without both, it may
@@ -288,8 +295,11 @@ Helio Host enforces these, whatever the agent or its model does:
    a person watches its session.
 6. **Watchers and take-over.** People whose devices may watch agents may
    watch an agent's session; a watcher who takes over drives the host, as
-   far as their own permissions go, while the agent's input is held.
-7. **Everything is written down.** The agent says what each action is, and
+   far as their own permissions go, while the agent's input is held. No
+   other agent takes over a session a person paused or took over.
+7. **A person's hold lasts.** A pause, a take-over or a stop is not undone
+   by the agent ending its session and starting another.
+8. **Everything is written down.** The agent says what each action is, and
    Helio Host logs it and shows it.
 
 The agent hears why it is held. Its next action waits for the hold to end

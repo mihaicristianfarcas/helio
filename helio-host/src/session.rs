@@ -15,6 +15,10 @@
 //! - its input is held while the host shows a secure screen, for a while
 //!   after someone uses the host's own keyboard or mouse, while paused, and
 //!   always when its access is view-only;
+//! - a person's hold outlasts the session: the agent's next starts paused,
+//!   taken over or held for local input as this one ended (`holds`), and an
+//!   agent a person stopped is refused until they allow it again (`clients`);
+//!   no other agent takes a session a person holds;
 //! - it and its watchers hear who drives, and why, in `Control::AgentState`.
 //!
 //! Every client is held to its permissions (`clients`,
@@ -79,9 +83,6 @@ const IDLE_TICK: Duration = Duration::from_millis(100);
 /// changed (control messages are not retransmitted).
 const AGENT_CHECK_EVERY: Duration = Duration::from_millis(250);
 const AGENT_STATE_EVERY: Duration = Duration::from_secs(1);
-/// Input at the host this much more recent than the last the session
-/// injected is someone else's: its own takes a moment to register.
-const INJECTION_MARGIN: Duration = Duration::from_millis(300);
 /// Input at the host in a session's first seconds is the session's own
 /// doing (waking the display, resetting the screensaver), not a person's.
 const START_GRACE: Duration = Duration::from_secs(3);
@@ -444,6 +445,8 @@ pub struct SessionManager {
     refused: Option<(PeerId, SessionStart, AckStatus)>,
     /// When the key held on the host repeats next.
     repeat_due: Option<Instant>,
+    /// What held agents' sessions that ended, for their next ones.
+    holds: crate::holds::Holds,
 }
 
 pub fn send_control(endpoint: &Endpoint, peer: &Peer, msg: Control) {
@@ -479,6 +482,7 @@ impl SessionManager {
             last_loss: LossReport::default(),
             refused: None,
             repeat_due: None,
+            holds: crate::holds::Holds::default(),
         }
     }
 
@@ -578,9 +582,32 @@ impl SessionManager {
             return;
         }
         let agent = role == Role::Agent;
+        // An agent's session starting again in place: its watchers are told
+        // it ended (the new one is not theirs until they watch again), and
+        // what held it is kept for the new one (`stop_stream`, `holds`).
+        self.end_watchers(EndReason::Quit);
         // A restart with new parameters: the platform keeps what it can of
         // the display (Windows reuses its virtual display).
         drop(self.stop_stream());
+        let now = Instant::now();
+        let local_until = if agent {
+            let hold = Duration::from_secs(cfg.agent_local_input_hold_secs as u64);
+            self.holds
+                .local_until(now, platform::host_input_idle(), hold)
+        } else {
+            None
+        };
+        // Someone is at the host: a session that would turn its monitors
+        // off is not started over them (the running one would end on it,
+        // `agent_tick`).
+        if local_until.is_some() && platform::isolates_host_displays(&req, &cfg) {
+            tracing::info!(
+                client = self.name_of(&peer),
+                "someone is using the host, whose monitors an agent's session turns off; refused"
+            );
+            self.refuse(&peer, &req, AckStatus::AgentNotAllowed);
+            return;
+        }
 
         let negotiated =
             match crate::negotiate::negotiate(&req, &cfg, &self.supported, |c, asked| {
@@ -665,15 +692,22 @@ impl SessionManager {
             }
         };
 
-        let agent_run = agent.then(|| AgentRun {
-            permissions,
-            watchers: Vec::new(),
-            controller: None,
-            paused: false,
-            local_until: None,
-            secure: false,
-            last_check: Instant::now() - AGENT_CHECK_EVERY,
-            last_state: None,
+        // A person's holds on this agent from its last session hold this
+        // one too, until they let go.
+        let agent_run = agent.then(|| {
+            let kept = self.holds.take(&peer.public().x25519);
+            AgentRun {
+                permissions,
+                watchers: Vec::new(),
+                // Unless the one who took over was unpaired since: nobody
+                // could hand back.
+                controller: kept.controller.filter(|&c| self.endpoint.peer(c).is_some()),
+                paused: kept.paused,
+                local_until,
+                secure: false,
+                last_check: now - AGENT_CHECK_EVERY,
+                last_state: None,
+            }
         });
         let sink = self.platform.input_sink(&display, width, height);
         let repeat = key_repeat(&sink, &req);
@@ -791,6 +825,15 @@ impl SessionManager {
             self.refuse(peer, req, AckStatus::AgentNotAllowed);
             return Err(());
         }
+        if agent && self.clients.lock().is_stopped(&peer.public().x25519) {
+            tracing::warn!(
+                client = self.name_of(peer),
+                "an agent's session refused: a person stopped this agent, and has not allowed \
+                    it again"
+            );
+            self.refuse(peer, req, AckStatus::AgentNotAllowed);
+            return Err(());
+        }
         if !permissions.allows(permission::VIEW) {
             tracing::warn!(
                 client = self.name_of(peer),
@@ -822,6 +865,19 @@ impl SessionManager {
                     }
                     // A person always takes over from an agent.
                     (true, false) => tracing::info!("a person is taking over from the agent"),
+                    // An agent's session a person holds (paused, or taken
+                    // over) is theirs: not another agent's to take.
+                    (true, true)
+                        if a.agent
+                            .as_ref()
+                            .is_some_and(|r| r.paused || r.controller.is_some()) =>
+                    {
+                        tracing::info!(
+                            "an agent asked for the host while a person holds another's; refused"
+                        );
+                        self.refuse(peer, req, AckStatus::AgentNotAllowed);
+                        return Err(());
+                    }
                     _ if !cfg.allow_takeover => {
                         self.refuse(peer, req, AckStatus::Busy);
                         return Err(());
@@ -1074,7 +1130,19 @@ impl SessionManager {
                 }
             }
             agent_control::STOP => {
-                tracing::info!("the agent was stopped");
+                // Stopped, not only its session ended: the agent's next
+                // request (a `connect`, any retry) is refused until a person
+                // allows it again.
+                tracing::info!("the agent was stopped; it may not start again until allowed");
+                let key = a.peer.public().to_b64().0;
+                // The stop is what holds it now: allowed again, it starts
+                // with nothing else held.
+                run.paused = false;
+                run.controller = None;
+                if let Err(e) = self.clients.lock().set_stopped(&key, true) {
+                    tracing::warn!(error = %e, "the agent's stop could not be saved; it holds \
+                        until Helio Host restarts");
+                }
                 self.teardown(Some(EndReason::Quit));
                 return;
             }
@@ -1107,26 +1175,26 @@ impl SessionManager {
                     i.last_injected.max(i.sink.last_sent())
                 });
                 let baseline = injected.map_or(grace_over, |t| t.max(grace_over));
-                let since_baseline = now.duration_since(baseline);
-                if let Some(idle) = platform::host_input_idle() {
-                    if idle + INJECTION_MARGIN < since_baseline {
-                        // Where the session turned the host's own monitors
-                        // off (a Windows host, isolated), the person there
-                        // sees nothing to use: the agent gives the host back.
-                        if platform::isolates_host_displays(&a.req, &self.config.read()) {
-                            tracing::info!(
-                                "someone is using the host, whose monitors the \
-                                    agent's session turned off; ending it"
-                            );
-                            self.teardown(Some(EndReason::HostInUse));
-                            return;
-                        }
-                        let until = now.checked_sub(idle).unwrap_or(now)
-                            + Duration::from_secs(hold_secs as u64);
-                        if run.local_until.is_none_or(|t| t < now) {
-                            tracing::info!("someone is using the host; holding the agent's input");
-                        }
-                        run.local_until = Some(until);
+                let hold = Duration::from_secs(hold_secs as u64);
+                let seen = platform::host_input_idle()
+                    .and_then(|idle| crate::holds::local_hold(now, idle, baseline, hold));
+                if let Some(until) = seen {
+                    let held = run.local_until.is_some_and(|t| t >= now);
+                    run.local_until = run.local_until.max(Some(until));
+                    // Where the session turned the host's own monitors off
+                    // (a Windows host, isolated), the person there sees
+                    // nothing to use: the agent gives the host back, and its
+                    // next session waits for them (`holds`).
+                    if platform::isolates_host_displays(&a.req, &self.config.read()) {
+                        tracing::info!(
+                            "someone is using the host, whose monitors the \
+                                agent's session turned off; ending it"
+                        );
+                        self.teardown(Some(EndReason::HostInUse));
+                        return;
+                    }
+                    if !held {
+                        tracing::info!("someone is using the host; holding the agent's input");
                     }
                 }
             }
@@ -1201,12 +1269,27 @@ impl SessionManager {
         // Out of the lock first: stopping waits for its thread.
         let clip = self.shared.clip.lock().take();
         drop(clip);
+        let mut injected = None;
         if let Some(mut input) = self.shared.input.lock().take() {
+            use helio_input::InputSink;
+            injected = input.last_injected.max(input.sink.last_sent());
             input.release_all();
             self.platform.input_done(&input.sink);
         }
         *self.status.lock() = None;
         let a = self.active.take()?;
+        // What held this session holds the agent's next (`holds`). Input at
+        // the host in its start's grace was its own doing, not a person's.
+        let own_until = injected.max(Some(a.started + START_GRACE));
+        let local_until = a.agent.as_ref().and_then(|r| r.local_until);
+        self.holds.session_ended(own_until, local_until);
+        if let Some(run) = &a.agent {
+            let kept = crate::holds::Kept {
+                paused: run.paused,
+                controller: run.controller,
+            };
+            self.holds.keep(a.peer.public().x25519, kept);
+        }
         a.video.stop();
         if let Some(audio) = a.audio {
             audio.stop();
@@ -1360,10 +1443,12 @@ impl SessionManager {
                 permissions: run.permissions,
                 flags: run.state(Instant::now()).flags,
                 watchers: run.watchers.iter().map(|w| name(&w.peer)).collect(),
+                // Who took over, watching or not: one who took over from the
+                // agent's last session holds this one until they hand back.
                 controller: run
                     .controller
-                    .and_then(|c| run.watchers.iter().find(|w| w.peer.id() == c))
-                    .map(|w| name(&w.peer)),
+                    .and_then(|c| self.endpoint.peer(c))
+                    .map(|p| name(&p)),
             }
         });
         *self.status.lock() = Some(SessionStatus {
