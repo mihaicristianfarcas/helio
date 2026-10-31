@@ -95,7 +95,12 @@ again when it comes back on, without a restart.
 With internet access on, Helio Host also asks the router to forward the tunnel's
 port: UPnP IGD first (an SSDP search, the WAN IP or PPP connection service,
 `AddPortMapping` for UDP with a one-hour lease renewed at half), else NAT-PMP
-(RFC 6886) to the default gateway. The mapping's public address joins the
+(RFC 6886) to the default gateway. Only the default gateway counts as the
+router: with its address known, an SSDP answer from another device, or a
+description or control URL that names another address, is ignored (without it,
+only private LAN addresses other than this computer's own are used), and the
+service must be a `WANIPConnection` or `WANPPPConnection` of the UPnP
+schema. The mapping's public address joins the
 published candidates, and is released when Helio Host stops or the setting is
 turned off. A router whose own "public" address is private (behind another
 NAT) is left alone: a mapping there would open nothing. The host's Helio
