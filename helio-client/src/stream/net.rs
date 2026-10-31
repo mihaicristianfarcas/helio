@@ -1102,7 +1102,7 @@ fn clip_directions(permissions: u16) -> helio_clipboard::Directions {
 fn start_clipboard(ctx: &Ctx, ack: &SessionAck) -> helio_clipboard::ClipSync {
     let (endpoint, peer) = (ctx.endpoint.clone(), ctx.peer.clone());
     let opts = helio_clipboard::Options {
-        files_dir: std::env::temp_dir().join("Helio Clipboard"),
+        files_dir: helio_clipboard::files_dir("Helio Clipboard"),
         rate: helio_clipboard::rate_for(ack.bitrate_kbps),
         offer_current: true,
         peer: ctx.host_name.clone(),

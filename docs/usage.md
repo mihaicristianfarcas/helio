@@ -347,8 +347,10 @@ the ways the device's permissions allow (**Copy from this computer**,
 - Each end watches its own clipboard and sends each new copy: files if there
   are some, else text, else an image. Helio also sends what is on its
   clipboard as the stream starts, so what you copied before connecting
-  pastes on the host. Files arrive in a temporary folder
-  (`Helio Clipboard` or `Helio Host Clipboard`, replaced by the next copy) and are
+  pastes on the host. Files arrive in a folder only you can use
+  (`Helio Clipboard` or `Helio Host Clipboard`, replaced by the next copy; on
+  Linux in `$XDG_RUNTIME_DIR`, else in `/tmp` with your user id in its name; if
+  another user owns it, the files are not put there) and are
   put on the clipboard as files, so pasting in Finder or Explorer copies
   them from there.
 - Copies travel inside the tunnel, chunked and acknowledged, under a rate
