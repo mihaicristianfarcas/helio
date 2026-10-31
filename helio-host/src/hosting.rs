@@ -132,6 +132,8 @@ mod system;
 #[path = "hosting/linux.rs"]
 mod system;
 
+#[cfg(windows)]
+pub use drivers::system_dir;
 #[cfg(target_os = "macos")]
 pub use system::watch_app;
 #[cfg(windows)]

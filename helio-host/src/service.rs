@@ -442,8 +442,20 @@ fn host_runs(service: u32) -> bool {
 }
 
 /// Firewall rules "Helio Host" allowing inbound traffic to `program`, or none.
+///
+/// `netsh` by its full path, never its bare name: this runs elevated from
+/// `helio-host enable` and `disable` in the per-user install folder, which
+/// the user (and whatever runs as them) can write, and std's `Command`
+/// looks for a bare name beside the running program before System32.
 fn firewall(program: Option<&Path>) {
-    let _ = std::process::Command::new("netsh")
+    let netsh = match crate::hosting::system_dir() {
+        Ok(dir) => dir.join("netsh.exe"),
+        Err(e) => {
+            tracing::warn!(error = e, "the firewall rules are left as they are");
+            return;
+        }
+    };
+    let _ = std::process::Command::new(&netsh)
         .args([
             "advfirewall",
             "firewall",
@@ -456,7 +468,7 @@ fn firewall(program: Option<&Path>) {
         return;
     };
     for proto in ["UDP", "TCP"] {
-        let _ = std::process::Command::new("netsh")
+        let _ = std::process::Command::new(&netsh)
             .args([
                 "advfirewall",
                 "firewall",
