@@ -432,7 +432,7 @@ async function clientsPage(el) {
 
 const settingSections = [
   ['Host', [
-    ['name', 'Host name', 'text', 'Shown to clients.'],
+    ['name', 'Host name', 'text', 'Shown to clients. Helio Host restarts to apply it.'],
     ['allow_takeover', 'Let a client take over a running session', 'check', 'Otherwise a second client is refused while one is streaming. A device also needs Take over in its permissions (Clients).'],
     ['keep_host_displays', "Keep this PC's monitors on while streaming", 'check', 'Off: the virtual display becomes the whole desktop, so windows open where the client sees them.'],
     ['clipboard', 'Share the clipboard with clients', 'check', "Text, images and files copied on either side can be pasted on the other, when the client asks for it too. Password managers' copies are never shared."],
@@ -440,8 +440,8 @@ const settingSections = [
   ['Encoder', [
     ['nvenc_preset', 'Preset', 'select:1=P1 (fastest)|2=P2|3=P3|4=P4|5=P5|6=P6|7=P7 (best quality)', 'Lower is faster. Sunshine uses P1.'],
     ['nvenc_two_pass', 'Two-pass encoding', 'check', 'Quarter-resolution first pass: better bit allocation at no extra latency.'],
-    ['nvidia_max_power', 'Full GPU power for Helio Host', 'check', "The NVIDIA driver keeps its clocks up for Helio Host instead of lowering them between frames, which slows the encoder. Applies after Helio Host restarts."],
-    ['nvidia_dxgi_present', 'OpenGL and Vulkan through DXGI', 'check', "Full-screen OpenGL and Vulkan games are captured at their full frame rate. Changes the driver's setting for every program while Helio Host runs, and puts it back when Helio Host stops. Applies after Helio Host restarts."],
+    ['nvidia_max_power', 'Full GPU power for Helio Host', 'check', "The NVIDIA driver keeps its clocks up for Helio Host instead of lowering them between frames, which slows the encoder. Helio Host restarts to apply it."],
+    ['nvidia_dxgi_present', 'OpenGL and Vulkan through DXGI', 'check', "Full-screen OpenGL and Vulkan games are captured at their full frame rate. Changes the driver's setting for every program while Helio Host runs, and puts it back when Helio Host stops. Helio Host restarts to apply it."],
     ['allow_hevc', 'Allow HEVC', 'check', 'Better quality per bit than H.264 when the client supports it.'],
     ['allow_av1', 'Allow AV1', 'check', 'Used when both this GPU and the client support it.'],
     ['allow_hdr', 'Allow HDR', 'check', "Stream HDR to a client that asks and shows it, where this host can: HEVC Main10 from an NVIDIA GPU, or from a Mac on macOS 15 or later."],
@@ -460,9 +460,9 @@ const settingSections = [
   ['Network', [
     ['internet_access', 'Allow streaming over the internet', 'check', "Paired devices can connect from anywhere, with no port forwarding: this PC's public address is published sealed, readable only by them."],
     ['port_mapping', 'Ask the router to forward the port', 'check', 'UPnP or NAT-PMP, as Sunshine\'s UPnP option does. Helps where hole punching cannot; a router behind another NAT (the ISP\'s box) cannot help, and is left alone.'],
-    ['port', 'Tunnel port (UDP)', 'number', 'Restart required.'],
-    ['pairing_port', 'Pairing port (TCP)', 'number', 'Restart required.'],
-    ['web_port', 'Web UI port (TCP)', 'number', 'Restart required.'],
+    ['port', 'Tunnel port (UDP)', 'number', 'Helio Host restarts to apply it.'],
+    ['pairing_port', 'Pairing port (TCP)', 'number', 'Helio Host restarts to apply it.'],
+    ['web_port', 'Web UI port (TCP)', 'number', 'Helio Host restarts to apply it.'],
   ]],
 ];
 // NVENC's settings mean nothing to a Mac host (VideoToolbox, no AV1 encoder).
@@ -496,8 +496,13 @@ async function settingsPage(el) {
     }
     try {
       const r = await put('/api/config', next);
-      const restart = hostOs === 'macos' ? 'Restart Helio Host' : 'Restart HelioHost';
-      $('#saved', el).replaceChildren(h(`<p class="note ok">Saved.${r.restart_needed ? ` ${restart} for port or name changes to apply.` : ''}</p>`));
+      // The host restarts on its own for what it reads only when it starts;
+      // sign-ins here do not outlive it.
+      const moved = next.web_port !== cfg.web_port ? ` at <a href="https://${location.hostname}:${next.web_port}/">port ${next.web_port}</a>` : '';
+      const said = r.restart === 'now' ? ` Helio Host is restarting to apply it: sign in again${moved} in a moment.`
+        : r.restart === 'after_session' ? ` Helio Host restarts when the stream ends, to apply it${moved ? `; the web UI is then${moved}` : ''}.`
+        : '';
+      $('#saved', el).replaceChildren(h(`<p class="note ok">Saved.${said}</p>`));
     } catch (err) { $('#saved', el).replaceChildren(h(`<p class="note bad">${esc(err.message)}</p>`)); }
   });
 }

@@ -101,7 +101,10 @@ the logs, reporting an issue).
   Video, its clipboard on Input, what agents may do on it on Agent setup.
   They save as they change (text fields on Return); encoder settings a Mac
   host does not have (NVENC, AV1) are not shown. Each setting is in one
-  place, and a computer that only plays has none of the host's.
+  place, and a computer that only plays has none of the host's. One the
+  host reads only when it starts (its name, its ports, the NVIDIA ones)
+  restarts it, and a line over the settings says so until it is back:
+  restarting, or restarting when the stream ends.
 
 Every page has the same column (`Metrics::PAGE`), and what is on it fills
 the column. On every system a page's actions (Add Host, Copy) sit beside
@@ -130,7 +133,9 @@ along the top, the step, and Back, Skip and Continue at the bottom.
    allow, each said in a line before it is asked. On a Mac, Screen
    Recording and Accessibility for the host (Helio Host), which macOS asks for as
    the host starts, each with a button to its pane of System Settings and
-   marked Allowed as soon as the host says so. On Windows, the administrator
+   marked Allowed as soon as the host says so (Screen Recording allowed
+   after the host started restarts it when the window comes back to the
+   front). On Windows, the administrator
    UAC asks for once, whether there are NVIDIA graphics (else it streams
    in software H.264), and SudoVDA (else the main display, scaled) and
    ViGEmBus (else no controllers), which turning hosting on installs.
@@ -257,6 +262,8 @@ This computer's host: `host=overview|devices|logs` (its pages; its
 settings are on the settings pages, `settings=hosting|video|input|agents`), `host-sample` (a made-up session, request, devices and
 settings), `host-signin`, `host-setup`, `host-offline` (the real host made
 signed out, without an account yet, or not answering),
+`host-restart=now|after_session` (a restart the host has ahead, as its
+settings pages say it),
 `signin-as=USER:PASSWORD`, `permissions=NAME` (the permissions sheet of the
 paired device called NAME). `HELIO_HOST_DATA_DIR` points the app at a test host's
 data folder; `HELIO_HOST_APP_URL`, `HELIO_HOST_APP_CERT` and `HELIO_HOST_APP_TOKEN` at another

@@ -1,17 +1,21 @@
 //! `helio host`: this computer as a host.
 //!
-//! The switch (`enable`, `disable`) and `status` are the host's program's
-//! own (`helio-host`, found and run by `engine`, as the app's hosting
-//! switch runs it): only it knows where it runs from on each system. On
-//! Windows the switch needs an administrator, and as in the app, a switch
-//! refused for want of one (exit code 740) is asked again through UAC.
+//! The switch (`enable`, `disable`), `status` and `restart` are the host's
+//! program's own (`helio-host`, found and run by `engine`, as the app's
+//! hosting switch runs it): only it knows where it runs from on each
+//! system. On Windows the switch needs an administrator, and as in the app,
+//! a switch refused for want of one (exit code 740) is asked again through
+//! UAC.
 //!
 //! The rest read and change the host's data (helio-host-data) in this
 //! process: its identity, its paired clients and what each may do. On
 //! Windows the host's data folder is readable by administrators only, so
 //! those need an administrator's terminal there: without one they say so
 //! and exit with 740, before they touch the folder (only an administrator
-//! may create it: `private`).
+//! may create it: `private`). A running host reads its clients only when
+//! it starts, so a change to them restarts it (`helio-host restart`: now,
+//! or when its session ends), as `restart` does; the host's own web API
+//! needs the token only an administrator may read there too.
 
 use std::io::Write;
 use std::path::Path;
@@ -48,6 +52,7 @@ pub fn run(command: HostCommand) -> ExitCode {
         HostCommand::RemoveClient { x25519 } => {
             with_data("remove-client", |dir| remove_client(dir, &x25519))
         }
+        HostCommand::Restart => with_data("restart", |_| restart()),
     }
 }
 
@@ -69,11 +74,49 @@ fn switched(said: &str) {
     println!("{}{rest}", style::to(To::Out, Look::Good, done));
 }
 
-/// A change to the host's data: what it came to, and when a running host
-/// sees it.
+/// A change to the host's data: what it came to, and the running host
+/// restarted to read it.
 fn changed(what: &str) {
     println!("{what}");
-    println!("{}", style::to(To::Out, Look::Quiet, RESTART));
+    let Some(program) = engine::host_program() else {
+        println!("{}", style::to(To::Out, Look::Quiet, AT_START));
+        return;
+    };
+    match engine::command(&program).arg("restart").output() {
+        Ok(out) if out.status.success() => {
+            let said = String::from_utf8_lossy(&out.stdout);
+            println!("{}", style::to(To::Out, Look::Quiet, said.trim()));
+        }
+        // No host runs: the one that starts reads the change.
+        Ok(out) if out.status.code() == Some(i32::from(NOT_RUNNING)) => {}
+        Ok(out) => {
+            style::warn(engine::said(&out.stderr, &out.stdout));
+            println!("{}", style::to(To::Out, Look::Quiet, AT_START));
+        }
+        Err(e) => {
+            style::warn(format!("{}: {e}", program.display()));
+            println!("{}", style::to(To::Out, Look::Quiet, AT_START));
+        }
+    }
+}
+
+/// `helio host restart`: what the host's program says. It exits with
+/// [`NOT_RUNNING`] when no host runs, which is a failure here.
+fn restart() -> ExitCode {
+    let Some(program) = engine::host_program() else {
+        return fail(engine::no_program());
+    };
+    match engine::command(&program).arg("restart").output() {
+        Ok(out) => {
+            let _ = std::io::stdout().write_all(&out.stdout);
+            let _ = std::io::stderr().write_all(&out.stderr);
+            match out.status.code() {
+                Some(0) => ExitCode::SUCCESS,
+                _ => ExitCode::FAILURE,
+            }
+        }
+        Err(e) => fail(format!("{}: {e}", program.display())),
+    }
 }
 
 /// The exit code a program gave, as this one's.
@@ -235,10 +278,13 @@ fn list_clients(dir: &Path) -> ExitCode {
     ExitCode::SUCCESS
 }
 
-/// What a running host makes of a change to its clients: it reads them
-/// when it starts.
-const RESTART: &str =
-    "A running host takes it at its next start (helio host disable, then enable).";
+/// A change to the host's clients that the host could not be restarted
+/// for: it reads them when it starts.
+const AT_START: &str = "The host takes it when it next starts (helio host restart).";
+
+/// `helio-host restart`'s exit code when no host runs (helio-host's
+/// `hosting::NOT_RUNNING`).
+const NOT_RUNNING: u8 = 3;
 
 fn permissions(dir: &Path, x25519: &str, set: Option<Permissions>) -> ExitCode {
     let mut clients = Clients::load(dir);

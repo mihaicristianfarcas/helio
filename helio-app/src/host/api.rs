@@ -364,6 +364,12 @@ pub struct Status {
     pub port_mapping: String,
     /// What macOS lets the host do (None elsewhere).
     pub grants: Option<Grants>,
+    /// A restart the host has ahead: "after_session" (it waits for the
+    /// session to end) or "now" (it is stopping to start again).
+    pub restart: Option<String>,
+    /// When the host's process started (Unix seconds): another value is a
+    /// host that started again.
+    pub started_unix: u64,
 }
 
 /// What macOS lets the host do: Screen Recording, to capture at all, and

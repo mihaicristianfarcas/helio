@@ -66,6 +66,9 @@ pub struct Host {
     sessions: Sender<crate::session::SessionCmd>,
     session_thread: Mutex<Option<std::thread::JoinHandle<()>>>,
     stop: AtomicBool,
+    /// When this process started (Unix seconds): the app tells a host that
+    /// started again by it.
+    pub started_unix: u64,
 }
 
 pub use helio_host_data::identity_path;
@@ -149,6 +152,9 @@ impl Host {
             sessions: tx,
             session_thread: Mutex::new(Some(session_thread)),
             stop: AtomicBool::new(false),
+            started_unix: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_or(0, |d| d.as_secs()),
         }))
     }
 
@@ -249,6 +255,24 @@ impl Host {
         let _ = self.sessions.send(crate::session::SessionCmd::Shutdown);
     }
 
+    /// Restart the host, for `why`: now if no session runs, else when it
+    /// ends (`restart`).
+    pub fn request_restart(&self, why: &str) -> crate::restart::When {
+        self.shared
+            .restart
+            .request(why, || self.shared.active_peer.load(Ordering::Acquire) != 0)
+    }
+
+    /// A restart asked for and waiting, or begun.
+    pub fn restart_pending(&self) -> Option<crate::restart::When> {
+        self.shared.restart.pending()
+    }
+
+    /// Whether the host stopped to start again (once `serve` returned).
+    pub fn restarting(&self) -> bool {
+        self.shared.restart.now()
+    }
+
     /// Admit a newly paired client to the tunnel, with these permissions
     /// (None: what a client of its kind gets by default).
     pub fn add_client(
@@ -298,6 +322,13 @@ impl Host {
         let mut buf = vec![0u8; 65536];
         let mut last_tick = Instant::now();
         while !self.stop.load(Ordering::Relaxed) {
+            // A restart due: the host's ordinary stop, which every thread
+            // that looks at `stop` follows. Looked at once a datagram or
+            // the receive timeout (100 ms) at most.
+            if self.shared.restart.now() {
+                self.stop.store(true, Ordering::Relaxed);
+                break;
+            }
             match self.endpoint.recv(&mut buf) {
                 Ok(Received::Data(peer, len)) => self.on_packet(&peer, &buf[..len]),
                 Ok(Received::Foreign(from, len)) => {

@@ -247,6 +247,8 @@ pub struct Shared {
     pub agent_log: Mutex<VecDeque<AgentLogEntry>>,
     /// The session's clipboard sharing, when its client asked for it.
     pub clip: Mutex<Option<Clip>>,
+    /// A restart asked for, which may wait for the session to end.
+    pub restart: crate::restart::Restart,
 }
 
 /// Clipboard sharing: here, or (a Windows host, which runs as SYSTEM) in a
@@ -611,6 +613,11 @@ impl SessionManager {
         );
         if let Err(status) = self.platform.preflight() {
             self.refuse(&peer, &req, status);
+            // Refused for want of Screen Recording, which may have been
+            // allowed since the host asked: it restarts to have it, and the
+            // device's next try streams (`permissions`). No session runs.
+            #[cfg(target_os = "macos")]
+            crate::permissions::follow_grant(|why| self.shared.restart.request(why, || false));
             return;
         }
 
@@ -1221,6 +1228,7 @@ impl SessionManager {
             notify == Some(EndReason::Shutdown),
             &self.shared,
         );
+        self.shared.restart.session_ended();
     }
 
     fn on_loss(&mut self, peer: PeerId, report: LossReport) {

@@ -75,6 +75,7 @@ pub enum HostCommand {
     RemoveClient {
         x25519: String,
     },
+    Restart,
 }
 
 /// A command line that asks for nothing `helio` does.
@@ -229,6 +230,10 @@ fn parse_host(args: &[String]) -> Result<HostCommand, Usage> {
         "disable" => {
             exactly(command, rest, [], true)?;
             HostCommand::Disable
+        }
+        "restart" => {
+            exactly(command, rest, [], true)?;
+            HostCommand::Restart
         }
         "status" => match rest {
             [] => HostCommand::Status { json: false },
@@ -523,6 +528,7 @@ mod tests {
     fn each_host_command_reads_its_words() {
         assert_eq!(host("host enable"), HostCommand::Enable);
         assert_eq!(host("host disable"), HostCommand::Disable);
+        assert_eq!(host("host restart"), HostCommand::Restart);
         assert_eq!(host("host status"), HostCommand::Status { json: false });
         assert_eq!(
             host("host status --json"),

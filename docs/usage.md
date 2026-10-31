@@ -166,8 +166,10 @@ On a Mac the host asks for Screen Recording and Accessibility with macOS's
 own prompts as it first starts, as **Helio Host**: System Settings lists it,
 not Helio, under both. Helio's Hosting page says, for each, whether
 macOS allows it, with a button to its pane of System Settings, and notices
-when it is allowed. After Screen Recording is turned on there, macOS asks
-to quit and reopen the host.
+when it is allowed. A host that runs cannot use Screen Recording allowed
+after it started, so it restarts to have it: when you come back to Helio
+from System Settings, or when a device next tries to connect (that try is
+refused, and the next one streams).
 
 Quitting Helio never stops the host: only the switch does. Uninstalling Helio
 turns hosting off first ([install.md](install.md#uninstalling)). Your
@@ -202,8 +204,8 @@ the host runs on.
 | | Share the clipboard with clients | on | `clipboard` |
 | Video | NVENC preset | P1 (fastest), as Sunshine | `nvenc_preset` |
 | | Two-pass encoding | on | `nvenc_two_pass` |
-| | Full GPU power for Helio Host (NVIDIA, after a restart) | on | `nvidia_max_power` |
-| | OpenGL and Vulkan through DXGI (NVIDIA, system-wide while Helio Host runs, after a restart) | on | `nvidia_dxgi_present` |
+| | Full GPU power for Helio Host (NVIDIA) | on | `nvidia_max_power` |
+| | OpenGL and Vulkan through DXGI (NVIDIA, system-wide while Helio Host runs) | on | `nvidia_dxgi_present` |
 | | Allow HEVC, Allow AV1 | on | `allow_hevc`, `allow_av1` |
 | | Allow HDR, Allow YUV 4:4:4 (for a client that asks) | on | `allow_hdr`, `allow_yuv444` |
 | | Maximum bitrate, maximum frame rate | the client's choice | `max_bitrate_kbps`, `max_fps` |
@@ -221,8 +223,12 @@ the Network group in **Settings → Hosting**, under the switch; keeping the
 monitors on and the Video group in **Settings → Video** ("Streaming from
 this PC", "What devices may ask of this PC"); the clipboard in **Settings →
 Input**; the AI agents group in **Settings → Agent setup**. A computer that
-only plays shows none of them. A changed name or port applies after the
-host restarts (the page offers to).
+only plays shows none of them.
+
+The host reads its name, its ports and the two NVIDIA settings only when it
+starts, so changing one restarts it: at once, or when the stream that runs
+ends. Helio's settings pages and the web UI say which, and the web UI asks
+you to sign in again after it.
 Helio Host's data folder holds `config.toml`, its identity, the paired clients,
 the web UI's certificate and account, and `logs/`:
 
@@ -282,8 +288,9 @@ What the device hears:
   stream started comes on with the next stream.
 
 From a terminal: `helio host permissions X25519 view,keyboard,mouse`
-([cli.md](cli.md#helio-host--this-computer-as-a-host)); a running host takes
-that change at its next start.
+([cli.md](cli.md#helio-host--this-computer-as-a-host)), which restarts a
+running host to take the change: at once, or when the stream that runs
+ends.
 
 ## Updates
 

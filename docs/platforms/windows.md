@@ -65,7 +65,9 @@ Apollo's SudoVDA there, `enable` and `disable` left it as it was.
 `HelioHost` (LocalSystem, automatic start) launches `helio-host host` into the
 active console session with a copy of its SYSTEM token, and relaunches it
 when the console session changes (sign-out, fast user switching, a reboot to
-the sign-in screen) or the host exits. Only SYSTEM can open the secure
+the sign-in screen) or the host exits: at once when the host stopped to
+start again (a changed name, port or NVIDIA setting; it exits with code 75
+for that), else 3 s later. Only SYSTEM can open the secure
 desktop, so only a host running this way can capture and control UAC
 prompts, the lock screen and the sign-in screen — the model Sunshine uses
 (`helio-host/src/service.rs`).
@@ -363,5 +365,7 @@ Building it needs an FFmpeg 8 shared build and LLVM (for the FFmpeg
 bindings): see [../install.md](../install.md#helio-on-windows).
 
 Not verified yet: keyboard, mouse and controllers streaming another machine
-(tests so far streamed the same PC, which feeds input back into itself), and
-on-glass timing on a real monitor.
+(tests so far streamed the same PC, which feeds input back into itself),
+on-glass timing on a real monitor, and HelioHost starting the host again at
+once after a change that restarts it (type-checked; the restart itself ran
+on a Mac).

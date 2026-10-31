@@ -11,6 +11,18 @@
 //! for the terminal, which is the user's to decide). `HELIO_HOST_NO_PROMPTS` has
 //! the helper only report them too (tests run it while someone works at the
 //! Mac).
+//!
+//! Screen Recording allowed while the host runs does not reach it: macOS
+//! answers a process what it answered when the process first asked (on
+//! macOS 26.5, a host started before the grant still read "not allowed"
+//! minutes after it, and one started after it read "allowed"). So the host
+//! asks a process of its own started now, `helio-host grants`
+//! ([`follow_grant`]), and restarts when that one is allowed. macOS judges
+//! a process by the app responsible for it, which for a child of the host
+//! is the host (launchd starts it as its own), never Helio's window that
+//! asked: a check run by the window would be the window's grant. The window
+//! asks the host to look when it comes back to the front (from System
+//! Settings), and the host looks when it refuses a session for want of it.
 
 use objc2_core_foundation::{CFBoolean, CFDictionary, CFString, CFType};
 
@@ -28,6 +40,52 @@ extern "C" {
 /// Whether macOS lets this process capture the screen.
 pub fn screen_capture_allowed() -> bool {
     unsafe { CGPreflightScreenCaptureAccess() }
+}
+
+/// `helio-host grants`: what macOS lets a host started now do, as JSON, for
+/// the host that started it ([`follow_grant`]).
+pub fn print_grants() -> std::process::ExitCode {
+    println!(
+        "{}",
+        serde_json::json!({
+            "screen": screen_capture_allowed(),
+            "accessibility": helio_input::macos::trusted(),
+        })
+    );
+    std::process::ExitCode::SUCCESS
+}
+
+/// Whether a host started now may capture the screen: `helio-host grants`,
+/// run as this host's child. None when it could not be asked.
+fn allowed_now() -> Option<bool> {
+    let program = std::env::current_exe().ok()?;
+    let out = std::process::Command::new(program)
+        .arg("grants")
+        .stdin(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .output()
+        .ok()?;
+    let v: serde_json::Value = serde_json::from_slice(&out.stdout).ok()?;
+    v.get("screen")?.as_bool()
+}
+
+/// Screen Recording allowed since this host asked: the host restarts to
+/// have it (see the module's doc), through `restart` (the host's
+/// `request_restart`). Returns when, if it does.
+pub fn follow_grant(
+    restart: impl FnOnce(&str) -> crate::restart::When,
+) -> Option<crate::restart::When> {
+    if screen_capture_allowed() {
+        return None;
+    }
+    match allowed_now() {
+        Some(true) => Some(restart("Screen Recording was allowed")),
+        Some(false) => None,
+        None => {
+            tracing::warn!("could not ask whether Screen Recording was allowed meanwhile");
+            None
+        }
+    }
 }
 
 fn bundled() -> bool {
