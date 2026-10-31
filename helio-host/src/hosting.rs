@@ -132,6 +132,40 @@ mod system;
 #[path = "hosting/linux.rs"]
 mod system;
 
+/// The user whose Helio may read the host's local token besides
+/// administrators: on Windows, who last turned hosting on (`enable
+/// --owner`); elsewhere the host runs as its user, whose file it is.
+pub fn owner() -> Option<String> {
+    #[cfg(windows)]
+    {
+        system::owner()
+    }
+    #[cfg(not(windows))]
+    {
+        None
+    }
+}
+
+/// `enable --owner SID`: the user who turned hosting on, from their Helio,
+/// which is not elevated (the elevated `enable` may be an administrator
+/// who typed their password for them). None without the flag (an update's
+/// `enable` keeps the owner there was); an error for a SID that is no user
+/// account's.
+#[cfg_attr(not(windows), allow(dead_code))]
+fn owner_arg(args: &[String]) -> Result<Option<String>, String> {
+    let Some(i) = args.iter().position(|a| a == "--owner") else {
+        return Ok(None);
+    };
+    match args.get(i + 1) {
+        Some(sid) if crate::private::is_account_sid(sid) => Ok(Some(sid.clone())),
+        _ => Err(
+            "helio-host enable --owner takes a user account's SID (S-1-5-21-...); \
+            nothing was changed"
+                .into(),
+        ),
+    }
+}
+
 #[cfg(windows)]
 pub use drivers::system_dir;
 #[cfg(target_os = "macos")]
@@ -140,10 +174,21 @@ pub use system::watch_app;
 pub use system::{trusted_engine, update_engine};
 
 /// `helio-host enable` (`on`) or `helio-host disable`: do it, say what happened, and
-/// exit with [`exit_code`].
-pub fn switch(on: bool) -> ! {
+/// exit with [`exit_code`]. `args`: the command line, which on Windows may
+/// name the user turning hosting on (`enable --owner SID`, [`owner_arg`]).
+pub fn switch(on: bool, args: &[String]) -> ! {
     let result = if on {
-        system::enable()
+        #[cfg(windows)]
+        {
+            owner_arg(args)
+                .map_err(Error::Failed)
+                .and_then(system::enable)
+        }
+        #[cfg(not(windows))]
+        {
+            let _ = args;
+            system::enable()
+        }
     } else {
         system::disable()
     };
@@ -366,6 +411,19 @@ pub fn systemd_state(show: &str) -> State {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn enable_takes_its_owner_only_as_a_user_accounts_sid() {
+        let args = |a: &[&str]| a.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        let sid = "S-1-5-21-3623811015-3361044348-30300820-1013";
+        assert_eq!(
+            owner_arg(&args(&["enable", "--owner", sid])),
+            Ok(Some(sid.to_string()))
+        );
+        assert_eq!(owner_arg(&args(&["enable"])), Ok(None));
+        assert!(owner_arg(&args(&["enable", "--owner"])).is_err());
+        assert!(owner_arg(&args(&["enable", "--owner", "S-1-1-0"])).is_err());
+    }
 
     #[test]
     fn needing_an_administrator_has_an_exit_code_of_its_own() {

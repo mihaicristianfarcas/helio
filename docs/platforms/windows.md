@@ -294,7 +294,8 @@ folder that is a junction, or that cannot be moved aside, refused as
 event it names for each run (`--stop-event`); `update-engine` checking
 and starting the new engine by the path its open file resolves to; the
 firewall rules set with `netsh` from System32; the clipboard helper
-inheriting only its two pipes.
+inheriting only its two pipes; Helio reading the host's token as the user
+who turned hosting on.
 
 ## Helio, the client
 

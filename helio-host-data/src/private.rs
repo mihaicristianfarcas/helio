@@ -74,10 +74,48 @@ pub fn make_public(path: &Path) {
     imp::make_public(path)
 }
 
-/// A file only SYSTEM and Administrators can read, not even its owner: the
-/// host's tokens, which a window that is not elevated must sign in for.
-pub fn restrict_to_admins(path: &Path) -> std::io::Result<()> {
-    imp::restrict_to_admins(path)
+/// The host's local token, readable by SYSTEM, Administrators and `owner`
+/// alone: the user who turned hosting on (`helio-host enable --owner`), whose
+/// Helio, not elevated, reads it as Helio on a Mac or Linux reads its
+/// host's. Without an owner, or with one that is no user account's SID
+/// ([`is_account_sid`]), administrators only.
+pub fn restrict_token(path: &Path, owner: Option<&str>) -> std::io::Result<()> {
+    imp::restrict_token(path, owner)
+}
+
+/// The local token's access list, in SDDL (see [`restrict_token`]). `P`:
+/// protected, nothing inherited; `FA` full control; `FR` read.
+#[cfg_attr(not(windows), allow(dead_code))]
+fn token_sddl(owner: Option<&str>) -> String {
+    let mut sddl = String::from("D:P(A;;FA;;;SY)(A;;FA;;;BA)");
+    if let Some(sid) = owner.filter(|s| is_account_sid(s)) {
+        sddl.push_str(&format!("(A;;FR;;;{sid})"));
+    }
+    sddl
+}
+
+/// Whether `text` is a user account's SID as Windows writes it: a local or
+/// domain account's (`S-1-5-21-` and four numbers) or a Microsoft Entra
+/// one's (`S-1-12-1-` and four numbers). Not a group everyone is in
+/// (`S-1-1-0`, `S-1-5-11`, `S-1-5-32-545`), which would make the token
+/// everyone's; and nothing else, as it goes into an access list. (A
+/// domain's groups have the same shape: `enable` asks Windows that it is a
+/// user's.)
+pub fn is_account_sid(text: &str) -> bool {
+    let Some(rest) = text
+        .strip_prefix("S-1-5-21-")
+        .or_else(|| text.strip_prefix("S-1-12-1-"))
+    else {
+        return false;
+    };
+    let parts: Vec<&str> = rest.split('-').collect();
+    parts.len() == 4
+        && parts.iter().all(|p| {
+            !p.is_empty()
+                && p.len() <= 10
+                && p.bytes().all(|b| b.is_ascii_digit())
+                && p.parse::<u32>().is_ok()
+        })
 }
 
 #[cfg(windows)]
@@ -121,7 +159,8 @@ mod imp {
     const PRIVATE_FILE: PCWSTR = w!("D:P(A;;FA;;;SY)(A;;FA;;;BA)(A;;FA;;;OW)");
     /// One of the public files.
     const PUBLIC_FILE: PCWSTR = w!("D:P(A;;FA;;;SY)(A;;FA;;;BA)(A;;FA;;;OW)(A;;FR;;;BU)");
-    /// The host's tokens.
+    /// The host's tokens, as found when the host starts (it writes its
+    /// local token again, for its owner too: `restrict_token`).
     const ADMINS_ONLY: PCWSTR = w!("D:P(A;;FA;;;SY)(A;;FA;;;BA)");
 
     /// Replace `path`'s access list with `sddl`.
@@ -330,8 +369,8 @@ mod imp {
         }
     }
 
-    /// The files `restrict_to_admins` guards (see `web`): they stay closed
-    /// to their owner too.
+    /// The files kept from everyone but administrators (see `web`), the
+    /// file's owner included.
     fn is_token(name: &std::ffi::OsStr) -> bool {
         name == "local-token" || name == "app-tokens.toml"
     }
@@ -346,8 +385,9 @@ mod imp {
         }
     }
 
-    pub fn restrict_to_admins(path: &Path) -> std::io::Result<()> {
-        set_dacl(path, ADMINS_ONLY)
+    pub fn restrict_token(path: &Path, owner: Option<&str>) -> std::io::Result<()> {
+        let sddl = HSTRING::from(super::token_sddl(owner));
+        set_dacl(path, PCWSTR(sddl.as_ptr()))
     }
 }
 
@@ -361,7 +401,64 @@ mod imp {
 
     pub fn make_public(_path: &Path) {}
 
-    pub fn restrict_to_admins(_path: &Path) -> std::io::Result<()> {
+    pub fn restrict_token(_path: &Path, _owner: Option<&str>) -> std::io::Result<()> {
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const ACCOUNT: &str = "S-1-5-21-3623811015-3361044348-30300820-1013";
+
+    #[test]
+    fn a_user_accounts_sid_may_own_the_token() {
+        assert!(is_account_sid(ACCOUNT));
+        assert!(is_account_sid(
+            "S-1-12-1-1234567890-1234567890-1234567890-4294967295"
+        ));
+    }
+
+    #[test]
+    fn a_group_everyone_is_in_may_not_own_the_token() {
+        for group in [
+            "S-1-1-0",
+            "S-1-5-11",
+            "S-1-5-32-545",
+            "S-1-5-18",
+            "S-1-5-32-544",
+        ] {
+            assert!(!is_account_sid(group), "{group}");
+        }
+    }
+
+    #[test]
+    fn text_that_would_change_the_access_list_is_no_sid() {
+        for bad in [
+            "",
+            "S-1-5-21-1-2-3-1000)(A;;FA;;;WD",
+            "S-1-5-21-1-2-3",
+            "S-1-5-21-1-2-3-4-5",
+            "S-1-5-21-1-2-3-4294967296",
+            "S-1-5-21-1-2--4",
+            "S-1-5-21-1-2-3-+4",
+            "s-1-5-21-1-2-3-4",
+            " S-1-5-21-1-2-3-4",
+            "S-1-5-21-1-2-3-4\n",
+        ] {
+            assert!(!is_account_sid(bad), "{bad:?}");
+        }
+    }
+
+    #[test]
+    fn the_token_is_read_by_system_administrators_and_its_owner_only() {
+        let admins = "D:P(A;;FA;;;SY)(A;;FA;;;BA)";
+        assert_eq!(
+            token_sddl(Some(ACCOUNT)),
+            format!("{admins}(A;;FR;;;{ACCOUNT})")
+        );
+        assert_eq!(token_sddl(None), admins);
+        assert_eq!(token_sddl(Some("S-1-1-0")), admins);
     }
 }

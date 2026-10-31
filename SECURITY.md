@@ -39,7 +39,9 @@ Tailscale's 100.64.0.0/10.
 and `helio host` use, answers on localhost only (127.0.0.1 and ::1):
 nothing on the network reaches it. It uses a self-signed certificate the
 host makes for itself, and every call carries a token: one the host writes
-for its own user, or, from a Windows Helio (which is not an administrator),
+for its own user (on Windows, readable by SYSTEM, Administrators and the
+user who turned hosting on, whom `helio-host enable` records beside the
+engine in `C:\Program Files\Helio Host`), or, from a Windows Helio (which is not an administrator),
 one it got by signing in once with an admin account made in Helio. On macOS
 and Linux there is no account and no other token: every user of the
 computer can reach localhost, and Helio there reads the host's own token.

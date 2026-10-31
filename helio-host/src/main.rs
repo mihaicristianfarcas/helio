@@ -228,8 +228,8 @@ fn main() -> ExitCode {
         // Helio's update, while hosting is on (Windows).
         #[cfg(windows)]
         "update-engine" => std::process::exit(hosting::update_engine(&args)),
-        "enable" => hosting::switch(true),
-        "disable" => hosting::switch(false),
+        "enable" => hosting::switch(true, &args),
+        "disable" => hosting::switch(false, &args),
         "status" => hosting::print_status(&dir, args.iter().any(|a| a == "--json")),
         "restart" => ask::restart(&dir),
         "pair" => ask::pair(&dir, &args[1..]),
