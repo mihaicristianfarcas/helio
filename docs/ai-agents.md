@@ -65,10 +65,12 @@ something, look over its shoulder, do a bit yourself, ask again.
   password, a key or a card number, and Shift+Delete, Ctrl+Alt+Delete,
   emptying the Trash or locking the screen. A click is never judged by rule:
   only the model knows what is under it, and clef, if you turn its
-  [screen checks](#screen-checks-cloudflare-clef) on. A question waits up
-  to 15 minutes (not counted against the turn); no answer is a no. A yes
-  to the model's own request covers the next few risky actions that carry
-  it out (2 minutes, 3 actions), so you are not asked twice.
+  [screen checks](#screen-checks-cloudflare-clef) on. A question about a
+  step shows it whole: all of a text the agent would type, a newline as
+  `\n`. A question waits up to 15 minutes (not counted against the turn);
+  no answer is a no. A yes to the model's own request covers the next few
+  risky actions that carry it out (2 minutes, 3 actions), so you are not
+  asked twice.
 - **Notifications** (macOS): when a session is not on screen, Helio tells you
   when the agent asks for your go-ahead (with **Allow** and **Don't** on the
   notification), waits at a sign-in or administrator prompt, is done, or
@@ -394,7 +396,8 @@ the screen (prompt injection), acting through helio. Such an agent cannot
 act while a person streams, over a person, on a secure screen, while someone
 uses the host, beyond its permissions, beyond its run's budget or after its run,
 or unseen: every action is in Helio Host's log, and a person can watch and stop
-it.
+it. The log names a text the agent typed by its length, never what it says:
+it is often a password.
 
 It does not protect against:
 

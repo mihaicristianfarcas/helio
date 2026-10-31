@@ -23,6 +23,15 @@ const POLL: Duration = Duration::from_millis(200);
 const COVER_FOR: Duration = Duration::from_secs(120);
 const COVER_ACTIONS: u32 = 3;
 
+/// An input action at the gate.
+pub struct Step<'a> {
+    /// What the person is asked about: the whole action (`Action::in_full`).
+    pub what: &'a str,
+    /// What the log and the model's answers call it, with no typed text
+    /// (`Action::for_log`).
+    pub label: &'a str,
+}
+
 pub struct Control {
     dir: PathBuf,
     approvals: Approvals,
@@ -59,7 +68,7 @@ impl Control {
     /// person is waited for.
     pub fn gate(
         &mut self,
-        action: &str,
+        step: &Step,
         risk: Option<&str>,
         stop: &dyn Fn() -> Option<String>,
         max_wait: Duration,
@@ -85,9 +94,10 @@ impl Control {
         };
         if self.ask(
             &Ask {
-                what: action.to_string(),
+                what: step.what.to_string(),
                 why,
             },
+            step.label,
             from,
             stop,
             max_wait,
@@ -95,8 +105,9 @@ impl Control {
             Ok(())
         } else {
             Err(format!(
-                "The person said no to {action}. Don't do it: do it another way, \
-                    or stop and report."
+                "The person said no to {}. Don't do it: do it another way, or stop \
+                    and report.",
+                step.label
             ))
         }
     }
@@ -112,7 +123,7 @@ impl Control {
         if self.approvals == Approvals::Off {
             return Ok(true);
         }
-        let yes = self.ask(ask, "model", stop, max_wait)?;
+        let yes = self.ask(ask, &ask.what, "model", stop, max_wait)?;
         self.covered = yes.then(|| (Instant::now() + COVER_FOR, COVER_ACTIONS));
         Ok(yes)
     }
@@ -127,7 +138,7 @@ impl Control {
         stop: &dyn Fn() -> Option<String>,
         max_wait: Duration,
     ) -> Result<bool, String> {
-        match self.ask(ask, "screen", stop, max_wait) {
+        match self.ask(ask, &ask.what, "screen", stop, max_wait) {
             Err(why) if stop().is_some() => Err(why),
             answer => Ok(answer.unwrap_or(false)),
         }
@@ -147,9 +158,12 @@ impl Control {
         }
     }
 
+    /// Put `ask` to the person and wait for the answer; `label` names it in
+    /// the log and in what the model is told.
     fn ask(
         &mut self,
         ask: &Ask,
+        label: &str,
         from: &str,
         stop: &dyn Fn() -> Option<String>,
         max_wait: Duration,
@@ -167,7 +181,7 @@ impl Control {
         tracing::info!(
             n,
             from,
-            action = ask.what,
+            action = label,
             why = ask.why,
             "waiting for the person's yes"
         );
@@ -187,9 +201,8 @@ impl Control {
             }
             if started.elapsed() > max_wait {
                 break Err(format!(
-                    "Nobody answered whether to {} (waited {} minutes). Don't do it: stop \
-                        here and report that it needs the person's go-ahead.",
-                    ask.what,
+                    "Nobody answered whether to {label} (waited {} minutes). Don't do it: \
+                        stop here and report that it needs the person's go-ahead.",
                     started.elapsed().as_secs() / 60
                 ));
             }
@@ -257,6 +270,10 @@ mod tests {
 
     const WAIT: Duration = Duration::from_secs(120);
 
+    fn step<'a>(what: &'a str, label: &'a str) -> Step<'a> {
+        Step { what, label }
+    }
+
     /// Answer the asks in `dir` in turn with `answers`, as the person would.
     fn answerer(dir: PathBuf, answers: Vec<bool>) -> std::thread::JoinHandle<Vec<Ask>> {
         std::thread::spawn(move || {
@@ -286,10 +303,21 @@ mod tests {
         let person = answerer(d.clone(), vec![false, true]);
         let none = || None;
         assert!(c
-            .gate("left_click (1, 1)", None, &none, WAIT)
+            .gate(
+                &step("left_click (1, 1)", "left_click (1, 1)"),
+                None,
+                &none,
+                WAIT
+            )
             .unwrap_err()
             .contains("said no"));
-        c.gate("left_click (2, 2)", None, &none, WAIT).unwrap();
+        c.gate(
+            &step("left_click (2, 2)", "left_click (2, 2)"),
+            None,
+            &none,
+            WAIT,
+        )
+        .unwrap();
         let seen = person.join().unwrap();
         assert_eq!(
             seen.iter().map(|a| a.what.as_str()).collect::<Vec<_>>(),
@@ -306,7 +334,13 @@ mod tests {
         };
         let t = Instant::now();
         c.approvals = Approvals::Off;
-        c.gate("left_click (3, 3)", None, &none, WAIT).unwrap();
+        c.gate(
+            &step("left_click (3, 3)", "left_click (3, 3)"),
+            None,
+            &none,
+            WAIT,
+        )
+        .unwrap();
         assert!(
             t.elapsed() >= Duration::from_millis(250),
             "{:?}",
@@ -323,11 +357,17 @@ mod tests {
         let mut c = Control::new(d.clone(), Approvals::Risky);
         let none = || None;
         // Routine: at once, nothing asked.
-        c.gate("left_click (1, 1)", None, &none, WAIT).unwrap();
+        c.gate(
+            &step("left_click (1, 1)", "left_click (1, 1)"),
+            None,
+            &none,
+            WAIT,
+        )
+        .unwrap();
         assert!(pending(&d).is_empty());
         let person = answerer(d.clone(), vec![true, true]);
         c.gate(
-            "type \"rm -rf build\"",
+            &step("type \"rm -rf build\"", "type (11 characters)"),
             Some("It types a command…"),
             &none,
             WAIT,
@@ -345,8 +385,13 @@ mod tests {
                 WAIT
             )
             .unwrap());
-        c.gate("key shift+Delete", Some("Shift+Delete…"), &none, WAIT)
-            .unwrap();
+        c.gate(
+            &step("key shift+Delete", "key shift+Delete"),
+            Some("Shift+Delete…"),
+            &none,
+            WAIT,
+        )
+        .unwrap();
         let seen = person.join().unwrap();
         assert_eq!(seen[0].why, "It types a command…");
         assert_eq!(seen[1].what, "Empty the Recycle Bin");
@@ -358,7 +403,13 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let mut c = Control::new(dir.path().to_path_buf(), Approvals::Off);
         let none = || None;
-        c.gate("type \"rm -rf /\"", Some("…"), &none, WAIT).unwrap();
+        c.gate(
+            &step("type \"rm -rf /\"", "type (8 characters)"),
+            Some("…"),
+            &none,
+            WAIT,
+        )
+        .unwrap();
         assert!(c
             .request(
                 &Ask {
@@ -396,14 +447,19 @@ mod tests {
         set_paused(dir.path(), true);
         let mut c = Control::new(dir.path().to_path_buf(), Approvals::Off);
         let e = c
-            .gate("key Return", None, &|| Some("Stopped.".into()), WAIT)
+            .gate(
+                &step("key Return", "key Return"),
+                None,
+                &|| Some("Stopped.".into()),
+                WAIT,
+            )
             .unwrap_err();
         assert_eq!(e, "Stopped.");
         let mut c = Control::new(dir.path().to_path_buf(), Approvals::Risky);
         set_paused(dir.path(), false);
         let e = c
             .gate(
-                "key shift+Delete",
+                &step("key shift+Delete", "key shift+Delete"),
                 Some("…"),
                 &|| Some("Stopped.".into()),
                 WAIT,
