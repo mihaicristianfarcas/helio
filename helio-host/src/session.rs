@@ -1033,13 +1033,23 @@ impl SessionManager {
     }
 
     /// A client's permissions changed: its session, or its watching, follows
-    /// at once, and it is told.
+    /// at once, and it is told. One paired again as the other kind (a
+    /// person's device now an agent, or the reverse) is let go: the rules a
+    /// session is held to are its kind's, chosen as it started.
     fn permissions_changed(&mut self, key: &str, permissions: Permissions) {
         let Some(a) = self.active.as_mut() else {
             return;
         };
+        let agent_now = |public: &helio_transport::PublicIdentity| {
+            self.clients.lock().role_of(&public.x25519).0 == Role::Agent
+        };
         if a.peer.public().to_b64().0 == key {
             tracing::info!(permissions = ?permissions.names(), "the session's client's permissions changed");
+            if agent_now(a.peer.public()) != a.agent.is_some() {
+                tracing::info!("the session's client was paired again as another kind; ending it");
+                self.teardown(Some(EndReason::NotAllowed));
+                return;
+            }
             if !permissions.allows(permission::VIEW) {
                 tracing::info!("the client may no longer see the screen; ending its session");
                 self.teardown(Some(EndReason::NotAllowed));
@@ -1052,18 +1062,26 @@ impl SessionManager {
             if let Some(clip) = self.shared.clip.lock().as_ref() {
                 clip.set_directions(clip_directions(permissions));
             }
-            if let Some(run) = a.agent.as_mut() {
+            let agent = if let Some(run) = a.agent.as_mut() {
                 run.permissions = permissions;
-                // `agent_tick` works out who drives, and tells them.
                 run.last_state = None;
-            } else if let Some(input) = self.shared.input.lock().as_mut() {
-                input.allow(permissions);
-            }
+                true
+            } else {
+                if let Some(input) = self.shared.input.lock().as_mut() {
+                    input.allow(permissions);
+                }
+                false
+            };
             send_control(
                 &self.endpoint,
                 &a.peer,
                 Control::Permissions(permissions.bits()),
             );
+            // `agent_tick` works out who drives, and as far as what: now,
+            // not after the platform's turn in this loop.
+            if agent {
+                self.agent_tick(Instant::now());
+            }
             return;
         }
         let Some(run) = a.agent.as_mut() else { return };
@@ -1077,7 +1095,8 @@ impl SessionManager {
         tracing::info!(permissions = ?permissions.names(), "a watcher's permissions changed");
         w.permissions = permissions;
         let (peer, id) = (w.peer.clone(), w.peer.id());
-        if !permissions.allows(permission::VIEW | permission::WATCH) {
+        // Agents watch nobody: a watcher paired again as one stops.
+        if !permissions.allows(permission::VIEW | permission::WATCH) || agent_now(peer.public()) {
             send_control(
                 &self.endpoint,
                 &peer,
@@ -1092,6 +1111,7 @@ impl SessionManager {
             &peer,
             Control::Permissions(permissions.bits()),
         );
+        self.agent_tick(Instant::now());
     }
 
     /// A watcher (or the API, `peer` 0) acts on the agent.
