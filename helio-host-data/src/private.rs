@@ -2,10 +2,10 @@
 //!
 //! Helio Host's data folder there is under `C:\ProgramData`, whose default
 //! permissions let every local user read what is in it and create files in
-//! it. The folder holds the host's private keys, its rendezvous keys, the web
-//! UI's TLS key and credentials, and the paired clients: readable, they let a
-//! local user impersonate the host; and a file planted before the host first
-//! wrote it (`web-credentials.toml`) would be an admin account.
+//! it. The folder holds the host's private keys, its rendezvous keys, the
+//! API's TLS key and token, and the paired clients: readable, they let a
+//! local user impersonate the host or use its API; and a file planted before
+//! the host first wrote it (`clients.toml`) would be a paired device.
 //!
 //! So the folder is private by default: only SYSTEM, Administrators and the
 //! folder's owner may read or write it, and everything created in it inherits
@@ -14,9 +14,8 @@
 //! (the web port) and `web-cert.pem` (the certificate to pin).
 //!
 //! And the folder must be the host's from the start. Any user may create
-//! `C:\ProgramData\Helio Host` before the host first runs, and fill it: with an
-//! admin account for the host's API, a paired device of their own, the host's
-//! keys. Its owner would also keep the right to change its permissions. So
+//! `C:\ProgramData\Helio Host` before the host first runs, and fill it: with a
+//! paired device of their own, the host's keys. Its owner would also keep the right to change its permissions. So
 //! the host trusts the folder only when SYSTEM or Administrators own it; it
 //! creates it owned by Administrators, private from its first instant (not
 //! private a moment later, when something could already be in it); and a
@@ -369,10 +368,10 @@ mod imp {
         }
     }
 
-    /// The files kept from everyone but administrators (see `web`), the
-    /// file's owner included.
+    /// The file kept from everyone but administrators (see `web`), the
+    /// file's owner included, until the host writes it again.
     fn is_token(name: &std::ffi::OsStr) -> bool {
-        name == "local-token" || name == "app-tokens.toml"
+        name == "local-token"
     }
 
     pub fn make_public(path: &Path) {

@@ -18,9 +18,9 @@ mod logs;
 mod overview;
 mod permissions;
 mod settings;
-mod signin;
 pub mod switch;
 pub mod tray;
+mod unavailable;
 pub mod worker;
 
 use std::collections::HashMap;
@@ -64,7 +64,6 @@ enum Confirm {
     Unpair(Client),
     EndSession(String),
     StopAgent,
-    SignOut,
 }
 
 pub struct HostPages {
@@ -88,10 +87,6 @@ pub struct HostPages {
     /// that is to make way, until another answers.
     restarting: Option<u64>,
     confirm: Option<Confirm>,
-    user: Entity<TextField>,
-    password: Entity<TextField>,
-    sign_in_error: Option<String>,
-    signing_in: bool,
     name: Entity<TextField>,
     ports: [Entity<TextField>; 3],
     logs_scroll: ScrollHandle,
@@ -137,15 +132,6 @@ impl HostPages {
         })
         .detach();
 
-        let user = cx.new(|cx| TextField::new(cx).placeholder("User name"));
-        let password = cx.new(|cx| TextField::new(cx).password().placeholder("Password"));
-        for f in [&user, &password] {
-            cx.subscribe_in(f, window, |this, _, e, _, cx| match e {
-                FieldEvent::Submit => this.sign_in(cx),
-                _ => cx.notify(),
-            })
-            .detach();
-        }
         let name = cx.new(|cx| TextField::new(cx).placeholder("This computer's name"));
         cx.subscribe_in(&name, window, |this, f, e, _, cx| {
             if *e == FieldEvent::Submit {
@@ -182,10 +168,6 @@ impl HostPages {
             note: None,
             restarting: None,
             confirm: None,
-            user,
-            password,
-            sign_in_error: None,
-            signing_in: false,
             name,
             ports,
             logs_scroll: ScrollHandle::new(),
@@ -238,12 +220,6 @@ impl HostPages {
         let open = self.confirm.take().is_some() | self.editing.take().is_some();
         cx.notify();
         open
-    }
-
-    /// Sign out of the host here (asked first).
-    pub fn ask_sign_out(&mut self, cx: &mut Context<Self>) {
-        self.confirm = Some(Confirm::SignOut);
-        cx.notify();
     }
 
     /// Ask the host how things are now (the window came forward: from
@@ -363,14 +339,6 @@ impl HostPages {
             Done::Failed(e) => {
                 self.note = Some((IconName::Warning, Ink::DANGER, e, Instant::now()))
             }
-            Done::SignedIn => {
-                self.signing_in = false;
-                self.sign_in_error = None;
-            }
-            Done::SignInFailed(e) => {
-                self.signing_in = false;
-                self.sign_in_error = Some(e);
-            }
         }
     }
 
@@ -425,29 +393,6 @@ impl HostPages {
         cx.notify();
     }
 
-    fn sign_in(&mut self, cx: &mut Context<Self>) {
-        let user = self.user.read(cx).text().trim().to_string();
-        let password = self.password.read(cx).text().to_string();
-        if user.is_empty() || password.is_empty() || self.signing_in {
-            return;
-        }
-        let setup = matches!(self.snap.conn, Conn::SignIn { setup: true });
-        if setup && password.len() < 8 {
-            self.sign_in_error = Some("Choose a password of at least 8 characters.".into());
-            cx.notify();
-            return;
-        }
-        self.signing_in = true;
-        self.sign_in_error = None;
-        self.password.update(cx, |f, cx| f.set_text("", cx));
-        self.send(Cmd::SignIn {
-            user,
-            password,
-            setup,
-        });
-        cx.notify();
-    }
-
     fn os(&self) -> &str {
         if self.snap.state.os.is_empty() {
             std::env::consts::OS
@@ -459,11 +404,13 @@ impl HostPages {
     // -----------------------------------------------------------------------
     // Drawing
 
-    fn body(&mut self, t: Theme, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
+    fn body(&mut self, t: Theme, cx: &mut Context<Self>) -> AnyElement {
         match self.snap.conn.clone() {
-            Conn::Connecting => signin::waiting("connecting-page", "Connecting to Helio Host…", t),
+            Conn::Connecting => {
+                unavailable::waiting("connecting-page", "Connecting to Helio Host…", t)
+            }
             Conn::NotRunning => self.not_running(t, cx),
-            Conn::SignIn { setup } => self.sign_in_page(setup, t, window, cx),
+            Conn::NotAllowed => self.not_allowed(t, cx),
             Conn::Ready => match self.page {
                 Page::Overview => self.overview(t, cx),
                 Page::Devices => self.devices(t, cx),
@@ -489,11 +436,6 @@ impl HostPages {
                 "Stop the agent?".into(),
                 "Its session ends, and it cannot start another until you allow it again.".into(),
                 "Stop Agent",
-            ),
-            Confirm::SignOut => (
-                "Sign out?".into(),
-                "This window forgets its token; the host stops taking it.".into(),
-                "Sign Out",
             ),
         };
         let body = div()
@@ -533,7 +475,6 @@ impl HostPages {
                                     Some(Confirm::Unpair(c)) => this.send(Cmd::Unpair(c.key)),
                                     Some(Confirm::EndSession(_)) => this.send(Cmd::EndSession),
                                     Some(Confirm::StopAgent) => this.send(Cmd::AgentOp("stop")),
-                                    Some(Confirm::SignOut) => this.send(Cmd::SignOut),
                                     None => {}
                                 }
                                 cx.notify();
@@ -553,13 +494,8 @@ impl Drop for HostPages {
 
 impl HostPages {
     /// The page shown, for the window's page column.
-    pub fn render_page(
-        &mut self,
-        t: Theme,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> AnyElement {
-        self.body(t, window, cx)
+    pub fn render_page(&mut self, t: Theme, cx: &mut Context<Self>) -> AnyElement {
+        self.body(t, cx)
     }
 
     /// The sheet open over the window (a confirmation, a device's

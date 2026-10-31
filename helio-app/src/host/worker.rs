@@ -31,12 +31,6 @@ pub enum Cmd {
     /// Whether macOS has allowed Screen Recording since the host asked;
     /// allowed, the host restarts to have it.
     CheckGrants,
-    SignIn {
-        user: String,
-        password: String,
-        setup: bool,
-    },
-    SignOut,
     /// Whether the Logs page is open (logs are read only then).
     WantLogs(bool),
     /// Whether a window is open (see the module's words on the tray).
@@ -49,9 +43,9 @@ pub enum Conn {
     #[default]
     Connecting,
     NotRunning,
-    SignIn {
-        setup: bool,
-    },
+    /// The host runs, but its token is not this user's to read: another
+    /// user's host, or (Windows) one another user turned on.
+    NotAllowed,
     Ready,
 }
 
@@ -64,8 +58,6 @@ pub struct Snapshot {
     pub log: Vec<LogEntry>,
     pub config: Option<Value>,
     pub logs: Option<String>,
-    /// Signed in with the local token (nothing to sign out of).
-    pub local: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -78,8 +70,6 @@ pub enum Done {
         restart: bool,
     },
     Failed(String),
-    SignedIn,
-    SignInFailed(String),
 }
 
 pub enum Msg {
@@ -158,13 +148,11 @@ fn run(cmds: Receiver<Cmd>, out: Sender<Msg>, wake: impl Fn()) {
         );
         if snap.conn != before {
             match &snap.conn {
-                Conn::Ready => tracing::info!(
-                    host = snap.state.name,
-                    local_token = snap.local,
-                    "connected to the host"
-                ),
+                Conn::Ready => tracing::info!(host = snap.state.name, "connected to the host"),
                 Conn::NotRunning => tracing::info!("the host is not running"),
-                Conn::SignIn { setup } => tracing::info!(setup, "the host wants its admin account"),
+                Conn::NotAllowed => {
+                    tracing::info!("the host's token is not this user's to read")
+                }
                 Conn::Connecting => {}
             }
         }
@@ -206,21 +194,18 @@ fn refresh(
         *api = Api::discover();
     }
     if !api.has_token() {
-        snap.conn = Conn::SignIn {
-            setup: snap.state.setup_needed,
-        };
+        snap.conn = Conn::NotAllowed;
         return;
     }
-    snap.local = api.local;
     match api.get("/api/status").and_then(|v| {
         serde_json::from_value::<Status>(v).map_err(|e| Failure::Other(e.to_string()))
     }) {
         Ok(s) => snap.status = Some(s),
-        Err(Failure::SignIn) => {
-            api.drop_token();
-            snap.conn = Conn::SignIn {
-                setup: snap.state.setup_needed,
-            };
+        Err(Failure::NotAllowed) => {
+            // A token from before the host started again: the next look
+            // reads its new one.
+            *api = Api::discover();
+            snap.conn = Conn::NotAllowed;
             return;
         }
         Err(Failure::NotRunning) => {
@@ -255,17 +240,15 @@ fn execute(api: &mut Api, snap: &mut Snapshot, cmd: Cmd) -> Done {
     // What is asked, never a PIN or a password.
     match &cmd {
         Cmd::SubmitPin(id, ..) => tracing::info!(request = id, "entering a PIN"),
-        Cmd::SignIn { user, setup, .. } => tracing::info!(user, setup, "signing in"),
         Cmd::PutConfig(_) => tracing::info!("saving settings"),
         other => tracing::info!(?other, "asking the host"),
     }
     let done = execute_inner(api, snap, cmd);
     match &done {
-        Done::Failed(e) | Done::SignInFailed(e) => tracing::warn!(error = e, "the host said no"),
+        Done::Failed(e) => tracing::warn!(error = e, "the host said no"),
         Done::PinFailed(id, e) => tracing::warn!(request = id, error = e, "pairing failed"),
         Done::Paired(name) => tracing::info!(client = name, "paired"),
         Done::Saved { restart } => tracing::debug!(restart, "done"),
-        Done::SignedIn => tracing::info!("signed in"),
     }
     done
 }
@@ -333,22 +316,6 @@ fn execute_inner(api: &mut Api, snap: &mut Snapshot, cmd: Cmd) -> Done {
                 restart: restarts(&v),
             })
             .unwrap_or_else(fail),
-        Cmd::SignIn {
-            user,
-            password,
-            setup,
-        } => {
-            let name = format!("Helio on {}", snap.state.name);
-            match api.sign_in(&user, &password, setup, &name) {
-                Ok(()) => Done::SignedIn,
-                Err(e) => Done::SignInFailed(e),
-            }
-        }
-        Cmd::SignOut => {
-            api.sign_out();
-            snap.conn = Conn::SignIn { setup: false };
-            Done::Saved { restart: false }
-        }
         Cmd::WantLogs(_) | Cmd::Watched(_) | Cmd::Refresh => Done::Saved { restart: false },
     }
 }

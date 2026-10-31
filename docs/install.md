@@ -338,9 +338,6 @@ Details: [platforms/linux.md](platforms/linux.md).
    On a host you cannot sit at, give it to the host from a terminal there,
    over SSH: `helio host pair PIN` ([cli.md](cli.md#helio-host--this-computer-as-a-host)).
 
-On Windows, the first time, Helio on the host asks you to create the host's
-admin account: Helio is not an administrator there, and signs in to the host
-with it once.
 Pairing is done once, on the local network; afterwards Helio connects from
 anywhere ([networking.md](networking.md)). Next: [usage.md](usage.md).
 

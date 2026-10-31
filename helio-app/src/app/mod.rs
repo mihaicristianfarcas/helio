@@ -961,7 +961,7 @@ impl Render for HelioApp {
             Page::Host(_) => match self.host.clone() {
                 Some(host) => host.update(cx, |h, cx| {
                     areas.extend(h.scroll_handles());
-                    h.render_page(t, window, cx)
+                    h.render_page(t, cx)
                 }),
                 None => self.render_hosting_page(t, cx),
             },

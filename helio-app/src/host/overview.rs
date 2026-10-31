@@ -15,7 +15,7 @@ use super::{ago, device_word, duration, info_row, now_ms, page, Confirm, HostPag
 impl HostPages {
     pub(super) fn overview(&mut self, t: Theme, cx: &mut Context<Self>) -> AnyElement {
         let Some(s) = self.snap.status.clone() else {
-            return super::signin::waiting("overview-page", "Asking Helio Host how it is…", t);
+            return super::unavailable::waiting("overview-page", "Asking Helio Host how it is…", t);
         };
         let subtitle = match &s.session {
             Some(sess) if sess.agent.is_some() => format!(
@@ -38,14 +38,7 @@ impl HostPages {
             .child(helio_ui::page_header(
                 s.name.clone(),
                 Some(subtitle.into()),
-                // Signed in with an account (not the local token): a way
-                // out.
-                (!self.snap.local).then(|| {
-                    button("sign-out", "Sign Out", t)
-                        .icon(IconName::Power)
-                        .on_click(cx.listener(|this, _, _, cx| this.ask_sign_out(cx)))
-                        .into_any_element()
-                }),
+                None,
                 t,
             ));
         if let Some(p) = pending {

@@ -181,8 +181,9 @@ With hosting on, Helio's **This computer** pages and **Settings → Hosting**
 are where you see and end the session, pair and unpair devices, set what
 each may do, change the host's settings and read its log. They talk to the
 host through its API, which answers this computer only: nothing on the
-network can. On Windows, Helio is not an administrator, so it signs in to
-the host once, with an admin account it asks you to make the first time.
+network can. They use the token the host writes for its own user: on
+Windows, for the user who turned hosting on, so another account's Helio
+shows **Another user's host** until hosting is turned on from it.
 
 A host you cannot sit at pairs from a terminal, over SSH: start pairing on
 the device (`helio pair HOST`, or **Add Host** in Helio), then give the PIN
@@ -232,7 +233,7 @@ The host reads its name, its ports and the two NVIDIA settings only when it
 starts, so changing one restarts it: at once, or when the stream that runs
 ends. Helio's settings pages say which.
 Helio Host's data folder holds `config.toml`, its identity, the paired clients,
-its API's certificate and tokens, the admin account (Windows), and `logs/`:
+its API's certificate and token, and `logs/`:
 
 | System | Helio Host's data folder |
 |---|---|

@@ -243,16 +243,6 @@ impl HelioApp {
                     Some(host) => host.update(cx, |h, cx| h.demo_permissions(name, cx)),
                     None => self.demo.actions.push(action),
                 }
-            } else if let Some((user, password)) = action
-                .strip_prefix("signin-as=")
-                .and_then(|c| c.split_once(':'))
-            {
-                match &self.host {
-                    Some(host) => host.update(cx, |h, cx| {
-                        h.demo_sign_in(user.to_string(), password.to_string(), cx)
-                    }),
-                    None => self.demo.actions.push(action),
-                }
             } else if let Some(address) = action.strip_prefix("pair=") {
                 self.pair_with(address.to_string(), address.to_string(), false, cx);
             } else if action == "add" {

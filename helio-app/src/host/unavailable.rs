@@ -1,11 +1,10 @@
 //! Before the host can be shown: the host not answering (starting, or
-//! failed), or signing in (Windows).
+//! failed), or another user's (its token is not this user's to read).
 //! Pages like the others: a title at the top, rows under it.
 
-use gpui::{div, prelude::*, px, AnyElement, Context, Window};
+use gpui::{div, prelude::*, px, AnyElement, Context};
 use helio_ui::{
-    button, field, notice, page_header, rows, section, setting, spinner, IconName, Ink, TextField,
-    Theme, Type,
+    button, notice, page_header, rows, section, setting, spinner, IconName, Ink, Theme, Type,
 };
 
 use super::switch::State;
@@ -92,93 +91,54 @@ impl HostPages {
         page(&self.page_scroll, t, "not-running-page", content)
     }
 
-    pub(super) fn sign_in_page(
-        &mut self,
-        setup: bool,
-        t: Theme,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> AnyElement {
-        let host = if self.snap.state.name.is_empty() {
-            "this computer".to_string()
+    /// The host runs, but its token is not this user's to read: on Windows
+    /// it is the user's who turned hosting on (and administrators'), with a
+    /// way to make this user that one; elsewhere the host is another
+    /// user's, who runs it.
+    pub(super) fn not_allowed(&mut self, t: Theme, cx: &mut Context<Self>) -> AnyElement {
+        let line = if cfg!(windows) {
+            "Another user of this PC turned hosting on, so its token is theirs to read. \
+                Turn it on again from this account to manage it here."
         } else {
-            self.snap.state.name.clone()
+            "Helio Host runs here as another user, so its token is theirs. Open Helio as \
+                that user to manage it."
         };
-        let (title, detail, action) = if setup {
-            (
-                "Create Helio Host's admin account".to_string(),
-                format!(
-                    "Helio is not an administrator here, so it signs in to the host on {host} \
-                        once, with this account. The password needs 8 characters or more."
-                ),
-                "Create Account",
-            )
-        } else {
-            (
-                format!("Sign in to Helio Host on {host}"),
-                "Use the account you made for Helio Host on this computer. This window stays \
-                 signed in."
-                    .to_string(),
-                "Sign In",
-            )
-        };
-        if !self.user.read(cx).is_focused(window)
-            && !self.password.read(cx).is_focused(window)
-            && self.user.read(cx).text().is_empty()
-        {
-            TextField::focus(&self.user, window, cx);
-        }
-        let ok = !self.user.read(cx).text().trim().is_empty()
-            && !self.password.read(cx).text().is_empty()
-            && !self.signing_in;
-        let content = div()
-            .flex()
-            .flex_col()
-            .gap(px(22.0))
-            .child(page_header(title, Some(detail.into()), None, t))
-            .child(
-                section("", t).child(rows(
-                    [
-                        setting(
-                            "User name",
-                            None,
-                            div().w(px(240.0)).child(field(&self.user, t)),
-                            t,
-                        )
-                        .into_any_element(),
-                        setting(
-                            "Password",
-                            None,
-                            div().w(px(240.0)).child(field(&self.password, t)),
-                            t,
-                        )
-                        .into_any_element(),
-                    ],
+        let mut content = div().flex().flex_col().gap(px(22.0)).child(page_header(
+            "Another user's host",
+            Some(line.into()),
+            None,
+            t,
+        ));
+        if cfg!(windows) {
+            let busy = self.hosting.read(cx).busy.is_some();
+            let take: AnyElement = if busy {
+                spinner("host-switching", 13.0, t.tertiary).into_any_element()
+            } else {
+                let hosting = self.hosting.clone();
+                button("own-host", "Turn On Here", t)
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        hosting.update(cx, |h, cx| h.turn(true, cx));
+                        this.send(Cmd::Refresh);
+                        cx.notify();
+                    }))
+                    .into_any_element()
+            };
+            content = content.child(section("", t).child(rows(
+                [setting(
+                    "Turn hosting on from this account",
+                    Some(
+                        "Windows asks for an administrator; the host then starts again with its \
+                            token readable by you, and no longer by the other user."
+                            .into(),
+                    ),
+                    take,
                     t,
-                )),
-            )
-            .children(
-                self.sign_in_error
-                    .clone()
-                    .map(|e| notice(IconName::Warning, Ink::DANGER, e, t)),
-            )
-            .child(
-                div().flex().justify_end().child(
-                    button(
-                        "sign-in",
-                        if self.signing_in {
-                            "Signing in…"
-                        } else {
-                            action
-                        },
-                        t,
-                    )
-                    .accent()
-                    .disabled(!ok)
-                    .on_click(cx.listener(|this, _, _, cx| this.sign_in(cx))),
-                ),
-            );
-        page(&self.page_scroll, t, "sign-in-page", content)
+                )
+                .into_any_element()],
+                t,
+            )));
+        }
+        page(&self.page_scroll, t, "not-allowed-page", content)
     }
 }
 
