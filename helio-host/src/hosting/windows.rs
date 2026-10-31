@@ -45,7 +45,9 @@ use windows::Win32::Security::{
 };
 use windows::Win32::Storage::FileSystem::{MoveFileExW, MOVEFILE_DELAY_UNTIL_REBOOT};
 use windows::Win32::System::Com::CoTaskMemFree;
-use windows::Win32::UI::Shell::{FOLDERID_ProgramFiles, SHGetKnownFolderPath, KF_FLAG_DEFAULT};
+use windows::Win32::UI::Shell::{
+    FOLDERID_ProgramData, FOLDERID_ProgramFiles, SHGetKnownFolderPath, KF_FLAG_DEFAULT,
+};
 
 use super::signature;
 use super::{Error, State};
@@ -443,11 +445,35 @@ pub fn update_engine(args: &[String]) -> i32 {
 /// `logs\update-engine.log` in the host's data folder, started anew; none
 /// when the folder is not there (it is, while hosting is on), rather than
 /// make it here.
+///
+/// The folder is the service's host's, found from the system, not from
+/// this process's environment (`HELIO_HOST_DATA_DIR`, `%ProgramData%`):
+/// elevated by consent, it has the environment of the user who approved
+/// it, which they and whatever runs as them can set. Nor through a link: a
+/// junction there would have an administrator write this file wherever it
+/// points.
 fn update_log() -> Option<std::fs::File> {
-    let logs = crate::config::data_dir().join("logs");
-    logs.is_dir()
+    let host_dir = system_data_dir().ok()?;
+    let logs = host_dir.join("logs");
+    // `is_dir` of what is not followed: false for a junction.
+    let real_dir = |p: &Path| std::fs::symlink_metadata(p).is_ok_and(|m| m.is_dir());
+    (real_dir(&host_dir) && real_dir(&logs))
         .then(|| std::fs::File::create(logs.join("update-engine.log")).ok())
         .flatten()
+}
+
+/// `C:\ProgramData\Helio Host`, by its known-folder ID (see [`install_dir`]):
+/// where the service's host keeps its data (`helio_host_data::data_dir` as
+/// the service has it, with no `HELIO_HOST_DATA_DIR`).
+fn system_data_dir() -> Result<PathBuf, String> {
+    // SAFETY: the shell allocates the path; it is copied, then freed once.
+    unsafe {
+        let path = SHGetKnownFolderPath(&FOLDERID_ProgramData, KF_FLAG_DEFAULT, None)
+            .map_err(|e| format!("cannot find ProgramData: {}", e.message()))?;
+        let text = path.to_string();
+        CoTaskMemFree(Some(path.0 as *const _));
+        Ok(PathBuf::from(text.map_err(|e| e.to_string())?).join("Helio Host"))
+    }
 }
 
 /// Wait for process `pid` to end, at most [`INSTALLER_WAIT`]; its exit
