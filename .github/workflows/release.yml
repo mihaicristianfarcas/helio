@@ -402,6 +402,7 @@ jobs:
           git commit -m "Casks: Helio $VERSION" \
             -m "The release's archives and their checksums, from the release workflow."
           git push origin "$branch"
+          sha=$(git rev-parse HEAD)
           gh pr create --base main --head "$branch" --title "Casks: Helio $VERSION" \
             --body "The Homebrew cask at release v$VERSION: its archives and their checksums. Merging this is what makes \`brew upgrade\` see the release."
           # GitHub holds the CI run of a pull request a workflow opened until
@@ -410,9 +411,11 @@ jobs:
           # here; if this token may not, the pull request says so and it is
           # approved by hand (Actions, or
           # gh api -X POST repos/OWNER/REPO/actions/runs/ID/approve).
+          # The run is the one for the commit just pushed: a fork can name
+          # its branch casks-VERSION too, but cannot have this commit's SHA.
           for _ in $(seq 1 20); do
-            run=$(gh run list --branch "$branch" --event pull_request --json databaseId,conclusion \
-              --jq '.[] | select(.conclusion == "action_required") | .databaseId' | head -n 1)
+            run=$(gh run list --branch "$branch" --event pull_request --json databaseId,conclusion,headSha \
+              --jq ".[] | select(.conclusion == \"action_required\" and .headSha == \"$sha\") | .databaseId" | head -n 1)
             [ -n "$run" ] && break
             sleep 6
           done
