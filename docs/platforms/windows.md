@@ -366,4 +366,7 @@ bindings): see [../install.md](../install.md#helio-on-windows).
 
 Not verified yet: keyboard, mouse and controllers streaming another machine
 (tests so far streamed the same PC, which feeds input back into itself),
-and on-glass timing on a real monitor.
+on-glass timing on a real monitor, and an agent's MCP server stopping once
+the Helio that started it is gone
+([../ai-agents.md](../ai-agents.md#design-decisions-and-why), "A run is
+bounded twice"): it is built and type-checked for Windows, not run there.
