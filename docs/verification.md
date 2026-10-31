@@ -28,7 +28,7 @@ The rest of what protects a release:
 | What | Rule |
 |---|---|
 | Actions | Only GitHub's own and `Swatinem/rust-cache` may run, each pinned to a commit |
-| Inputs of the Windows release | FFmpeg's build is one fixed BtbN release, checked against a SHA-256 before it is unpacked (`tools/windows/ffmpeg-ci.ps1`), as ViGEmBus's installer is |
+| Inputs of the Windows release | FFmpeg's build is one fixed BtbN build, copied into a pre-release of this repository so it outlives BtbN's pruning, and checked against a SHA-256 before it is unpacked (`tools/windows/ffmpeg-ci.ps1`), as ViGEmBus's installer is |
 | Version tags | Once made, a `v*` tag cannot be moved or deleted |
 | The `release` environment, with the Windows signing secrets | Deploys from `main` only |
 | Secrets in a push | Secret scanning and push protection are on |
