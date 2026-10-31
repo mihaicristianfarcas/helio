@@ -934,9 +934,13 @@ pub fn main(args: &[String]) -> std::process::ExitCode {
         }
     }
     // The checks the person turned on in Helio apply to every agent that
-    // uses the hosts, this server's included.
-    let checks = crate::providers::AgentSettings::load(&config.data_dir).checks;
-    config.judge = crate::judge::Judge::new(&config.data_dir, &checks).map(std::sync::Arc::new);
+    // uses the hosts, this server's included. With no control folder
+    // nobody can be asked, so what they or the rules hold is refused,
+    // unless the person turned approvals off.
+    let settings = crate::providers::AgentSettings::load(&config.data_dir);
+    config.refuse_held = settings.approvals != Approvals::Off;
+    config.judge =
+        crate::judge::Judge::new(&config.data_dir, &settings.checks).map(std::sync::Arc::new);
     match serve(Computer::new(config), opts) {
         Ok(()) => std::process::ExitCode::SUCCESS,
         Err(e) => {

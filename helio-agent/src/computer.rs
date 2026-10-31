@@ -393,6 +393,10 @@ pub struct Config {
     /// The run's control folder (pause, approve steps: see `control`), and
     /// which steps wait for a yes.
     pub control: Option<(PathBuf, crate::providers::Approvals)>,
+    /// With no control folder, so nobody to ask (an agent outside Helio):
+    /// a step a rule or clef would hold for a yes is refused, not done.
+    /// Off only when the person turned approvals off.
+    pub refuse_held: bool,
     /// Observers get the screen after each action as the model sees it, not
     /// a thumbnail (Helio's "what the agent sees").
     pub full_screens: bool,
@@ -418,6 +422,7 @@ impl Config {
             until: None,
             owner_pid: None,
             control: None,
+            refuse_held: true,
             full_screens: false,
             hold_wait: Duration::from_secs(50),
             judge: None,
@@ -1031,10 +1036,23 @@ impl Computer {
 
     /// Before an input action, when the run has a control folder: wait while
     /// the person paused it, and for their yes when the step is to be
-    /// approved. Time spent waiting for the person is not the run's.
+    /// approved. Time spent waiting for the person is not the run's. With
+    /// none, nobody can be asked: a step to hold is refused (as
+    /// `ask_approval` and a withheld screen are), unless the person turned
+    /// approvals off (`Config::refuse_held`).
     fn go_ahead(&mut self, action: &Action) -> Result<(), String> {
         if self.control.is_none() {
-            return Ok(());
+            if !self.config.refuse_held {
+                return Ok(());
+            }
+            return match crate::risk::assess(action).or_else(|| self.judged(action)) {
+                Some(why) => Err(format!(
+                    "{why} It needs a person's go-ahead, and nobody can be asked here (no one \
+                        runs this session from Helio). Don't do it: report that it needs a \
+                        person's go-ahead."
+                )),
+                None => Ok(()),
+            };
         }
         let stop = self.stop_check();
         let risk = crate::risk::assess(action).or_else(|| self.judged(action));
@@ -1056,11 +1074,16 @@ impl Computer {
     }
 
     /// Clef's reason for `action` to wait for a yes, when approvals are for
-    /// risky steps and a check covers it. When clef cannot say, the rules
-    /// alone decide, as without it.
+    /// risky steps (or nobody can be asked, and held steps are refused) and
+    /// a check covers it. When clef cannot say, the rules alone decide, as
+    /// without it.
     fn judged(&self, action: &Action) -> Option<String> {
         let judge = self.config.judge.as_ref()?;
-        if self.control.as_ref()?.approvals() != crate::providers::Approvals::Risky {
+        let risky = match &self.control {
+            Some(c) => c.approvals() == crate::providers::Approvals::Risky,
+            None => self.config.refuse_held,
+        };
+        if !risky {
             return None;
         }
         let looks = crate::judge::Subject::of(action, self.pointer, judge.checks());
@@ -1688,6 +1711,33 @@ mod tests {
             std::thread::sleep(Duration::from_millis(5));
         });
         (Computer::new(config), person)
+    }
+
+    #[test]
+    fn a_held_step_is_not_done_where_nobody_can_be_asked() {
+        // An agent outside Helio (`Helio mcp` as installed): no control
+        // folder, so nobody to ask.
+        let dir = tempfile::tempdir().unwrap();
+        let mut c = Computer::new(Config::new(dir.path().to_path_buf()));
+        let e = c
+            .go_ahead(&Action::Type {
+                text: "rm -rf build\n".into(),
+            })
+            .unwrap_err();
+        assert!(e.contains("nobody can be asked"), "{e}");
+        // Routine steps go ahead.
+        c.go_ahead(&Action::Type {
+            text: "hello".into(),
+        })
+        .unwrap();
+        // The person turned approvals off: the agent acts without asking.
+        let mut config = Config::new(dir.path().to_path_buf());
+        config.refuse_held = false;
+        Computer::new(config)
+            .go_ahead(&Action::Type {
+                text: "rm -rf build\n".into(),
+            })
+            .unwrap();
     }
 
     #[test]
