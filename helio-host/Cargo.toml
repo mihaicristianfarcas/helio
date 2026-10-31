@@ -110,4 +110,5 @@ windows = { version = "0.61", features = [
 ] }
 
 [dev-dependencies]
+mainline = "8"
 tempfile = "3"

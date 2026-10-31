@@ -69,9 +69,11 @@ for one too, and also punches.
      clock stepped back, even across a restart, does not stop publishing.
 3. **Punching.** The client races handshake initiations to every host
    candidate (local ones first, remote ones 300 ms later). The host checks
-   its paired clients' records every few seconds; on a fresh intent it sends
-   initiations to the client's candidates, which opens its own NAT towards
-   the client. Whichever handshake lands first wins, and WireGuard roaming
+   its paired clients' records every few seconds; on an intent it has not
+   seen before it sends initiations to the client's candidates, once, which
+   opens its own NAT towards the client. An intent is new by its nonce, not
+   by its time, so a client's clock minutes off the host's does not matter;
+   one stamped more than 10 minutes before the host's clock is ignored. Whichever handshake lands first wins, and WireGuard roaming
    keeps the path.
 4. **Keeping it open.** The tunnel's keepalive holds the NAT mappings during
    a session; the host re-checks its public address by STUN every 25 s.

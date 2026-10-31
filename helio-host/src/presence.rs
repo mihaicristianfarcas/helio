@@ -19,6 +19,10 @@
 //! removed client is not published for again; its last record expires from
 //! the DHT within about two hours.
 //!
+//! An intent is acted on once, when the host first sees its nonce, not by
+//! the time it carries: a client's clock may be minutes off the host's. Its
+//! timestamp only rules out one more than 10 minutes old.
+//!
 //! All of it only while internet access is on (`internet_access`): off, the
 //! host is not on the DHT at all (it leaves it when the setting goes off),
 //! asks no STUN server, and maps no port; it is reachable on the local
@@ -26,13 +30,13 @@
 
 use std::collections::HashMap;
 use std::net::SocketAddr;
-use std::sync::atomic::Ordering;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use helio_nat::keys::utc_day;
 use helio_nat::rendezvous::{now_ms, Kind, Record, Rendezvous, Secret};
-use helio_transport::PublicIdentity;
+use helio_transport::{Endpoint, PublicIdentity};
 
 use crate::host::Host;
 
@@ -40,8 +44,11 @@ use crate::host::Host;
 const STUN_EVERY: Duration = Duration::from_secs(25);
 /// DHT items expire after about two hours.
 const REPUBLISH_EVERY: Duration = Duration::from_secs(30 * 60);
-/// Intents older than this are stale.
-const INTENT_FRESH: Duration = Duration::from_secs(60);
+/// An intent stamped longer ago than this, by its own clock, is ignored
+/// (one left on the DHT from a connect long done): a client's clock within
+/// this of the host's makes no difference. A client re-publishes its intent
+/// every 20 s while it connects, each with a new nonce.
+const INTENT_MAX_AGE: Duration = Duration::from_secs(10 * 60);
 const IDLE: Duration = Duration::from_secs(5);
 /// Keeping a path warm towards a present client.
 const WARM_EVERY: Duration = Duration::from_secs(20);
@@ -154,6 +161,53 @@ fn publish_due(
     any
 }
 
+/// The intents the host has acted on: the last nonce from each client.
+#[derive(Default)]
+struct Intents {
+    seen: HashMap<[u8; 32], u64>,
+}
+
+impl Intents {
+    /// Whether to act on intent `r` from `client`, at `now_ms` by the
+    /// host's clock. An intent is fresh when the host first sees its nonce,
+    /// wherever the client's clock stands, and is acted on then only; its
+    /// own timestamp only rules out one older than `INTENT_MAX_AGE`.
+    fn first_sight(&mut self, client: [u8; 32], r: &Record, now_ms: u64) -> bool {
+        if now_ms.saturating_sub(r.at_ms) > INTENT_MAX_AGE.as_millis() as u64 {
+            return false;
+        }
+        self.seen.insert(client, r.nonce) != Some(r.nonce)
+    }
+}
+
+/// Look a client's intent and presence up, both at once.
+fn lookup(rv: &Rendezvous, c: &Watched) -> (Option<Record>, Option<Record>) {
+    std::thread::scope(|s| {
+        let presence = std::thread::Builder::new()
+            .name("rendezvous-watch".into())
+            .spawn_scoped(s, || rv.resolve(&c.secret, Kind::Presence));
+        let intent = rv.resolve(&c.secret, Kind::Intent);
+        (intent, presence.ok().and_then(|h| h.join().ok()).flatten())
+    })
+}
+
+/// Punch towards a client whose intent the host sees for the first time.
+/// True if it did.
+fn on_intent(
+    endpoint: &Endpoint,
+    stop: &AtomicBool,
+    intents: &mut Intents,
+    c: &Watched,
+    r: &Record,
+    now_ms: u64,
+) -> bool {
+    if !intents.first_sight(c.public.x25519, r, now_ms) {
+        return false;
+    }
+    punch(endpoint, stop, c, &r.endpoints);
+    true
+}
+
 pub fn run(host: Arc<Host>) {
     // The DHT, joined while internet access is on.
     let mut dht: Option<Rendezvous> = None;
@@ -163,7 +217,7 @@ pub fn run(host: Arc<Host>) {
     // The addresses last said to be reachable, for the log.
     let mut reachable: Vec<SocketAddr> = Vec::new();
     let mut last_probe: Option<Instant> = None;
-    let mut seen: HashMap<[u8; 32], u64> = HashMap::new();
+    let mut intents = Intents::default();
     let mut present: HashMap<[u8; 32], (Vec<SocketAddr>, Instant)> = HashMap::new();
     let mut last_warm = Instant::now();
     let mut turn = 0usize;
@@ -229,7 +283,7 @@ pub fn run(host: Arc<Host>) {
         // towards it.
         let paired = |key: &[u8; 32]| clients.iter().any(|c| c.public.x25519 == *key);
         published.retain(|k, _| paired(k));
-        seen.retain(|k, _| paired(k));
+        intents.seen.retain(|k, _| paired(k));
         present.retain(|k, _| paired(k));
         if !endpoints.is_empty()
             && publish_due(&host, rv, &clients, &mut published, &endpoints)
@@ -247,18 +301,16 @@ pub fn run(host: Arc<Host>) {
         let c = &clients[turn % clients.len()];
         turn = turn.wrapping_add(1);
         let key = c.public.x25519;
-        let (intent, presence) = std::thread::scope(|s| {
-            let presence = std::thread::Builder::new()
-                .name("rendezvous-watch".into())
-                .spawn_scoped(s, || rv.resolve(&c.secret, Kind::Presence));
-            let intent = rv.resolve(&c.secret, Kind::Intent);
-            (intent, presence.ok().and_then(|h| h.join().ok()).flatten())
-        });
+        let (intent, presence) = lookup(rv, c);
         if let Some(r) = intent {
-            if r.age() < INTENT_FRESH && seen.get(&key) != Some(&r.nonce) {
-                seen.insert(key, r.nonce);
-                punch(&host, c, &r.endpoints);
-            }
+            on_intent(
+                &host.endpoint,
+                host.stop_flag(),
+                &mut intents,
+                c,
+                &r,
+                now_ms(),
+            );
         }
         if let Some(r) = presence.filter(|r| r.age() < PRESENCE_FRESH) {
             let fresh_until = Instant::now() + PRESENCE_FRESH.saturating_sub(r.age());
@@ -367,13 +419,12 @@ fn renew_after(lease: Duration) -> Duration {
 
 /// Send handshake initiations towards a client that wants to connect, a few
 /// times over a second: each opens our NAT towards it.
-fn punch(host: &Host, c: &Watched, endpoints: &[SocketAddr]) {
-    let Some(peer) = host.endpoint.peer_by_key(&c.public.x25519) else {
+fn punch(endpoint: &Endpoint, stop: &AtomicBool, c: &Watched, endpoints: &[SocketAddr]) {
+    let Some(peer) = endpoint.peer_by_key(&c.public.x25519) else {
         return;
     };
     if peer.is_established()
-        && host
-            .endpoint
+        && endpoint
             .since_rx(&peer)
             .is_some_and(|d| d < Duration::from_secs(5))
     {
@@ -381,15 +432,15 @@ fn punch(host: &Host, c: &Watched, endpoints: &[SocketAddr]) {
     }
     tracing::info!(client = c.name, endpoints = ?endpoints, "client wants to connect from \
         the internet; punching");
-    let Ok(packets) = host.endpoint.initiation(&peer) else {
+    let Ok(packets) = endpoint.initiation(&peer) else {
         return;
     };
     for _ in 0..4 {
         for &ep in endpoints {
-            let _ = host.endpoint.send_initiation(&peer, &packets, ep);
+            let _ = endpoint.send_initiation(&peer, &packets, ep);
         }
         std::thread::sleep(Duration::from_millis(250));
-        if host.stop_flag().load(Ordering::Relaxed) {
+        if stop.load(Ordering::Relaxed) {
             return;
         }
     }
@@ -398,6 +449,135 @@ fn punch(host: &Host, c: &Watched, endpoints: &[SocketAddr]) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use helio_nat::keys::Sequence;
+    use helio_transport::{Identity, Received};
+
+    #[test]
+    fn an_intent_counts_from_when_the_host_first_sees_it() {
+        let mut intents = Intents::default();
+        let client = [1; 32];
+        let now = 20_000 * 86_400_000;
+        let intent = |at_ms, nonce| Record {
+            kind: Kind::Intent,
+            at_ms,
+            nonce,
+            endpoints: Vec::new(),
+        };
+        assert!(
+            intents.first_sight(client, &intent(now - 5 * 60_000, 1), now),
+            "a client's clock five minutes behind"
+        );
+        assert!(
+            !intents.first_sight(client, &intent(now - 5 * 60_000, 1), now + 30_000),
+            "acted on once"
+        );
+        assert!(
+            intents.first_sight(client, &intent(now + 5 * 60_000, 2), now),
+            "or five minutes ahead"
+        );
+        assert!(
+            !intents.first_sight(client, &intent(now - 11 * 60_000, 3), now),
+            "older than ten minutes by its own clock"
+        );
+    }
+
+    /// Receive (which answers handshakes) and tick, until `stop`.
+    fn pump(ep: Arc<Endpoint>, stop: Arc<AtomicBool>) -> std::thread::JoinHandle<()> {
+        std::thread::spawn(move || {
+            let mut buf = vec![0u8; 65536];
+            let mut last_tick = Instant::now();
+            while !stop.load(Ordering::Relaxed) {
+                let _: Option<Received> = ep.recv(&mut buf).ok();
+                if last_tick.elapsed() > Duration::from_millis(100) {
+                    ep.tick();
+                    last_tick = Instant::now();
+                }
+            }
+        })
+    }
+
+    /// The internet path end to end on loopback: a client publishes an
+    /// intent on a DHT, the host finds it and punches, and the tunnel comes
+    /// up from the host's side, to an address the host learned from the
+    /// DHT alone.
+    #[test]
+    fn an_intent_on_the_dht_gets_the_host_punching_through() {
+        let net = mainline::Testnet::builder(8)
+            .bind_address(std::net::Ipv4Addr::LOCALHOST)
+            .build()
+            .unwrap();
+        let host_rv = Rendezvous::join_with(&net.bootstrap).unwrap();
+        let client_rv = Rendezvous::join_with(&net.bootstrap).unwrap();
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while !(host_rv.is_ready() && client_rv.is_ready()) && Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(20));
+        }
+
+        let host = Arc::new(Endpoint::bind(Arc::new(Identity::generate()), 0).unwrap());
+        let client = Arc::new(Endpoint::bind(Arc::new(Identity::generate()), 0).unwrap());
+        host.add_peer(client.identity().public().clone(), None)
+            .unwrap();
+        // The client knows the host's key, not where it is.
+        client
+            .add_peer(host.identity().public().clone(), None)
+            .unwrap();
+        let stop = Arc::new(AtomicBool::new(false));
+        let pumps = [
+            pump(host.clone(), stop.clone()),
+            pump(client.clone(), stop.clone()),
+        ];
+
+        let secret = helio_nat::rendezvous::random_32();
+        let dir = tempfile::tempdir().unwrap();
+        let seq = Sequence::open(dir.path().join("rendezvous.toml"), |p, b| {
+            std::fs::write(p, b)
+        });
+        let from: SocketAddr = format!("127.0.0.1:{}", client.local_port())
+            .parse()
+            .unwrap();
+        client_rv
+            .publish(&secret, &Record::new(Kind::Intent, vec![from]), &seq)
+            .unwrap();
+
+        let c = Watched {
+            name: "mac".into(),
+            public: client.identity().public().clone(),
+            secret,
+        };
+        let (intent, presence) = lookup(&host_rv, &c);
+        let intent = intent.expect("the host finds the intent");
+        assert_eq!(presence, None);
+        let mut intents = Intents::default();
+        let never = AtomicBool::new(false);
+        assert!(on_intent(
+            &host,
+            &never,
+            &mut intents,
+            &c,
+            &intent,
+            now_ms()
+        ));
+        let to_client = host
+            .peer_by_key(&client.identity().public().x25519)
+            .unwrap();
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while !to_client.is_established() {
+            assert!(
+                Instant::now() < deadline,
+                "the punch did not bring the tunnel up"
+            );
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        assert!(
+            !on_intent(&host, &never, &mut intents, &c, &intent, now_ms()),
+            "one punch per intent"
+        );
+
+        stop.store(true, Ordering::Relaxed);
+        for p in pumps {
+            p.join().unwrap();
+        }
+    }
 
     #[test]
     fn a_record_is_due_when_the_addresses_change_or_the_day_turns() {
