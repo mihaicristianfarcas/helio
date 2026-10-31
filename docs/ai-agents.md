@@ -335,7 +335,9 @@ functions map onto the same code.
 **The MCP server is written here** (JSON-RPC over stdio), not taken from an
 SDK: the protocol is small, the Rust SDKs change fast, and nothing but
 protocol may reach stdout. It answers protocol versions 2024-11-05 to
-2025-11-25.
+2025-11-25. A session lends it to Codex and Claude Code over HTTP on
+127.0.0.1 instead, with a token of its own
+([SECURITY.md](../SECURITY.md#the-model) says what that exposes).
 
 **The CLI agents run with Helio's tools and nothing else.** Codex runs
 with its shell, its own computer use, browser, apps, plugins and sub-agents
