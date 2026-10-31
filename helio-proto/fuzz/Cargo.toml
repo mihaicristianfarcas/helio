@@ -29,4 +29,10 @@ path = "fuzz_targets/input.rs"
 test = false
 doc = false
 
+[[bin]]
+name = "clip"
+path = "fuzz_targets/clip.rs"
+test = false
+doc = false
+
 [workspace]

@@ -113,10 +113,10 @@ silicon Mac with rustc 1.99.0 and no sanitizer (`cargo fuzz run -s none`):
 | `depacketize` | Video datagrams: `Header::decode` and reassembly (`Reassembler::push`) | 425,148 |
 | `control` | Control messages (`Control::decode`) | 183,799,658 |
 | `input` | Input packets (`input::decode`) | 176,793,828 |
+| `clip` | Clipboard messages and copies (`clip::decode`, `clip::decode_items`) | 15,395,693, in one minute rather than two |
 
 Other parsers of network input have no target, and rest on unit tests and
-bounds checks: audio datagrams (`helio-proto/src/audio.rs`), clipboard
-messages (`helio-proto/src/clip.rs`), pairing messages
+bounds checks: audio datagrams (`helio-proto/src/audio.rs`), pairing messages
 (`helio-pairing/src/pair.rs`), STUN replies (`helio-nat/src/stun.rs`) and
 rendezvous records (`helio-nat/src/rendezvous.rs`). The DHT's own messages
 are parsed by the `mainline` crate, which no target covers; CI's
