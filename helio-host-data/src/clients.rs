@@ -254,6 +254,30 @@ impl Clients {
         Ok(client)
     }
 
+    /// A device a person paired with its PIN: what they chose, else what
+    /// the prompt showed them (`default_permissions`). The prompt cannot
+    /// know the device's key, which arrives sealed after the PIN, so a
+    /// device pairing again counts there as a person already here; it gets
+    /// that, never more than was shown (`add`, which `helio host
+    /// add-client` uses, leaves it out of the count).
+    pub fn pair(
+        &mut self,
+        name: &str,
+        public: &PublicIdentity,
+        rendezvous: Option<[u8; 32]>,
+        agent: bool,
+        chosen: Option<Permissions>,
+    ) -> std::io::Result<Client> {
+        let shown = self.default_permissions(agent);
+        self.add(
+            name,
+            public,
+            rendezvous,
+            agent,
+            Some(chosen.unwrap_or(shown)),
+        )
+    }
+
     /// Record a client's rendezvous key (learned over the tunnel from a
     /// client paired before pairing exchanged it). True if it changed.
     pub fn set_rendezvous(&mut self, x25519_b64: &str, key: [u8; 32]) -> std::io::Result<bool> {
@@ -431,6 +455,22 @@ mod tests {
             Some(Permissions::AGENT_ALL)
         );
         assert_eq!(c.set_permissions("nobody", all).unwrap(), None);
+    }
+
+    #[test]
+    fn a_device_paired_again_gets_what_the_prompt_showed() {
+        let dir = tempfile::tempdir().unwrap();
+        let mac = Identity::generate();
+        let mut c = Clients::load(dir.path());
+        c.add("mac", mac.public(), None, false, None).unwrap();
+        let (x, _) = mac.public().to_b64();
+        c.set_permissions(&x, Permissions::SEE_ONLY).unwrap();
+        // It pairs again, and the PIN is typed with the prompt's default
+        // left as it is: what the prompt showed is what it gets.
+        let shown = c.default_permissions(false);
+        let paired = c.pair("mac", mac.public(), None, false, None).unwrap();
+        assert_eq!(paired.permissions, shown);
+        assert_eq!(paired.permissions, Permissions::SEE_ONLY);
     }
 
     #[test]

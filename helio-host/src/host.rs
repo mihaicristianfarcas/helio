@@ -273,7 +273,7 @@ impl Host {
     }
 
     /// Admit a newly paired client to the tunnel, with these permissions
-    /// (None: what a client of its kind gets by default).
+    /// (None: what the pairing prompt showed, `Clients::pair`).
     pub fn add_client(
         &self,
         name: &str,
@@ -285,7 +285,7 @@ impl Host {
         let client = self
             .clients
             .lock()
-            .add(name, public, rendezvous, agent, permissions)?;
+            .pair(name, public, rendezvous, agent, permissions)?;
         self.endpoint
             .add_peer(public.clone(), None)
             .map_err(|e| std::io::Error::other(e.to_string()))?;
