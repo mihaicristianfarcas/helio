@@ -223,7 +223,12 @@ impl Control {
             "waiting for the person's yes"
         );
         let result = loop {
-            if let Ok(a) = std::fs::read_to_string(&answer) {
+            // Empty: made and not written yet (`answer` renames it into
+            // place whole; another writer may not).
+            if let Some(a) = std::fs::read_to_string(&answer)
+                .ok()
+                .filter(|a| !a.trim().is_empty())
+            {
                 let yes = a.trim() == "yes";
                 tracing::info!(
                     n,
@@ -368,10 +373,12 @@ pub fn pending(dir: &Path) -> Vec<(u32, Ask)> {
 }
 
 pub fn answer(dir: &Path, n: u32, yes: bool) {
-    let _ = std::fs::write(
-        dir.join(format!("answer-{n}")),
-        if yes { "yes" } else { "no" },
-    );
+    // Written aside and renamed into place: the gate never reads it half
+    // made.
+    let aside = dir.join(format!(".answer-{n}"));
+    if std::fs::write(&aside, if yes { "yes" } else { "no" }).is_ok() {
+        let _ = std::fs::rename(&aside, dir.join(format!("answer-{n}")));
+    }
 }
 
 #[cfg(test)]
@@ -713,6 +720,35 @@ mod tests {
         assert!(e.contains("another user"), "{e}");
         assert_eq!(mode(&open), 0o777);
         assert!(own_folder_of(&open, uid).is_ok());
+    }
+
+    #[test]
+    fn an_answer_is_read_once_written_whole() {
+        let dir = tempfile::tempdir().unwrap();
+        let d = dir.path().to_path_buf();
+        // The moment between an answer file's creation and its text, held
+        // longer than the gate's poll so the gate sees it.
+        let person = std::thread::spawn({
+            let d = d.clone();
+            move || loop {
+                if let Some((n, _)) = pending(&d).into_iter().next() {
+                    let file = d.join(format!("answer-{n}"));
+                    std::fs::write(&file, "").unwrap();
+                    std::thread::sleep(POLL * 2);
+                    std::fs::write(&file, "yes").unwrap();
+                    return;
+                }
+                std::thread::sleep(Duration::from_millis(5));
+            }
+        });
+        let mut c = Control::new(d.clone(), Approvals::Every);
+        let gate = c.gate(&step("key Return", "key Return"), None, &|| None, WAIT);
+        person.join().unwrap();
+        assert_eq!(gate, Ok(()));
+        // And `answer` writes it whole: never an empty file under its name.
+        answer(&d, 7, true);
+        assert_eq!(std::fs::read_to_string(d.join("answer-7")).unwrap(), "yes");
+        assert_eq!(std::fs::read_dir(&d).unwrap().count(), 1);
     }
 
     #[test]
