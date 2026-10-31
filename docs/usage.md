@@ -219,7 +219,7 @@ the host runs on.
 | | Send pacing | 800 Mbit/s | `pace_mbps` |
 | | Adapt the bitrate to the network | on | `adaptive_bitrate` |
 | Input | Share the clipboard with clients | on | `clipboard` |
-| Agent setup | Allow paired AI agents | on | `agents` |
+| Agent setup | Allow paired AI agents (off: an agent's running session ends too) | on | `agents` |
 | | Hold after local input | 10 s | `agent_local_input_hold_secs` |
 
 In Helio, with hosting on, each setting is on the settings page the table

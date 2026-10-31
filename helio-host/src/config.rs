@@ -75,7 +75,8 @@ pub struct HostConfig {
     /// so they can connect from anywhere without port forwarding.
     pub internet_access: bool,
     /// Let paired AI agents start sessions (each agent's own access, set on
-    /// the Devices page, applies too). Off: every agent is refused.
+    /// the Devices page, applies too). Off: every agent is refused, and a
+    /// running agent's session ends.
     pub agents: bool,
     /// Hold an agent's keyboard and mouse for this long after someone uses
     /// the host's own (seconds; 0: never hold).
