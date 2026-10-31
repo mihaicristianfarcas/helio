@@ -37,45 +37,39 @@ pub fn web_port(dir: &Path) -> u16 {
 
 /// Whether the host on this computer answers its web API on `port`.
 pub fn answers(dir: &Path, port: u16) -> bool {
-    let Ok(pem) = std::fs::read(dir.join("web-cert.pem")) else {
-        // The host makes it when it first runs: no host has answered yet.
+    let request = b"GET /api/state HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n";
+    let Some(mut tls) = connect(dir, port) else {
         return false;
     };
-    let Ok(cert) = CertificateDer::from_pem_slice(&pem) else {
-        return false;
-    };
+    let mut status = [0u8; 12];
+    tls.write_all(request).is_ok()
+        && tls.read_exact(&mut status).is_ok()
+        && &status == b"HTTP/1.1 200"
+}
+
+/// A TLS connection to the host on `port`, trusting only its certificate.
+fn connect(dir: &Path, port: u16) -> Option<StreamOwned<ClientConnection, TcpStream>> {
+    // The host makes it when it first runs: none, and no host has answered yet.
+    let pem = std::fs::read(dir.join("web-cert.pem")).ok()?;
+    let cert = CertificateDer::from_pem_slice(&pem).ok()?;
     let provider = Arc::new(rustls::crypto::ring::default_provider());
     let verifier = Arc::new(Pinned {
         cert,
         algorithms: provider.signature_verification_algorithms,
     });
-    let Ok(config) =
-        ClientConfig::builder_with_provider(provider).with_safe_default_protocol_versions()
-    else {
-        return false;
-    };
-    let config = config
+    let config = ClientConfig::builder_with_provider(provider)
+        .with_safe_default_protocol_versions()
+        .ok()?
         .dangerous()
         .with_custom_certificate_verifier(verifier)
         .with_no_client_auth();
-    let Ok(name) = ServerName::try_from("localhost") else {
-        return false;
-    };
-    let Ok(connection) = ClientConnection::new(Arc::new(config), name) else {
-        return false;
-    };
+    let name = ServerName::try_from("localhost").ok()?;
+    let connection = ClientConnection::new(Arc::new(config), name).ok()?;
     let addr = SocketAddr::from(([127, 0, 0, 1], port));
-    let Ok(tcp) = TcpStream::connect_timeout(&addr, TIMEOUT) else {
-        return false;
-    };
+    let tcp = TcpStream::connect_timeout(&addr, TIMEOUT).ok()?;
     let _ = tcp.set_read_timeout(Some(TIMEOUT));
     let _ = tcp.set_write_timeout(Some(TIMEOUT));
-    let mut tls = StreamOwned::new(connection, tcp);
-    let request = b"GET /api/state HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n";
-    let mut status = [0u8; 12];
-    tls.write_all(request).is_ok()
-        && tls.read_exact(&mut status).is_ok()
-        && &status == b"HTTP/1.1 200"
+    Some(StreamOwned::new(connection, tcp))
 }
 
 /// Trusts the one certificate the host made for itself, and checks the
