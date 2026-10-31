@@ -3598,6 +3598,7 @@ dependencies = [
  "helio-proto",
  "helio-transport",
  "libc",
+ "mainline",
  "objc2-core-foundation",
  "parking_lot",
  "rand_core 0.6.4",
