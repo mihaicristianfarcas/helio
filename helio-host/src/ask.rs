@@ -5,8 +5,9 @@
 //! `remove-client` and `permissions` run `restart` after their change.
 //!
 //! Both go through the host's API (`web::probe`), signed in with the token
-//! the host writes for its own computer. On Windows only administrators may
-//! read it: from another terminal they exit with [`NEEDS_ELEVATION`].
+//! the host writes for its own computer. On Windows only administrators and
+//! the user who turned hosting on may read it: anyone else's terminal exits
+//! with [`NEEDS_ELEVATION`].
 //!
 //! `pair` is how a host nobody sits at takes a device: the API answers this
 //! computer only, so over SSH, `helio pair HOST` on the device shows the
@@ -32,8 +33,9 @@ fn local_token(dir: &Path, command: &str) -> Result<String, ExitCode> {
         Ok(t) => Ok(t.trim().to_string()),
         Err(e) if e.kind() == std::io::ErrorKind::PermissionDenied => {
             eprintln!(
-                "helio-host {command} needs an administrator: run it again from an elevated \
-                    terminal (exit code {NEEDS_ELEVATION}; nothing was changed)"
+                "helio-host {command} needs an administrator, or the user who turned hosting \
+                    on: run it again from an elevated terminal (exit code {NEEDS_ELEVATION}; \
+                    nothing was changed)"
             );
             std::process::exit(NEEDS_ELEVATION);
         }

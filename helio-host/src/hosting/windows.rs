@@ -34,7 +34,7 @@
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use windows::core::{w, HSTRING, PCWSTR};
+use windows::core::{w, HSTRING, PCWSTR, PWSTR};
 use windows::Win32::Foundation::{LocalFree, HLOCAL};
 use windows::Win32::Security::Authorization::{
     ConvertStringSecurityDescriptorToSecurityDescriptorW, SDDL_REVISION_1,
@@ -232,9 +232,61 @@ fn sweep(dir: &Path) {
     }
 }
 
-pub fn enable() -> Result<String, Error> {
+/// Who turned hosting on, as their SID's text (`hosting::owner`): beside
+/// the engine, where only SYSTEM and Administrators may write.
+const OWNER: &str = "owner";
+
+/// The owner the last `enable --owner` recorded, while it is still a user
+/// account's SID.
+pub fn owner() -> Option<String> {
+    let text = std::fs::read_to_string(install_dir().ok()?.join(OWNER)).ok()?;
+    let sid = text.trim();
+    crate::private::is_account_sid(sid).then(|| sid.to_string())
+}
+
+/// Whether Windows knows `sid` as a user account, not a group (a domain's
+/// groups have a user's shape: `is_account_sid`).
+fn is_user(sid: &str) -> bool {
+    use windows::Win32::Security::Authorization::ConvertStringSidToSidW;
+    use windows::Win32::Security::{LookupAccountSidW, SidTypeUser, PSID, SID_NAME_USE};
+    let mut psid = PSID::default();
+    let (mut name, mut domain) = ([0u16; 256], [0u16; 256]);
+    let (mut name_len, mut domain_len) = (name.len() as u32, domain.len() as u32);
+    let mut kind = SID_NAME_USE::default();
+    // SAFETY: `psid` is allocated by ConvertStringSidToSidW and freed once
+    // below, after LookupAccountSidW read it; the name buffers are locals of
+    // the lengths given.
+    unsafe {
+        if ConvertStringSidToSidW(&HSTRING::from(sid), &mut psid).is_err() {
+            return false;
+        }
+        let found = LookupAccountSidW(
+            PCWSTR::null(),
+            psid,
+            Some(PWSTR(name.as_mut_ptr())),
+            &mut name_len,
+            Some(PWSTR(domain.as_mut_ptr())),
+            &mut domain_len,
+            &mut kind,
+        )
+        .is_ok();
+        let _ = LocalFree(Some(HLOCAL(psid.0)));
+        found && kind == SidTypeUser
+    }
+}
+
+/// `enable`, with `owner` the user turning hosting on (`--owner`), whose
+/// Helio may then read the host's local token: they become its owner, in
+/// place of whoever was. None keeps the owner there was (an update's
+/// `enable`, an installer's).
+pub fn enable(owner: Option<String>) -> Result<String, Error> {
     if !crate::private::elevated() {
         return Err(Error::NeedsElevation);
+    }
+    if let Some(sid) = owner.as_deref().filter(|sid| !is_user(sid)) {
+        return Err(Error::Failed(format!(
+            "{sid} is not a user account on this PC; nothing was changed"
+        )));
     }
     let here = std::env::current_exe().map_err(|e| e.to_string())?;
     let source = here.parent().ok_or("helio-host.exe is in no folder")?;
@@ -272,6 +324,19 @@ pub fn enable() -> Result<String, Error> {
                     dir.display()
                 )));
             }
+        }
+    }
+    // Before the service starts, which writes the token for the owner.
+    if let Some(sid) = &owner {
+        let path = dir.join(OWNER);
+        if let Err(e) = std::fs::write(&path, sid)
+            .map_err(|e| format!("{}: {e}", path.display()))
+            .and_then(|()| secure(&path, FILE))
+        {
+            eprintln!(
+                "warning: the user who turned hosting on is not recorded ({e}): \
+                only administrators may read the host's token"
+            );
         }
     }
     // Before the service starts: its first session finds them.
@@ -332,6 +397,7 @@ pub fn disable() -> Result<String, Error> {
                 .map_err(|e| format!("cannot delete {}: {e}", file.display()))?;
         }
     }
+    let _ = std::fs::remove_file(dir.join(OWNER));
     // The folder goes once nothing else is in it (an installer may keep
     // Helio Host's window there).
     let _ = std::fs::remove_dir(&dir);

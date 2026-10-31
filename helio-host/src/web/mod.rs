@@ -131,18 +131,20 @@ fn load_app_tokens(dir: &Path) -> AppTokens {
 fn save_app_tokens(dir: &Path, tokens: &AppTokens) -> std::io::Result<()> {
     let text = toml::to_string(tokens).unwrap_or_default();
     helio_transport::identity::write_private(&dir.join(APP_TOKENS), text.as_bytes())?;
-    crate::private::restrict_to_admins(&dir.join(APP_TOKENS))
+    crate::private::restrict_token(&dir.join(APP_TOKENS), None)
 }
 
 /// A fresh local token, where only this host's user can read it: 0600 on a
-/// Mac or Linux (the host runs as its user), SYSTEM and Administrators on
-/// Windows (the host is a service; an app that is not elevated signs in).
-/// None when the file cannot be made private: then there is none.
+/// Mac or Linux (the host runs as its user); on Windows (the host is a
+/// service) SYSTEM, Administrators and the user who turned hosting on
+/// (`hosting::owner`), whose Helio is not elevated. None when the file
+/// cannot be made private: then there is none.
 fn write_local_token(dir: &Path) -> Option<String> {
     let path = dir.join(LOCAL_TOKEN);
     let t = token();
+    let owner = crate::hosting::owner();
     let written = helio_transport::identity::write_private(&path, t.as_bytes())
-        .and_then(|()| crate::private::restrict_to_admins(&path));
+        .and_then(|()| crate::private::restrict_token(&path, owner.as_deref()));
     match written {
         Ok(()) => Some(t),
         Err(e) => {

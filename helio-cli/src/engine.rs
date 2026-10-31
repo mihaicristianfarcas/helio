@@ -35,13 +35,66 @@ impl std::fmt::Display for Switched {
 /// `program enable` or `program disable`, and what it said it did.
 pub fn switch(program: &Path, on: bool) -> Result<String, Switched> {
     let out = command(program)
-        .arg(if on { "enable" } else { "disable" })
+        .args(switch_args(on))
         .output()
         .map_err(|e| Switched::Failed(format!("{}: {e}", program.display())))?;
     match out.status.code() {
         Some(0) => Ok(String::from_utf8_lossy(&out.stdout).trim().to_string()),
         Some(NEEDS_ELEVATION) => Err(Switched::NeedsElevation),
         _ => Err(Switched::Failed(said(&out.stderr, &out.stdout))),
+    }
+}
+
+/// `enable` or `disable`; on Windows, turning hosting on, with `--owner`
+/// and this user's SID: the elevated `enable` may run as an administrator
+/// who typed their password for this user, and it is this user's Helio,
+/// not elevated, that reads the host's token (`helio-host`'s
+/// `hosting::owner`).
+fn switch_args(on: bool) -> Vec<String> {
+    #[allow(unused_mut)]
+    let mut args = vec![if on { "enable" } else { "disable" }.to_string()];
+    #[cfg(windows)]
+    if on {
+        if let Some(sid) = user_sid() {
+            args.extend(["--owner".to_string(), sid]);
+        }
+    }
+    args
+}
+
+/// This process's user, as their SID's text (`S-1-5-21-…`).
+#[cfg(windows)]
+fn user_sid() -> Option<String> {
+    use windows::core::PWSTR;
+    use windows::Win32::Foundation::{CloseHandle, LocalFree, HANDLE, HLOCAL};
+    use windows::Win32::Security::Authorization::ConvertSidToStringSidW;
+    use windows::Win32::Security::{GetTokenInformation, TokenUser, TOKEN_QUERY, TOKEN_USER};
+    use windows::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
+    // Room for a TOKEN_USER and its SID (at most 76 bytes), aligned for it.
+    let mut buf = [0u64; 32];
+    let mut len = 0u32;
+    // SAFETY: the token is this process's own, closed once; `buf` is a local
+    // of the size given, aligned for TOKEN_USER, and read as one only after
+    // GetTokenInformation filled it; the string ConvertSidToStringSidW
+    // allocates is copied, then freed once.
+    unsafe {
+        let mut token = HANDLE::default();
+        OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut token).ok()?;
+        let got = GetTokenInformation(
+            token,
+            TokenUser,
+            Some(buf.as_mut_ptr().cast()),
+            std::mem::size_of_val(&buf) as u32,
+            &mut len,
+        );
+        let _ = CloseHandle(token);
+        got.ok()?;
+        let user = &*(buf.as_ptr() as *const TOKEN_USER);
+        let mut text = PWSTR::null();
+        ConvertSidToStringSidW(user.User.Sid, &mut text).ok()?;
+        let sid = text.to_string().ok();
+        let _ = LocalFree(Some(HLOCAL(text.0.cast())));
+        sid
     }
 }
 
@@ -154,7 +207,7 @@ pub fn switch_elevated(program: &Path, on: bool) -> Result<(), Switched> {
     use windows::Win32::UI::WindowsAndMessaging::SW_HIDE;
 
     let (verb, file) = (HSTRING::from("runas"), HSTRING::from(program.as_os_str()));
-    let args = HSTRING::from(if on { "enable" } else { "disable" });
+    let args = HSTRING::from(switch_args(on).join(" "));
     let mut info = SHELLEXECUTEINFOW {
         cbSize: std::mem::size_of::<SHELLEXECUTEINFOW>() as u32,
         fMask: SEE_MASK_NOCLOSEPROCESS | SEE_MASK_NOASYNC,
