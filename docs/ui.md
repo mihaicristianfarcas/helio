@@ -28,7 +28,7 @@ action on a page. Light and dark follow the system
   panel and the Dock (`desktop`), and the update check's notice, sheet and
   settings (`updates`, over `helio-update`).
 - **`helio-app`**: the app. `host/` is This computer: the host's pages, a
-  client of its web API (`api.rs`, `worker.rs`, `link.rs`), the hosting
+  client of its API on localhost (`api.rs`, `worker.rs`, `link.rs`), the hosting
   switch (`switch.rs`) and the host's icon (`tray.rs`).
 
 ## The glass, on each system
@@ -78,8 +78,7 @@ the logs, reporting an issue).
 
 - **Hosts**: a card per host with its status, this computer's own host left
   out. Hovering says what a click does (Stream, Wake, Pair); the card's "…"
-  or a right click has the rest (Steam Big Picture, Wake, the web UI,
-  Unpair). Under the cards, what a click streams at, and how to change it.
+  or a right click has the rest (Steam Big Picture, Wake, Unpair). Under the cards, what a click streams at, and how to change it.
 - **This computer**: while hosting is off, one page (**Overview**) that says
   so, what hosting is, and leads to Settings → Hosting, where the switch
   is. While it is on, the host's pages:
@@ -101,7 +100,10 @@ the logs, reporting an issue).
   Video, its clipboard on Input, what agents may do on it on Agent setup.
   They save as they change (text fields on Return); encoder settings a Mac
   host does not have (NVENC, AV1) are not shown. Each setting is in one
-  place, and a computer that only plays has none of the host's.
+  place, and a computer that only plays has none of the host's. One the
+  host reads only when it starts (its name, its ports, the NVIDIA ones)
+  restarts it, and a line over the settings says so until it is back:
+  restarting, or restarting when the stream ends.
 
 Every page has the same column (`Metrics::PAGE`), and what is on it fills
 the column. On every system a page's actions (Add Host, Copy) sit beside
@@ -130,7 +132,9 @@ along the top, the step, and Back, Skip and Continue at the bottom.
    allow, each said in a line before it is asked. On a Mac, Screen
    Recording and Accessibility for the host (Helio Host), which macOS asks for as
    the host starts, each with a button to its pane of System Settings and
-   marked Allowed as soon as the host says so. On Windows, the administrator
+   marked Allowed as soon as the host says so (Screen Recording allowed
+   after the host started restarts it when the window comes back to the
+   front). On Windows, the administrator
    UAC asks for once, whether there are NVIDIA graphics (else it streams
    in software H.264), and SudoVDA (else the main display, scaled) and
    ViGEmBus (else no controllers), which turning hosting on installs.
@@ -172,7 +176,8 @@ looking, every three seconds, and not for its devices or the agent's log.
 
 ### How This computer reaches the host
 
-Over the host's web API, HTTPS on localhost, trusting only the certificate
+Over the host's API, HTTPS on localhost (the only place it answers),
+trusting only the certificate
 the host made for itself (`web-cert.pem` in its data folder), with a bearer
 token:
 
@@ -182,16 +187,21 @@ token:
   nothing.
 - **An app token, on Windows.** The host is a service there, and its token
   is readable by SYSTEM and Administrators only, so an app that is not
-  elevated **signs in once** with the web UI's admin account (creating it
+  elevated **signs in once** with the host's admin account (creating it
   if there is none yet). It gets an app token, which it keeps in the user's
   profile (`%APPDATA%\Helio Host\app-token`) and the host keeps hashed
   (`app-tokens.toml`). Signing out drops it on both sides.
 
 `POST /api/app-token` (user, password, optional `setup` to create the
-account, a name) and `DELETE /api/app-token` are the API's only
-app-specific endpoints; every other endpoint takes the bearer token as it
-takes the web UI's cookie. `/api/status` says, on a Mac, what macOS allows
-the host (`grants`: Screen Recording, Accessibility).
+account, a name) and `DELETE /api/app-token` give and take back an app
+token; every other endpoint but `/api/state` takes the bearer token.
+`/api/status` says, on a Mac, what macOS allows the host (`grants`: Screen
+Recording, Accessibility), and whether a restart is ahead (`restart`) and
+when the host started (`started_unix`): the settings pages say "restarting"
+until another host answers. `POST /api/grants/check` asks a Mac host to
+look whether Screen Recording was allowed since it started (the window
+does when it comes back to the front), and `POST /api/restart` restarts
+the host.
 
 ## Logs
 
@@ -257,6 +267,8 @@ This computer's host: `host=overview|devices|logs` (its pages; its
 settings are on the settings pages, `settings=hosting|video|input|agents`), `host-sample` (a made-up session, request, devices and
 settings), `host-signin`, `host-setup`, `host-offline` (the real host made
 signed out, without an account yet, or not answering),
+`host-restart=now|after_session` (a restart the host has ahead, as its
+settings pages say it),
 `signin-as=USER:PASSWORD`, `permissions=NAME` (the permissions sheet of the
 paired device called NAME). `HELIO_HOST_DATA_DIR` points the app at a test host's
 data folder; `HELIO_HOST_APP_URL`, `HELIO_HOST_APP_CERT` and `HELIO_HOST_APP_TOKEN` at another

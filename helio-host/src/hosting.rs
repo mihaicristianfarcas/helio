@@ -18,12 +18,12 @@
 //!   (`hosting/linux.rs`).
 //!
 //! Everything a host exposes lives in `helio-host host`: the tunnel port, the
-//! pairing listener, the web UI and API, presence on the DHT, STUN, the
+//! pairing listener, the API, presence on the DHT, STUN, the
 //! router's port mapping and the mDNS advertisement. Off, no `helio-host host`
 //! runs, so none of them does; nothing in the client starts any of them.
 //!
 //! `helio-host status` says off, starting, on or failed (with why), and for on,
-//! whether the host's web API answers on this computer. `--json` is for the
+//! whether the host's API answers on this computer. `--json` is for the
 //! app; `helio host status` prints either. What launchd and systemd print is read here, not in their modules,
 //! so that the reading is tested on every system.
 
@@ -52,7 +52,7 @@ pub enum State {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Status {
     pub state: State,
-    /// For a host that runs: whether its web API answers on this computer.
+    /// For a host that runs: whether its API answers on this computer.
     pub api: Option<bool>,
 }
 
@@ -70,15 +70,15 @@ impl Status {
     }
 
     /// For a person.
-    pub fn text(&self, web_port: u16) -> String {
+    pub fn text(&self, api_port: u16) -> String {
         match (&self.state, self.api) {
             (State::Off, _) => "off".into(),
             (State::Starting, _) => "starting".into(),
             (State::On, Some(true)) => {
-                format!("on; the web UI answers at https://localhost:{web_port}")
+                format!("on; its API answers at https://localhost:{api_port}")
             }
             (State::On, _) => {
-                format!("on, but the web UI does not answer at https://localhost:{web_port}")
+                format!("on, but its API does not answer at https://localhost:{api_port}")
             }
             (State::Failed(reason), _) => format!("failed: {reason}"),
         }
@@ -160,13 +160,13 @@ pub fn switch(on: bool) -> ! {
 /// `helio-host status [--json]`: what runs, and whether the host answers.
 pub fn print_status(dir: &Path, json: bool) -> std::process::ExitCode {
     let state = system::state();
-    let web_port = crate::web::probe::web_port(dir);
-    let api = (state == State::On).then(|| crate::web::probe::answers(dir, web_port));
+    let api_port = crate::web::probe::api_port(dir);
+    let api = (state == State::On).then(|| crate::web::probe::answers(dir, api_port));
     let status = Status { state, api };
     if json {
         println!("{}", status.json());
     } else {
-        println!("{}", status.text(web_port));
+        println!("{}", status.text(api_port));
     }
     std::process::ExitCode::SUCCESS
 }

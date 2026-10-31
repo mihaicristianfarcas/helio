@@ -13,7 +13,7 @@ helio-app/            the app's window (GPUI), This computer   ─┐
 helio-client/         the client: session, stream, platforms   │ the app
 helio-cli/            `helio`, the command line                │
 helio-agent/          AI agents: MCP server, runners           ─┘
-helio-host/           the host: sessions, pipelines, web UI    ─┐ the host
+helio-host/           the host: sessions, pipelines, its API   ─┐ the host
 helio-host-data/      its data folder, identity, clients       ─┘
 helio-*/              the libraries both share (see docs/architecture.md)
 Casks/                the Homebrew cask, written at each release (see below)

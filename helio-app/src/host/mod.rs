@@ -2,10 +2,10 @@
 //! the one window (This computer in the sidebar): the host at a glance (the
 //! session, with its numbers; an agent's, with its controls), the devices
 //! (pairing requests first), its log; and the host's settings, in Settings
-//! → Hosting under the switch (each setting in one place). What the web UI
-//! does, native, for this computer.
+//! → Hosting under the switch (each setting in one place). What Sunshine's
+//! web UI does, native, for this computer.
 //!
-//! The pages are a client of the host's web API on localhost, with the
+//! The pages are a client of the host's API on localhost, with the
 //! certificate the host made pinned (`api`), through one worker thread
 //! (`worker`) whose word the app keeps (`link`) while hosting is on
 //! (`switch`); the tray icon reads the same (`tray`).
@@ -84,7 +84,9 @@ pub struct HostPages {
     /// A permissions change made here, ahead of the host's word on it.
     permissions_ahead: Option<(String, helio_proto::permission::Permissions, Instant)>,
     note: Option<(IconName, gpui::Rgba, String, Instant)>,
-    restart_needed: bool,
+    /// A change made here restarts the host: the start time of the host
+    /// that is to make way, until another answers.
+    restarting: Option<u64>,
     confirm: Option<Confirm>,
     user: Entity<TextField>,
     password: Entity<TextField>,
@@ -98,7 +100,7 @@ pub struct HostPages {
     pub page_scroll: ScrollHandle,
 }
 
-const PORT_KEYS: [&str; 3] = ["port", "pairing_port", "web_port"];
+const PORT_KEYS: [&str; 3] = ["port", "pairing_port", "api_port"];
 
 impl HostPages {
     pub fn new(
@@ -178,7 +180,7 @@ impl HostPages {
             editing: None,
             permissions_ahead: None,
             note: None,
-            restart_needed: false,
+            restarting: None,
             confirm: None,
             user,
             password,
@@ -245,9 +247,21 @@ impl HostPages {
     }
 
     /// Ask the host how things are now (the window came forward: from
-    /// System Settings, say).
+    /// System Settings, say). Screen Recording missing, the host is asked
+    /// to look whether it was allowed meanwhile, which only a process it
+    /// starts can tell it (`helio-host/src/mac/permissions.rs`): allowed,
+    /// it restarts.
     pub fn refresh(&self) {
         self.send(Cmd::Refresh);
+        let screen = self
+            .snap
+            .status
+            .as_ref()
+            .and_then(|s| s.grants)
+            .map(|g| g.screen);
+        if screen == Some(false) {
+            self.send(Cmd::CheckGrants);
+        }
     }
 
     fn take_snapshot(&mut self, mut s: Snapshot, _window: &mut Window, cx: &mut Context<Self>) {
@@ -291,7 +305,17 @@ impl HostPages {
                 self.logs_scroll.scroll_to_bottom();
             }
         }
+        let back = restarted(self.restarting, &s);
         self.snap = s;
+        if back {
+            self.restarting = None;
+            self.note = Some((
+                IconName::CheckCircle,
+                Ink::FRESH,
+                "Helio Host restarted: the change applies.".into(),
+                Instant::now(),
+            ));
+        }
         if first_config {
             self.fill_fields(cx);
         }
@@ -333,7 +357,7 @@ impl HostPages {
             }
             Done::Saved { restart } => {
                 if restart {
-                    self.restart_needed = true;
+                    self.restarting = Some(self.snap.status.as_ref().map_or(0, |s| s.started_unix));
                 }
             }
             Done::Failed(e) => {
@@ -662,5 +686,51 @@ fn date(unix: u64) -> String {
         format!("{month} {d}")
     } else {
         format!("{month} {d}, {y}")
+    }
+}
+
+/// Whether the host that was to make way for a restart (the one that
+/// started at `from`) has: another one answers.
+fn restarted(from: Option<u64>, now: &Snapshot) -> bool {
+    match (from, &now.conn, &now.status) {
+        (Some(from), Conn::Ready, Some(s)) => s.started_unix != from,
+        _ => false,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::host::api::Status;
+
+    fn ready(started_unix: u64) -> Snapshot {
+        Snapshot {
+            conn: Conn::Ready,
+            status: Some(Status {
+                started_unix,
+                ..Status::default()
+            }),
+            ..Snapshot::default()
+        }
+    }
+
+    #[test]
+    fn the_host_has_restarted_once_another_one_answers() {
+        assert!(!restarted(Some(100), &ready(100)));
+        assert!(restarted(Some(100), &ready(160)));
+    }
+
+    #[test]
+    fn a_host_that_does_not_answer_has_not_restarted_yet() {
+        let gone = Snapshot {
+            conn: Conn::NotRunning,
+            ..Snapshot::default()
+        };
+        assert!(!restarted(Some(100), &gone));
+    }
+
+    #[test]
+    fn with_no_restart_asked_nothing_has_restarted() {
+        assert!(!restarted(None, &ready(160)));
     }
 }

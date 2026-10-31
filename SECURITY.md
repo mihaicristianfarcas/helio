@@ -31,11 +31,12 @@ the middle *while* the pairing happens, and guess the PIN at the first try,
 to intervene; a recording of the pairing does not help later. The pairing
 port (TCP 47801) serves the local network only.
 
-**The host's web UI and API** (HTTPS on TCP 47802) use a self-signed
-certificate the host makes for itself, and require the admin account the
-first visitor creates (or, from Helio on the host itself, a token the host writes
-for its own user). It is meant for the local network; do not forward the
-port.
+**The host's API** (HTTPS on TCP 47802), which Helio's This computer pages
+and `helio host` use, answers on localhost only (127.0.0.1 and ::1):
+nothing on the network reaches it. It uses a self-signed certificate the
+host makes for itself, and every call carries a token: one the host writes
+for its own user, or, from a Windows Helio (which is not an administrator),
+one it got by signing in once with an admin account made in Helio.
 
 **Secrets at rest.** On macOS and Linux, each device's private keys, the
 agent's API keys and the host's tokens are written readable only by their

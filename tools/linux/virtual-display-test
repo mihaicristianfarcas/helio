@@ -38,7 +38,7 @@ cat >"$HELIO_HOST_DATA_DIR/config.toml" <<'TOML'
 name = "linux-vd"
 port = 47830
 pairing_port = 47831
-web_port = 47832
+api_port = 47832
 internet_access = false
 port_mapping = false
 TOML

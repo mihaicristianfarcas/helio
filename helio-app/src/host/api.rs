@@ -1,4 +1,4 @@
-//! Talking to the host on this computer: its web API over HTTPS on
+//! Talking to the host on this computer: its API over HTTPS on
 //! localhost, trusting only the certificate Helio Host made for itself, with the
 //! local token Helio Host leaves for its own user or an app token got by signing in.
 //!
@@ -93,11 +93,11 @@ pub struct Api {
 
 #[derive(Deserialize)]
 struct PortOnly {
-    #[serde(default = "default_web_port")]
-    web_port: u16,
+    #[serde(default = "default_api_port")]
+    api_port: u16,
 }
 
-fn default_web_port() -> u16 {
+fn default_api_port() -> u16 {
     47802
 }
 
@@ -116,8 +116,8 @@ impl Api {
             let port = std::fs::read_to_string(dir.join("config.toml"))
                 .ok()
                 .and_then(|t| toml::from_str::<PortOnly>(&t).ok())
-                .map(|c| c.web_port)
-                .unwrap_or(default_web_port());
+                .map(|c| c.api_port)
+                .unwrap_or(default_api_port());
             format!("https://localhost:{port}")
         });
         let cert_path = std::env::var_os("HELIO_HOST_APP_CERT")
@@ -364,6 +364,12 @@ pub struct Status {
     pub port_mapping: String,
     /// What macOS lets the host do (None elsewhere).
     pub grants: Option<Grants>,
+    /// A restart the host has ahead: "after_session" (it waits for the
+    /// session to end) or "now" (it is stopping to start again).
+    pub restart: Option<String>,
+    /// When the host's process started (Unix seconds): another value is a
+    /// host that started again.
+    pub started_unix: u64,
 }
 
 /// What macOS lets the host do: Screen Recording, to capture at all, and

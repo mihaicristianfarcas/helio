@@ -35,6 +35,10 @@ impl HostPages {
             };
         }
         let mut out = Vec::new();
+        let pending = self.snap.status.as_ref().and_then(|s| s.restart.as_deref());
+        if let Some(line) = restart_line(pending, self.restarting.is_some()) {
+            out.push(notice(IconName::Refresh, Ink::ATTENTION, line, t).into_any_element());
+        }
         if let Some((glyph, tint, text, _)) = self.note.clone() {
             out.push(notice(glyph, tint, text, t).into_any_element());
         }
@@ -58,30 +62,10 @@ impl HostPages {
         }
     }
 
-    fn restart(&self) -> &'static str {
-        if self.os() == "macos" {
-            "Restart Helio Host"
-        } else {
-            "Restart HelioHost"
-        }
-    }
-
     /// Settings → Hosting: the host's name and sessions, and how devices
     /// reach it.
     fn hosting_sections(&mut self, t: Theme, cx: &mut Context<Self>) -> Vec<AnyElement> {
-        let restart = self.restart();
         let mut out = Vec::new();
-        if self.restart_needed {
-            out.push(
-                notice(
-                    IconName::Refresh,
-                    Ink::ATTENTION,
-                    format!("Saved. {restart} for the name or port change to apply."),
-                    t,
-                )
-                .into_any_element(),
-            );
-        }
         out.push(
             section("Host", t)
                 .child(rows(
@@ -89,11 +73,9 @@ impl HostPages {
                         setting(
                             "Name",
                             Some(
-                                format!(
-                                    "Shown to your devices. Press Return to save; {restart} \
-                                     for it to apply."
-                                )
-                                .into(),
+                                "Shown to your devices. Press Return to save: Helio Host \
+                                 restarts to apply it, once the stream ends if one runs."
+                                    .into(),
                             ),
                             div().w(px(200.0)).child(field(&self.name, t)),
                             t,
@@ -145,7 +127,7 @@ impl HostPages {
                     [
                         ("Tunnel (UDP)", 0usize),
                         ("Pairing (TCP)", 1),
-                        ("Web UI (TCP)", 2),
+                        ("API, this computer only (TCP)", 2),
                     ]
                     .into_iter()
                     .map(|(label, i)| {
@@ -160,9 +142,8 @@ impl HostPages {
                     t,
                 ))
                 .child(footnote(
-                    format!(
-                        "Press Return in a field to save it. {restart} for port changes to apply."
-                    ),
+                    "Press Return in a field to save it: Helio Host restarts to apply it, once \
+                     the stream ends if one runs.",
                     t,
                 ))
                 .into_any_element(),
@@ -224,7 +205,7 @@ impl HostPages {
                 "nvidia_max_power",
                 "Full GPU power for Helio Host",
                 "The NVIDIA driver keeps its clocks up for Helio Host instead of lowering them \
-                 between frames, which slows the encoder. Applies after Helio Host restarts.",
+                 between frames, which slows the encoder. Helio Host restarts to apply it.",
                 t,
                 cx,
             ));
@@ -233,7 +214,7 @@ impl HostPages {
                 "OpenGL and Vulkan through DXGI",
                 "Full-screen OpenGL and Vulkan games are captured at their full frame rate. \
                  Changes the driver's setting for every program while Helio Host runs, and puts it \
-                 back when it stops. Applies after Helio Host restarts.",
+                 back when it stops. Helio Host restarts to apply it.",
                 t,
                 cx,
             ));
@@ -446,5 +427,44 @@ impl HostPages {
             t,
         )
         .into_any_element()
+    }
+}
+
+/// The line over the host's settings while a restart is ahead: `pending`,
+/// the host's word on it ("after_session", "now"); `asked_here`, a change
+/// made in this window restarts it and the host has not answered again.
+fn restart_line(pending: Option<&str>, asked_here: bool) -> Option<&'static str> {
+    match (pending, asked_here) {
+        (Some("after_session"), _) => {
+            Some("Helio Host restarts when the stream ends, to apply a change.")
+        }
+        (Some(_), _) | (None, true) => Some("Helio Host is restarting to apply a change…"),
+        (None, false) => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::restart_line;
+
+    #[test]
+    fn a_restart_waiting_for_the_stream_says_so() {
+        assert_eq!(
+            restart_line(Some("after_session"), true),
+            Some("Helio Host restarts when the stream ends, to apply a change.")
+        );
+    }
+
+    #[test]
+    fn a_restart_under_way_says_so_until_the_host_is_back() {
+        let line = Some("Helio Host is restarting to apply a change…");
+        assert_eq!(restart_line(Some("now"), false), line);
+        // Asked here, and the host is gone meanwhile: still under way.
+        assert_eq!(restart_line(None, true), line);
+    }
+
+    #[test]
+    fn no_restart_ahead_says_nothing() {
+        assert_eq!(restart_line(None, false), None);
     }
 }

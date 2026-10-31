@@ -9,7 +9,8 @@
 //! - the console session is where the displays are.
 //!
 //! It relaunches the host when the console session changes (sign-out, fast user
-//! switching, a reboot to the sign-in screen) or if the host exits.
+//! switching, a reboot to the sign-in screen) or if the host exits: at once
+//! when the host exited to start again (`restart`), else after 3 s.
 //!
 //! It runs, and launches, only the engine's copy in `C:\Program Files\Helio Host`
 //! that `helio-host enable` puts there (`hosting`): never a `helio-host.exe` in a folder
@@ -32,10 +33,10 @@ use windows::Win32::System::Diagnostics::ToolHelp::{
 };
 use windows::Win32::System::RemoteDesktop::WTSGetActiveConsoleSessionId;
 use windows::Win32::System::Threading::{
-    CreateEventW, CreateProcessAsUserW, GetCurrentProcess, OpenProcess, OpenProcessToken,
-    ResetEvent, SetEvent, TerminateProcess, WaitForMultipleObjects, WaitForSingleObject,
-    CREATE_NO_WINDOW, CREATE_UNICODE_ENVIRONMENT, INFINITE, PROCESS_INFORMATION,
-    PROCESS_SYNCHRONIZE, STARTUPINFOW,
+    CreateEventW, CreateProcessAsUserW, GetCurrentProcess, GetExitCodeProcess, OpenProcess,
+    OpenProcessToken, ResetEvent, SetEvent, TerminateProcess, WaitForMultipleObjects,
+    WaitForSingleObject, CREATE_NO_WINDOW, CREATE_UNICODE_ENVIRONMENT, INFINITE,
+    PROCESS_INFORMATION, PROCESS_SYNCHRONIZE, STARTUPINFOW,
 };
 use windows_service::service::{
     ServiceAccess, ServiceControl, ServiceControlAccept, ServiceErrorControl, ServiceExitCode,
@@ -127,7 +128,8 @@ fn service_body() -> Result<(), String> {
     // Until stopped: make sure a host runs in the console session. At once
     // the first time, so that the host runs as soon as the service does
     // (`helio-host status` reports a service without its host as failed); then 3 s
-    // after the host exits, or while there is no console session.
+    // after the host exits (at once when it exited to start again), or while
+    // there is no console session.
     let mut wait = 0;
     while unsafe { WaitForSingleObject(events.stop, wait) } != WAIT_OBJECT_0 {
         wait = 3000;
@@ -168,7 +170,16 @@ fn service_body() -> Result<(), String> {
                     break;
                 }
                 _ => {
-                    tracing::warn!("host exited; relaunching");
+                    let mut code = 0u32;
+                    // SAFETY: the child's process handle, open until the
+                    // CloseHandle below; `code` is a live local.
+                    let _ = unsafe { GetExitCodeProcess(child.hProcess, &mut code) };
+                    if code == u32::from(crate::restart::EXIT_CODE) {
+                        tracing::info!("the host stopped to start again; relaunching");
+                        wait = 0;
+                    } else {
+                        tracing::warn!(code, "host exited; relaunching");
+                    }
                     break;
                 }
             }

@@ -3,7 +3,8 @@
 //!
 //! 1. Helio shows a 4-digit PIN and connects to Helio Host's pairing port, with its
 //!    SPAKE2 message and a fresh ML-KEM-768 encapsulation key.
-//! 2. Helio Host shows "<client> wants to pair" in its web UI; the user types the PIN.
+//! 2. Helio on the host shows "<client> wants to pair"; the user types the PIN
+//!    there (or gives it to `helio host pair`).
 //! 3. Helio Host answers with its SPAKE2 message and an ML-KEM ciphertext to Helio's
 //!    key. Both derive the pairing's keys from the SPAKE2 secret and the
 //!    ML-KEM secret together, each proves it derived them (a confirmation MAC
@@ -309,7 +310,7 @@ pub struct PairedHost {
 }
 
 /// Stops a client's pairing from another thread: the connection is closed,
-/// so the host drops the request from its web UI.
+/// so the host drops the request from its list.
 #[derive(Clone, Default)]
 pub struct Cancel {
     cancelled: Arc<AtomicBool>,

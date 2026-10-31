@@ -364,7 +364,8 @@ fn list_hosts(computer: &Computer) -> String {
     let hosts = crate::headless::agent_hosts(&computer.config.data_dir);
     if hosts.is_empty() {
         return "This agent is paired with no host. Ask the user to pair one: `helio \
-            pair-agent HOST` (or Helio > Agents), then type the PIN in Helio Host's web UI."
+            pair-agent HOST` (or Helio > Agents), then type the PIN in Helio on the host (This \
+            computer > Devices), or run `helio host pair PIN` there."
             .into();
     }
     let current = computer.host().map(str::to_string);

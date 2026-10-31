@@ -26,6 +26,9 @@ pub enum Cmd {
     AgentOp(&'static str),
     EndSession,
     PutConfig(Value),
+    /// Whether macOS has allowed Screen Recording since the host asked;
+    /// allowed, the host restarts to have it.
+    CheckGrants,
     SignIn {
         user: String,
         password: String,
@@ -67,7 +70,11 @@ pub struct Snapshot {
 pub enum Done {
     Paired(String),
     PinFailed(u32, String),
-    Saved { restart: bool },
+    /// Done; `restart`: the host restarts for it (now, or when the session
+    /// ends).
+    Saved {
+        restart: bool,
+    },
     Failed(String),
     SignedIn,
     SignInFailed(String),
@@ -306,10 +313,7 @@ fn execute_inner(api: &mut Api, snap: &mut Snapshot, cmd: Cmd) -> Done {
             Ok(v) => {
                 snap.config = Some(config);
                 Done::Saved {
-                    restart: v
-                        .get("restart_needed")
-                        .and_then(Value::as_bool)
-                        .unwrap_or(false),
+                    restart: restarts(&v),
                 }
             }
             Err(e) => {
@@ -317,6 +321,12 @@ fn execute_inner(api: &mut Api, snap: &mut Snapshot, cmd: Cmd) -> Done {
                 fail(e)
             }
         },
+        Cmd::CheckGrants => api
+            .post("/api/grants/check", &json!({}))
+            .map(|v| Done::Saved {
+                restart: restarts(&v),
+            })
+            .unwrap_or_else(fail),
         Cmd::SignIn {
             user,
             password,
@@ -335,4 +345,10 @@ fn execute_inner(api: &mut Api, snap: &mut Snapshot, cmd: Cmd) -> Done {
         }
         Cmd::WantLogs(_) | Cmd::Watched(_) | Cmd::Refresh => Done::Saved { restart: false },
     }
+}
+
+/// Whether the host's answer says it restarts (its `restart`: "now" or
+/// "after_session").
+fn restarts(answer: &Value) -> bool {
+    answer.get("restart").and_then(Value::as_str).is_some()
 }

@@ -150,6 +150,12 @@ pub fn error(what: impl std::fmt::Display) {
     eprintln!("{} {what}", to(To::Err, Look::Bad, "error:"));
 }
 
+/// Print on stderr what went wrong beside a command that worked:
+/// `warning:`, then what.
+pub fn warn(what: impl std::fmt::Display) {
+    eprintln!("{} {what}", to(To::Err, Look::Warn, "warning:"));
+}
+
 /// `rows` in columns two spaces apart, as wide as their widest cell, with
 /// `header` above them (quiet); each cell painted by `look`, given its
 /// column and text. The last column is not padded.

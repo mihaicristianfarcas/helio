@@ -48,7 +48,7 @@ line of its standard output. That process is `helio_client::linux`:
 
 ## Hosting: Helio Host
 
-The same host — sessions, pairing, the web UI, the bitrate controller, the
+The same host — sessions, pairing, the API, the bitrate controller, the
 internet path — with `helio-host/src/linux/` where Windows and macOS have theirs.
 On GNOME and KDE under Wayland, each session gets a virtual display at the
 client's mode, made by the desktop's compositor (below). Elsewhere it

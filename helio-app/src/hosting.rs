@@ -267,8 +267,8 @@ impl HelioApp {
                     "grant-screen",
                     IconName::Display,
                     "Screen Recording",
-                    "For your devices to see this Mac's screen. macOS asks to reopen the host \
-                     once it is allowed.",
+                    "For your devices to see this Mac's screen. Once it is allowed, the host \
+                     restarts when you come back to Helio.",
                     grants.map(|g| g.screen),
                     SCREEN_PANE,
                 ),

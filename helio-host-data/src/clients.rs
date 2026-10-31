@@ -1,4 +1,5 @@
-//! Paired clients. Pairing adds one; the web UI lists and removes them.
+//! Paired clients. Pairing adds one; Helio's This computer pages and
+//! `helio host` list and remove them.
 //!
 //! A client is a person's device, or an AI agent's identity on one: an agent
 //! pairs with a key of its own, so the host knows it by key, not by what it

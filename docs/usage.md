@@ -11,7 +11,7 @@ its own — full screen by default — at the resolution, frame rate and bitrate
 set under **Video**; the host sets up a display in exactly that mode for the
 session. Helio's own window stays open beside it. The card's **…** menu (or a
 right click) has more: **Steam Big Picture** (open Steam's Big Picture on
-the host, and close it after), **Wake**, the host's **web UI**, **Unpair**.
+the host, and close it after), **Wake**, **Unpair**.
 
 While the stream has the keyboard and mouse, every key goes to the host —
 system shortcuts included — except Moonlight's chords, **Ctrl+Alt+Shift**
@@ -130,7 +130,7 @@ hosts (`hosts.toml`) and this device's keys:
 Hosting is one switch, and it is off until you turn it on: in Helio, in
 **Settings → Hosting** (or in setup, by answering that your devices will
 play this computer). Off, nothing of the host runs on
-your computer: no port is open for streaming, pairing or the web UI,
+your computer: no port is open for streaming or pairing,
 nothing is published for finding the host from the internet, and it is not
 announced on the local network. Helio, the client, opens none of these.
 
@@ -166,21 +166,28 @@ On a Mac the host asks for Screen Recording and Accessibility with macOS's
 own prompts as it first starts, as **Helio Host**: System Settings lists it,
 not Helio, under both. Helio's Hosting page says, for each, whether
 macOS allows it, with a button to its pane of System Settings, and notices
-when it is allowed. After Screen Recording is turned on there, macOS asks
-to quit and reopen the host.
+when it is allowed. A host that runs cannot use Screen Recording allowed
+after it started, so it restarts to have it: when you come back to Helio
+from System Settings, or when a device next tries to connect (that try is
+refused, and the next one streams).
 
 Quitting Helio never stops the host: only the switch does. Uninstalling Helio
 turns hosting off first ([install.md](install.md#uninstalling)). Your
 pairings and settings stay in the data folder either way.
 
-## This computer and the web UI
+## This computer
 
 With hosting on, Helio's **This computer** pages and **Settings → Hosting**
-and the host's web UI (`https://HOST:47802`) do the same things: see and
-end the session, pair and unpair devices, set what each may do, change the
-host's settings, read its log. This computer is for the host's own screen; the web UI for a
-headless host or another computer. On Windows, Helio signs in to the host
-once with the web UI's admin account.
+are where you see and end the session, pair and unpair devices, set what
+each may do, change the host's settings and read its log. They talk to the
+host through its API, which answers this computer only: nothing on the
+network can. On Windows, Helio is not an administrator, so it signs in to
+the host once, with an admin account it asks you to make the first time.
+
+A host you cannot sit at pairs from a terminal, over SSH: start pairing on
+the device (`helio pair HOST`, or **Add Host** in Helio), then give the PIN
+it shows to the host with `helio host pair PIN`
+([cli.md](cli.md#helio-host--this-computer-as-a-host)).
 
 **Helio's icon** sits in the menu bar on a Mac and in the taskbar's
 notification area on Windows while hosting is on, with or without the
@@ -196,35 +203,36 @@ the host runs on.
 
 | Page | Setting | Default | `config.toml` |
 |---|---|---|---|
-| General | Name (as clients see it) | the computer's name | `name` |
+| Hosting | Name (as clients see it) | the computer's name | `name` |
 | | Let a client take over a session (a device also needs **Take over** in its permissions) | on | `allow_takeover` |
-| | Keep this PC's monitors on while streaming | off: the virtual display is the whole desktop (Windows, macOS, GNOME; on KDE it extends the desktop either way) | `keep_host_displays` |
-| | Share the clipboard with clients | on | `clipboard` |
-| Video | NVENC preset | P1 (fastest), as Sunshine | `nvenc_preset` |
+| | Allow streaming over the internet (off: the host is on the local network only, and not on the DHT at all) | on | `internet_access` |
+| | Ask the router to forward the port | on | `port_mapping` |
+| | Ports: tunnel (UDP), pairing, API (this computer only) | 47800, 47801, 47802 | `port`, `pairing_port`, `api_port` |
+| Video | Keep this PC's monitors on while streaming | off: the virtual display is the whole desktop (Windows, macOS, GNOME; on KDE it extends the desktop either way) | `keep_host_displays` |
+| | NVENC preset | P1 (fastest), as Sunshine | `nvenc_preset` |
 | | Two-pass encoding | on | `nvenc_two_pass` |
-| | Full GPU power for Helio Host (NVIDIA, after a restart) | on | `nvidia_max_power` |
-| | OpenGL and Vulkan through DXGI (NVIDIA, system-wide while Helio Host runs, after a restart) | on | `nvidia_dxgi_present` |
+| | Full GPU power for Helio Host (NVIDIA) | on | `nvidia_max_power` |
+| | OpenGL and Vulkan through DXGI (NVIDIA, system-wide while Helio Host runs) | on | `nvidia_dxgi_present` |
 | | Allow HEVC, Allow AV1 | on | `allow_hevc`, `allow_av1` |
 | | Allow HDR, Allow YUV 4:4:4 (for a client that asks) | on | `allow_hdr`, `allow_yuv444` |
 | | Maximum bitrate, maximum frame rate | the client's choice | `max_bitrate_kbps`, `max_fps` |
 | | Send pacing | 800 Mbit/s | `pace_mbps` |
 | | Adapt the bitrate to the network | on | `adaptive_bitrate` |
-| Network | Allow streaming over the internet (off: the host is on the local network only, and not on the DHT at all) | on | `internet_access` |
-| | Ask the router to forward the port | on | `port_mapping` |
-| | Ports: tunnel (UDP), pairing, web UI | 47800, 47801, 47802 | `port`, `pairing_port`, `web_port` |
-| AI agents | Allow paired AI agents | on | `agents` |
+| Input | Share the clipboard with clients | on | `clipboard` |
+| Agent setup | Allow paired AI agents | on | `agents` |
 | | Hold after local input | 10 s | `agent_local_input_hold_secs` |
 
-The groups are the web UI's. In Helio, with hosting on, each setting is on
-the settings page of its kind, after Helio's own: the name, taking over and
-the Network group in **Settings → Hosting**, under the switch; keeping the
-monitors on and the Video group in **Settings → Video** ("Streaming from
-this PC", "What devices may ask of this PC"); the clipboard in **Settings →
-Input**; the AI agents group in **Settings → Agent setup**. A computer that
-only plays shows none of them. A changed name or port applies after the
-host restarts (the page offers to).
+In Helio, with hosting on, each setting is on the settings page the table
+names, after Helio's own: the name, taking over, the network and the ports
+in **Settings → Hosting**, under the switch; the Video ones in **Settings →
+Video** ("Streaming from this PC", "What devices may ask of this PC"). A
+computer that only plays shows none of them.
+
+The host reads its name, its ports and the two NVIDIA settings only when it
+starts, so changing one restarts it: at once, or when the stream that runs
+ends. Helio's settings pages say which.
 Helio Host's data folder holds `config.toml`, its identity, the paired clients,
-the web UI's certificate and account, and `logs/`:
+its API's certificate and tokens, the admin account (Windows), and `logs/`:
 
 | System | Helio Host's data folder |
 |---|---|
@@ -239,8 +247,7 @@ the web UI's certificate and account, and `logs/`:
 Each paired device has permissions on the host, as Apollo gives each of its
 clients: whether it may see the screen, which input the host takes from it,
 which way the clipboard goes, and more. Set them in Helio, This computer →
-**Devices** (the button beside each device) or in the web UI under
-**Clients**. A change applies at once, to a stream that is running too.
+**Devices** (the button beside each device). A change applies at once, to a stream that is running too.
 
 | Permission | Lets the device | Name (`helio host permissions`) |
 |---|---|---|
@@ -282,8 +289,9 @@ What the device hears:
   stream started comes on with the next stream.
 
 From a terminal: `helio host permissions X25519 view,keyboard,mouse`
-([cli.md](cli.md#helio-host--this-computer-as-a-host)); a running host takes
-that change at its next start.
+([cli.md](cli.md#helio-host--this-computer-as-a-host)), which restarts a
+running host to take the change: at once, or when the stream that runs
+ends.
 
 ## Updates
 

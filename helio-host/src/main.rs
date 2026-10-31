@@ -9,7 +9,19 @@
 //!   helio-host enable | disable      hosting on (the host runs at every start,
 //!                                    from now) or off (see `hosting`)
 //!   helio-host status [--json]       off, starting, on or failed; for on,
-//!                                    whether the web API answers
+//!                                    whether its API answers
+//!   helio-host restart               the running host starts again: now, or
+//!                                    when its session ends (`restart`)
+//!   helio-host pair PIN [--device NAME] [--permissions LIST]
+//!                                    give the running host the PIN a device
+//!                                    asking to pair shows (`ask`)
+//!
+//! On a Mac, also:
+//!
+//!   helio-host grants                what macOS lets a host started now do
+//!                                    (Screen Recording, Accessibility), as
+//!                                    JSON: the host runs it to learn of a
+//!                                    grant it cannot see itself (`permissions`)
 //!
 //! On Windows, also:
 //!
@@ -26,6 +38,7 @@
 
 #[cfg(windows)]
 mod apps;
+mod ask;
 #[cfg(windows)]
 mod audio;
 #[cfg(any(target_os = "macos", target_os = "linux"))]
@@ -84,6 +97,7 @@ mod priority;
 #[cfg(target_os = "linux")]
 #[path = "linux/remote_input.rs"]
 mod remote_input;
+mod restart;
 mod sender;
 #[cfg(windows)]
 mod service;
@@ -205,10 +219,15 @@ fn main() -> ExitCode {
         "enable" => hosting::switch(true),
         "disable" => hosting::switch(false),
         "status" => hosting::print_status(&dir, args.iter().any(|a| a == "--json")),
+        "restart" => ask::restart(&dir),
+        "pair" => ask::pair(&dir, &args[1..]),
+        #[cfg(target_os = "macos")]
+        "grants" => permissions::print_grants(),
         other => {
             eprintln!(
                 "helio-host: no command {other:?}. helio-host is what the system and Helio run \
-                    (host, enable, disable, status); this computer's hosting is `helio host` \
+                    (host, enable, disable, status, restart, pair); this computer's hosting is \
+                    `helio host` \
                     (helio host --help)."
             );
             ExitCode::FAILURE
@@ -227,7 +246,7 @@ fn run_host(
     opened_by_hand: bool,
     secured: Option<String>,
 ) -> ExitCode {
-    let _guard = init_logging(&dir);
+    let log = init_logging(&dir);
     if let Some(said) = secured {
         tracing::warn!("{said}");
     }
@@ -286,6 +305,10 @@ fn run_host(
     host.serve();
     #[cfg(windows)]
     endsession::stopped();
+    if host.restarting() {
+        return restart::start_again(log);
+    }
+    drop(log);
     ExitCode::SUCCESS
 }
 

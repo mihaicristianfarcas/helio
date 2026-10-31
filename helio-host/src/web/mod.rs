@@ -1,21 +1,21 @@
-//! Helio Host's web UI: what Sunshine's web UI is to Sunshine. HTTPS on the web port,
-//! with a self-signed certificate generated on first run; an admin account is
-//! created on the first visit.
+//! Helio Host's API, for Helio's This computer pages on this computer
+//! (`helio-app/src/host`) and `helio host` (`probe`): the session, pairing
+//! requests and their PINs, the paired devices and what each may do, the
+//! settings (what the host reads only when it starts restarts it:
+//! `restart`), the log. What Sunshine's web UI does, in Helio's own window.
 //!
-//! Pages: dashboard (the live session; an AI agent's, with what it does and
-//! buttons to pause or stop it), pairing (type the PIN a client shows, and
-//! choose what it may do), clients (unpair; what each one may do), settings
-//! (config.toml), logs.
-//!
-//! The same API serves Helio's This computer pages (`helio-app/src/host`),
-//! which send a bearer token instead of a cookie: the local token this host
-//! writes where only its own user (on Windows, SYSTEM and Administrators)
-//! can read it, or an app token it got by signing in once with the admin
-//! account (kept hashed here, in app-tokens.toml).
+//! HTTPS on the API port, with a self-signed certificate made on first run,
+//! on localhost only (127.0.0.1 and ::1): nothing on the network reaches
+//! it. A device a person cannot sit at pairs with `helio host pair PIN`
+//! over SSH. Every call but `/api/state` carries a bearer token: the local
+//! token this host writes where only its own user (on Windows, SYSTEM and
+//! Administrators) can read it, or an app token Helio got by signing in once
+//! with the admin account (kept hashed here, in app-tokens.toml), which a
+//! Windows Helio needs: it is not elevated, and the host's folder is
+//! administrators' only.
 
 pub mod probe;
 
-use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::path::Path;
 use std::sync::Arc;
@@ -27,7 +27,7 @@ use argon2::password_hash::{
 use argon2::Argon2;
 use axum::extract::{Path as UrlPath, State};
 use axum::http::{header, HeaderMap, StatusCode};
-use axum::response::{Html, IntoResponse, Response};
+use axum::response::{IntoResponse, Response};
 use axum::routing::{delete, get, post};
 use axum::{Json, Router};
 use parking_lot::Mutex;
@@ -39,9 +39,6 @@ use crate::host::Host;
 use crate::pairing::PinResult;
 use helio_proto::permission::Permissions;
 
-const INDEX: &str = include_str!("index.html");
-const SESSION_TTL: Duration = Duration::from_secs(7 * 24 * 3600);
-const COOKIE: &str = "helio_host_session";
 const LOCAL_TOKEN: &str = "local-token";
 const APP_TOKENS: &str = "app-tokens.toml";
 
@@ -67,7 +64,6 @@ struct AppToken {
 
 struct Web {
     host: Arc<Host>,
-    sessions: Mutex<HashMap<String, Instant>>,
     failures: Mutex<Vec<Instant>>,
     /// Readable only by this host's own user: that user's Helio Host app.
     local_token: Option<String>,
@@ -146,43 +142,20 @@ fn write_local_token(dir: &Path) -> Option<String> {
     }
 }
 
-fn cookie_of(headers: &HeaderMap) -> Option<String> {
-    let raw = headers.get(header::COOKIE)?.to_str().ok()?;
-    raw.split(';')
-        .filter_map(|kv| kv.trim().split_once('='))
-        .find(|(k, _)| *k == COOKIE)
-        .map(|(_, v)| v.to_string())
-}
-
 impl Web {
     fn authed(&self, headers: &HeaderMap) -> bool {
-        if let Some(t) = bearer_of(headers) {
-            if self.local_token.as_deref().is_some_and(|l| same(l, &t)) {
-                return true;
-            }
-            let hash = sha256_hex(&t);
-            return self
-                .app_tokens
-                .lock()
-                .tokens
-                .iter()
-                .any(|a| same(&a.sha256, &hash));
-        }
-        let Some(t) = cookie_of(headers) else {
+        let Some(t) = bearer_of(headers) else {
             return false;
         };
-        let mut s = self.sessions.lock();
-        s.retain(|_, at| at.elapsed() < SESSION_TTL);
-        s.contains_key(&t)
-    }
-
-    fn login_cookie(&self) -> String {
-        let t = token();
-        self.sessions.lock().insert(t.clone(), Instant::now());
-        format!(
-            "{COOKIE}={t}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age={}",
-            SESSION_TTL.as_secs()
-        )
+        if self.local_token.as_deref().is_some_and(|l| same(l, &t)) {
+            return true;
+        }
+        let hash = sha256_hex(&t);
+        self.app_tokens
+            .lock()
+            .tokens
+            .iter()
+            .any(|a| same(&a.sha256, &hash))
     }
 }
 
@@ -202,10 +175,6 @@ macro_rules! require_auth {
     };
 }
 
-async fn index() -> impl IntoResponse {
-    ([(header::CACHE_CONTROL, "no-store")], Html(INDEX))
-}
-
 async fn state(State(web): State<Shared>, headers: HeaderMap) -> Response {
     let setup_needed = load_credentials(&web.host.data_dir).is_none();
     Json(json!({
@@ -223,50 +192,40 @@ struct Login {
     password: String,
 }
 
-async fn setup(State(web): State<Shared>, Json(req): Json<Login>) -> Response {
-    let dir = web.host.data_dir.clone();
-    if load_credentials(&dir).is_some() {
-        return (
-            StatusCode::CONFLICT,
-            Json(json!({"error": "already set up"})),
-        )
-            .into_response();
+/// Make the admin account, which a Windows Helio signs in with (the first
+/// time, `/api/app-token` with `setup`).
+fn setup(web: &Web, req: &Login) -> Result<(), Box<Response>> {
+    let fail = |code: StatusCode, error: String| {
+        Err(Box::new(
+            (code, Json(json!({ "error": error }))).into_response(),
+        ))
+    };
+    let dir = &web.host.data_dir;
+    if load_credentials(dir).is_some() {
+        return fail(StatusCode::CONFLICT, "already set up".into());
     }
     if req.user.trim().is_empty() || req.password.len() < 8 {
-        return (
+        return fail(
             StatusCode::BAD_REQUEST,
-            Json(json!({"error": "choose a user name and a password of at least 8 characters"})),
-        )
-            .into_response();
+            "choose a user name and a password of at least 8 characters".into(),
+        );
     }
     let salt = SaltString::generate(&mut OsRng);
     let Ok(hash) = Argon2::default().hash_password(req.password.as_bytes(), &salt) else {
-        return (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({"error": "hashing failed"})),
-        )
-            .into_response();
+        return fail(StatusCode::INTERNAL_SERVER_ERROR, "hashing failed".into());
     };
     let creds = Credentials {
         user: req.user.trim().to_string(),
         hash: hash.to_string(),
     };
-    tracing::info!(user = creds.user, "web UI: admin account created");
+    tracing::info!(user = creds.user, "API: admin account created");
     let text = toml::to_string(&creds).unwrap_or_default();
     if let Err(e) =
-        helio_transport::identity::write_private(&credentials_path(&dir), text.as_bytes())
+        helio_transport::identity::write_private(&credentials_path(dir), text.as_bytes())
     {
-        return (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({"error": e.to_string()})),
-        )
-            .into_response();
+        return fail(StatusCode::INTERNAL_SERVER_ERROR, e.to_string());
     }
-    (
-        [(header::SET_COOKIE, web.login_cookie())],
-        Json(json!({"ok": true})),
-    )
-        .into_response()
+    Ok(())
 }
 
 /// The admin account's user name and password, rate-limited.
@@ -299,7 +258,7 @@ fn check_password(web: &Web, req: &Login) -> Result<(), Box<Response>> {
             .unwrap_or(false);
     if !ok {
         web.failures.lock().push(Instant::now());
-        tracing::warn!(user = req.user, "web UI: wrong user name or password");
+        tracing::warn!(user = req.user, "API: wrong user name or password");
         return Err(Box::new(
             (
                 StatusCode::UNAUTHORIZED,
@@ -308,7 +267,7 @@ fn check_password(web: &Web, req: &Login) -> Result<(), Box<Response>> {
                 .into_response(),
         ));
     }
-    tracing::info!(user = req.user, "web UI: signed in");
+    tracing::info!(user = req.user, "API: signed in");
     Ok(())
 }
 
@@ -319,7 +278,7 @@ struct AppLogin {
     /// Who asks ("Helio Host on gaming-pc"), to tell tokens apart.
     #[serde(default)]
     name: String,
-    /// Create the admin account first (the first visit, as /api/setup).
+    /// Create the admin account first (the first sign-in).
     #[serde(default)]
     setup: bool,
 }
@@ -330,19 +289,12 @@ async fn app_token(State(web): State<Shared>, Json(req): Json<AppLogin>) -> Resp
         user: req.user,
         password: req.password,
     };
-    if req.setup {
-        let response = setup(
-            State(web.clone()),
-            Json(Login {
-                user: login.user.clone(),
-                password: login.password.clone(),
-            }),
-        )
-        .await;
-        if response.status() != StatusCode::OK {
-            return response;
-        }
-    } else if let Err(r) = check_password(&web, &login) {
+    let checked = if req.setup {
+        setup(&web, &login)
+    } else {
+        check_password(&web, &login)
+    };
+    if let Err(r) = checked {
         return *r;
     }
     let t = token();
@@ -357,7 +309,7 @@ async fn app_token(State(web): State<Shared>, Json(req): Json<AppLogin>) -> Resp
     };
     let saved = {
         let mut tokens = web.app_tokens.lock();
-        tracing::info!(name, "web UI: app token issued");
+        tracing::info!(name, "API: app token issued");
         tokens.tokens.push(AppToken {
             name,
             sha256: sha256_hex(&t),
@@ -386,32 +338,10 @@ async fn drop_app_token(State(web): State<Shared>, headers: HeaderMap) -> Respon
     let before = tokens.tokens.len();
     tokens.tokens.retain(|a| !same(&a.sha256, &hash));
     if tokens.tokens.len() != before {
-        tracing::info!("web UI: app token revoked (signed out)");
+        tracing::info!("API: app token revoked (signed out)");
         let _ = save_app_tokens(&web.host.data_dir, &tokens);
     }
     Json(json!({"ok": true})).into_response()
-}
-
-async fn login(State(web): State<Shared>, Json(req): Json<Login>) -> Response {
-    if let Err(r) = check_password(&web, &req) {
-        return *r;
-    }
-    (
-        [(header::SET_COOKIE, web.login_cookie())],
-        Json(json!({"ok": true})),
-    )
-        .into_response()
-}
-
-async fn logout(State(web): State<Shared>, headers: HeaderMap) -> Response {
-    if let Some(t) = cookie_of(&headers) {
-        web.sessions.lock().remove(&t);
-    }
-    (
-        [(header::SET_COOKIE, format!("{COOKIE}=; Path=/; Max-Age=0"))],
-        Json(json!({"ok": true})),
-    )
-        .into_response()
 }
 
 async fn status(State(web): State<Shared>, headers: HeaderMap) -> Response {
@@ -437,6 +367,8 @@ async fn status(State(web): State<Shared>, headers: HeaderMap) -> Response {
         "public": h.stun.public().iter().map(|a| a.to_string()).collect::<Vec<_>>(),
         "port_mapping": *h.port_mapping.lock(),
         "grants": grants(),
+        "restart": h.restart_pending().map(|w| w.word()),
+        "started_unix": h.started_unix,
     }))
     .into_response()
 }
@@ -486,19 +418,19 @@ async fn submit_pin(
     .await;
     match &result {
         Ok(PinResult::Paired(name)) => {
-            tracing::info!(request = id, client = name, "web UI: PIN accepted, paired")
+            tracing::info!(request = id, client = name, "API: PIN accepted, paired")
         }
-        Ok(PinResult::WrongPin) => tracing::warn!(request = id, "web UI: wrong PIN"),
+        Ok(PinResult::WrongPin) => tracing::warn!(request = id, "API: wrong PIN"),
         Ok(PinResult::NotFound) => {
-            tracing::info!(request = id, "web UI: PIN for a request that is gone")
+            tracing::info!(request = id, "API: PIN for a request that is gone")
         }
         Ok(PinResult::TooManyAttempts) => {
-            tracing::warn!(request = id, "web UI: too many wrong PINs")
+            tracing::warn!(request = id, "API: too many wrong PINs")
         }
         Ok(PinResult::Failed(e)) => {
-            tracing::warn!(request = id, error = e, "web UI: pairing failed")
+            tracing::warn!(request = id, error = e, "API: pairing failed")
         }
-        Err(e) => tracing::warn!(request = id, error = %e, "web UI: pairing task failed"),
+        Err(e) => tracing::warn!(request = id, error = %e, "API: pairing task failed"),
     }
     match result {
         Ok(PinResult::Paired(name)) => Json(json!({"ok": true, "client": name})).into_response(),
@@ -537,7 +469,7 @@ async fn decline(
     UrlPath(id): UrlPath<u32>,
 ) -> Response {
     require_auth!(web, headers);
-    tracing::info!(request = id, "web UI: pairing request declined");
+    tracing::info!(request = id, "API: pairing request declined");
     Json(json!({"ok": web.host.pairing.decline(id)})).into_response()
 }
 
@@ -585,7 +517,7 @@ async fn unpair(
         .find(|c| c.x25519 == req.key)
         .map(|c| c.name.clone())
         .unwrap_or_default();
-    tracing::info!(client = name, "web UI: unpair");
+    tracing::info!(client = name, "API: unpair");
     match web.host.remove_client(&req.key) {
         Ok(found) => Json(json!({"ok": found})).into_response(),
         Err(e) => (
@@ -619,7 +551,7 @@ async fn set_permissions(
     let Some((name, agent)) = found else {
         return Json(json!({"ok": false})).into_response();
     };
-    tracing::info!(client = name, permissions = ?req.permissions.fit(agent).names(), "web UI: permissions");
+    tracing::info!(client = name, permissions = ?req.permissions.fit(agent).names(), "API: permissions");
     match web.host.set_permissions(&req.key, req.permissions) {
         Ok(now) => Json(json!({"ok": now.is_some(), "permissions": now})).into_response(),
         Err(e) => (
@@ -656,7 +588,7 @@ async fn agent_op(
                 .into_response()
         }
     };
-    tracing::info!(op = op_name, "web UI: agent control");
+    tracing::info!(op = op_name, "API: agent control");
     web.host.agent_control(op);
     Json(json!({"ok": true})).into_response()
 }
@@ -680,14 +612,11 @@ async fn put_config(
         {
             for (k, v) in &b {
                 if a.get(k) != Some(v) {
-                    tracing::info!(key = k, from = %a.get(k).cloned().unwrap_or_default(), to = %v, "web UI: setting changed");
+                    tracing::info!(key = k, from = %a.get(k).cloned().unwrap_or_default(), to = %v, "API: setting changed");
                 }
             }
         }
-        old.port != new.port
-            || old.pairing_port != new.pairing_port
-            || old.web_port != new.web_port
-            || old.name != new.name
+        taken_at_start(&old, &new)
     };
     if let Err(e) = new.save(&web.host.data_dir) {
         return (
@@ -697,12 +626,64 @@ async fn put_config(
             .into_response();
     }
     *web.host.config.write() = new;
-    Json(json!({"ok": true, "restart_needed": restart})).into_response()
+    // Saved first: the host that starts again reads it.
+    let when = restart.map(|why| web.host.request_restart(why));
+    Json(json!({"ok": true, "restart": when.map(|w| w.word())})).into_response()
+}
+
+/// Why the host has to start again for `new` to apply over `old`, if it
+/// does: what it takes in only when it starts (`restart`). The rest applies
+/// at once or at the next session.
+fn taken_at_start(old: &HostConfig, new: &HostConfig) -> Option<&'static str> {
+    if old.name != new.name {
+        Some("the name changed")
+    } else if old.port != new.port || old.pairing_port != new.pairing_port {
+        Some("a port changed")
+    } else if old.api_port != new.api_port {
+        Some("the API's port changed")
+    } else if old.nvidia_max_power != new.nvidia_max_power
+        || old.nvidia_dxgi_present != new.nvidia_dxgi_present
+    {
+        Some("an NVIDIA setting changed")
+    } else {
+        None
+    }
+}
+
+/// Restart the host: now, or when the session that runs ends. `helio host
+/// restart` asks for it.
+async fn restart(State(web): State<Shared>, headers: HeaderMap) -> Response {
+    require_auth!(web, headers);
+    let when = web.host.request_restart("asked for");
+    Json(json!({"ok": true, "restart": when.word()})).into_response()
+}
+
+/// Whether macOS has allowed Screen Recording since this host asked, which
+/// the host cannot learn by asking again itself (`permissions`); allowed,
+/// the host restarts to have it. Helio's window asks when it comes back to
+/// the front (from System Settings). Elsewhere there is nothing to grant.
+async fn check_grants(State(web): State<Shared>, headers: HeaderMap) -> Response {
+    require_auth!(web, headers);
+    #[cfg(target_os = "macos")]
+    {
+        let host = web.host.clone();
+        let when = tokio::task::spawn_blocking(move || {
+            crate::permissions::follow_grant(|why| host.request_restart(why))
+        })
+        .await
+        .ok()
+        .flatten();
+        Json(json!({"ok": true, "restart": when.map(|w| w.word())})).into_response()
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        Json(json!({"ok": true, "restart": null})).into_response()
+    }
 }
 
 async fn end_session(State(web): State<Shared>, headers: HeaderMap) -> Response {
     require_auth!(web, headers);
-    tracing::info!("web UI: end the session");
+    tracing::info!("API: end the session");
     web.host.end_session();
     Json(json!({"ok": true})).into_response()
 }
@@ -756,17 +737,17 @@ fn certificate(dir: &Path, name: &str) -> Result<(Vec<u8>, Vec<u8>), String> {
     Ok((c, k))
 }
 
-/// Run the web UI until the process exits. Call on its own thread.
+/// Serve the API until the process exits. Call on its own thread.
 pub fn serve(host: Arc<Host>) {
     let (port, name) = {
         let c = host.config.read();
-        (c.web_port, c.name.clone())
+        (c.api_port, c.name.clone())
     };
     let _ = rustls::crypto::ring::default_provider().install_default();
     let (cert, key) = match certificate(&host.data_dir, &name) {
         Ok(v) => v,
         Err(e) => {
-            tracing::error!(error = %e, "web UI certificate");
+            tracing::error!(error = %e, "the API's certificate");
             return;
         }
     };
@@ -774,18 +755,13 @@ pub fn serve(host: Arc<Host>) {
     let app_tokens = Mutex::new(load_app_tokens(&host.data_dir));
     let web = Arc::new(Web {
         host,
-        sessions: Mutex::new(HashMap::new()),
         failures: Mutex::new(Vec::new()),
         local_token,
         app_tokens,
     });
     let app = Router::new()
-        .route("/", get(index))
         .route("/api/state", get(state))
-        .route("/api/setup", post(setup))
-        .route("/api/login", post(login))
         .route("/api/app-token", post(app_token).delete(drop_app_token))
-        .route("/api/logout", post(logout))
         .route("/api/status", get(status))
         .route("/api/pairing", get(pending))
         .route("/api/pairing/{id}", post(submit_pin).delete(decline))
@@ -795,6 +771,8 @@ pub fn serve(host: Arc<Host>) {
         .route("/api/agent/log", get(agent_log))
         .route("/api/agent/{op}", post(agent_op))
         .route("/api/config", get(get_config).put(put_config))
+        .route("/api/restart", post(restart))
+        .route("/api/grants/check", post(check_grants))
         .route("/api/session", delete(end_session))
         .route("/api/logs", get(logs))
         .with_state(web);
@@ -806,7 +784,7 @@ pub fn serve(host: Arc<Host>) {
     {
         Ok(r) => r,
         Err(e) => {
-            tracing::error!(error = %e, "web UI runtime");
+            tracing::error!(error = %e, "the API's runtime");
             return;
         }
     };
@@ -814,46 +792,86 @@ pub fn serve(host: Arc<Host>) {
         let tls = match axum_server::tls_rustls::RustlsConfig::from_pem(cert, key).await {
             Ok(t) => t,
             Err(e) => {
-                tracing::error!(error = %e, "web UI TLS");
+                tracing::error!(error = %e, "the API's TLS");
                 return;
             }
         };
-        let addr = SocketAddr::from(([0, 0, 0, 0], port));
-        tracing::info!(%addr, "web UI at https://localhost:{port}");
-        if let Err(e) = axum_server::bind_rustls(addr, tls)
-            .serve(app.into_make_service())
-            .await
-        {
-            tracing::error!(error = %e, "web UI stopped");
-        }
+        // This computer only, over IPv4 and IPv6 both: `localhost` is
+        // either, depending on the system.
+        let serve = |addr: SocketAddr| {
+            let (tls, app) = (tls.clone(), app.clone());
+            async move {
+                if let Err(e) = axum_server::bind_rustls(addr, tls)
+                    .serve(app.into_make_service())
+                    .await
+                {
+                    tracing::warn!(%addr, error = %e, "the API stopped answering here");
+                }
+            }
+        };
+        tracing::info!(
+            port,
+            "API at https://localhost:{port}, for this computer only"
+        );
+        tokio::join!(
+            serve(SocketAddr::from((std::net::Ipv4Addr::LOCALHOST, port))),
+            serve(SocketAddr::from((std::net::Ipv6Addr::LOCALHOST, port))),
+        );
     });
 }
 
 #[cfg(test)]
 mod tests {
-    use super::INDEX;
+    use super::taken_at_start;
+    use crate::config::HostConfig;
 
-    /// The page's script must parse: one stray quote in a setting's text
-    /// stops all of it, and the web UI is a blank page. Needs Node.js (on
-    /// GitHub's runners); without it the test says so and passes.
     #[test]
-    fn the_web_uis_script_parses() {
-        let start = INDEX.rfind("<script>").expect("the page has its script") + "<script>".len();
-        let end = INDEX[start..].find("</script>").expect("the script ends") + start;
-        let path = std::env::temp_dir().join(format!("helio-host-web-{}.js", std::process::id()));
-        std::fs::write(&path, &INDEX[start..end]).unwrap();
-        let checked = std::process::Command::new("node")
-            .arg("--check")
-            .arg(&path)
-            .output();
-        let _ = std::fs::remove_file(&path);
-        match checked {
-            Ok(out) => assert!(
-                out.status.success(),
-                "the web UI's script does not parse:\n{}",
-                String::from_utf8_lossy(&out.stderr)
-            ),
-            Err(e) => eprintln!("node not found ({e}): the web UI's script was not checked"),
+    fn a_new_name_port_or_nvidia_setting_needs_the_host_to_start_again() {
+        let old = HostConfig::default();
+        let changed = [
+            HostConfig {
+                name: format!("{} 2", old.name),
+                ..old.clone()
+            },
+            HostConfig {
+                port: old.port + 1,
+                ..old.clone()
+            },
+            HostConfig {
+                pairing_port: old.pairing_port + 1,
+                ..old.clone()
+            },
+            HostConfig {
+                api_port: old.api_port + 1,
+                ..old.clone()
+            },
+            HostConfig {
+                nvidia_max_power: !old.nvidia_max_power,
+                ..old.clone()
+            },
+            HostConfig {
+                nvidia_dxgi_present: !old.nvidia_dxgi_present,
+                ..old.clone()
+            },
+        ];
+        for new in &changed {
+            assert!(taken_at_start(&old, new).is_some());
         }
+    }
+
+    #[test]
+    fn settings_a_running_host_follows_need_no_restart() {
+        let old = HostConfig::default();
+        let new = HostConfig {
+            internet_access: !old.internet_access,
+            port_mapping: !old.port_mapping,
+            allow_takeover: !old.allow_takeover,
+            keep_host_displays: !old.keep_host_displays,
+            max_bitrate_kbps: 50_000,
+            clipboard: !old.clipboard,
+            ..old.clone()
+        };
+        assert_eq!(taken_at_start(&old, &new), None);
+        assert_eq!(taken_at_start(&old, &old), None);
     }
 }

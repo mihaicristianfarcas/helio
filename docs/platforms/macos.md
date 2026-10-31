@@ -102,7 +102,7 @@ says which system the host runs (so Helio forwards Command as Command).
 
 Everything after the encoder is shared with the other hosts: the paced
 sender, FEC, adaptive bitrate, the tunnel, pairing, discovery, reconnection
-and the web UI. The Mac-specific modules are in `helio-host/src/mac/`.
+and the API. The Mac-specific modules are in `helio-host/src/mac/`.
 
 ### Hosting from Helio, and its menu bar icon
 
@@ -182,6 +182,18 @@ Without Accessibility, Helio Host tells the client, and Helio shows that the hos
 is ignoring its keyboard and mouse. Sound in surround needs **System Audio
 Recording** besides (below): Helio Host asks for it the first time a client wants
 5.1 or 7.1, and that session streams stereo while you answer.
+
+Accessibility applies to a running host as soon as it is allowed; Screen
+Recording does not. macOS answers a running process what it answered when
+the process first asked: a host started before Screen Recording was allowed
+still read "not allowed" minutes later, and one started after it read
+"allowed" (macOS 26.5, Developer ID build). So the host asks a process of
+its own started now (`helio-host grants`), which macOS judges as Helio Host,
+the app responsible for it, and restarts when that one is allowed. It asks
+when Helio's window comes back to the front (from System Settings) while
+the Hosting page shows Screen Recording missing, and when it refuses a
+session for want of it: that try fails, and the device's next one streams.
+System Settings' own **Quit & Reopen** restarts it too.
 
 macOS ties these permissions to the app's signature. An ad hoc signature
 changes with every build, so each rebuild would lose them;

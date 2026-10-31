@@ -75,6 +75,13 @@ pub enum HostCommand {
     RemoveClient {
         x25519: String,
     },
+    Restart,
+    /// The PIN a device asking to pair shows, given to the running host.
+    Pair {
+        pin: String,
+        device: Option<String>,
+        permissions: Option<Permissions>,
+    },
 }
 
 /// A command line that asks for nothing `helio` does.
@@ -230,6 +237,10 @@ fn parse_host(args: &[String]) -> Result<HostCommand, Usage> {
             exactly(command, rest, [], true)?;
             HostCommand::Disable
         }
+        "restart" => {
+            exactly(command, rest, [], true)?;
+            HostCommand::Restart
+        }
         "status" => match rest {
             [] => HostCommand::Status { json: false },
             [json] if json == "--json" => HostCommand::Status { json: true },
@@ -311,6 +322,36 @@ fn parse_host(args: &[String]) -> Result<HostCommand, Usage> {
         "remove-client" => {
             let [x25519] = exactly(command, rest, ["X25519"], true)?;
             HostCommand::RemoveClient { x25519 }
+        }
+        "pair" => {
+            let usage = "pair PIN (--device NAME, --permissions LIST)";
+            let (pin, flags) = rest.split_at(rest.len().min(1));
+            let [pin] = exactly(command, pin, ["PIN"], true)?;
+            if pin.starts_with("--") {
+                return Err(Usage::wrong(
+                    format!("{pin} comes after the PIN: helio host {usage}"),
+                    true,
+                ));
+            }
+            let (mut device, mut chosen) = (None, None);
+            let mut it = flags.iter();
+            while let Some(flag) = it.next() {
+                let value = |it: &mut std::slice::Iter<String>| {
+                    it.next()
+                        .cloned()
+                        .ok_or_else(|| Usage::wrong(format!("{flag} needs a value"), true))
+                };
+                match flag.as_str() {
+                    "--device" => device = Some(value(&mut it)?),
+                    "--permissions" => chosen = Some(permissions(&value(&mut it)?)?),
+                    _ => return Err(unexpected(flag, usage)),
+                }
+            }
+            HostCommand::Pair {
+                pin,
+                device,
+                permissions: chosen,
+            }
         }
         other => {
             return Err(Usage::wrong(
@@ -523,6 +564,23 @@ mod tests {
     fn each_host_command_reads_its_words() {
         assert_eq!(host("host enable"), HostCommand::Enable);
         assert_eq!(host("host disable"), HostCommand::Disable);
+        assert_eq!(host("host restart"), HostCommand::Restart);
+        assert_eq!(
+            host("host pair 4821"),
+            HostCommand::Pair {
+                pin: "4821".into(),
+                device: None,
+                permissions: None,
+            }
+        );
+        assert_eq!(
+            host("host pair 4821 --device phone --permissions see-only"),
+            HostCommand::Pair {
+                pin: "4821".into(),
+                device: Some("phone".into()),
+                permissions: Some(Permissions::parse("see-only").unwrap()),
+            }
+        );
         assert_eq!(host("host status"), HostCommand::Status { json: false });
         assert_eq!(
             host("host status --json"),
