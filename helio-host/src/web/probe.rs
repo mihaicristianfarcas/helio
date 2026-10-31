@@ -1,11 +1,14 @@
-//! Whether the host's web API answers on this computer, for `helio-host status`.
+//! The host's web API from this computer: whether it answers, for
+//! `helio-host status`, and asking it to restart, for `helio-host restart`.
 //!
-//! `GET /api/state` over HTTPS on localhost, trusting only the certificate
-//! the host made for itself (`web-cert.pem`, the one Helio Host's window pins,
+//! HTTPS on localhost, trusting only the certificate the host made for
+//! itself (`web-cert.pem`, the one Helio Host's window pins,
 //! `helio-app/src/host/api.rs`): something else on the port is not the host.
 //!
-//! Read-only: `helio-host status` runs without an administrator, often before the
-//! host has ever run, and must create nothing in the host's folder.
+//! Both only read the host's folder: `helio-host status` runs without an
+//! administrator, often before the host has ever run, and must create
+//! nothing there; `helio-host restart` reads the local token the host wrote
+//! for its own computer.
 
 use std::io::{Read, Write};
 use std::net::{SocketAddr, TcpStream};
@@ -45,6 +48,30 @@ pub fn answers(dir: &Path, port: u16) -> bool {
     tls.write_all(request).is_ok()
         && tls.read_exact(&mut status).is_ok()
         && &status == b"HTTP/1.1 200"
+}
+
+/// `POST path` with an empty JSON body, signed in with `token`: the status
+/// code and the body, or None when no host answered.
+pub fn post(dir: &Path, port: u16, path: &str, token: &str) -> Option<(u16, String)> {
+    let request = format!(
+        "POST {path} HTTP/1.1\r\nHost: localhost\r\nAuthorization: Bearer {token}\r\n\
+            Content-Type: application/json\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{{}}"
+    );
+    let mut tls = connect(dir, port)?;
+    tls.write_all(request.as_bytes()).ok()?;
+    let mut reply = Vec::new();
+    // The host closes the connection after its answer, maybe without
+    // TLS's goodbye: what arrived before it is the answer.
+    let _ = tls.read_to_end(&mut reply);
+    parse_reply(&reply)
+}
+
+/// An HTTP/1.1 answer's status code and body.
+fn parse_reply(reply: &[u8]) -> Option<(u16, String)> {
+    let text = String::from_utf8_lossy(reply);
+    let (head, body) = text.split_once("\r\n\r\n")?;
+    let code = head.strip_prefix("HTTP/1.1 ")?.get(..3)?.parse().ok()?;
+    Some((code, body.to_string()))
 }
 
 /// A TLS connection to the host on `port`, trusting only its certificate.
@@ -118,5 +145,26 @@ impl ServerCertVerifier for Pinned {
 
     fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
         self.algorithms.supported_schemes()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn an_answer_gives_its_status_code_and_body() {
+        let reply =
+            b"HTTP/1.1 200 OK\r\ncontent-type: application/json\r\n\r\n{\"restart\":\"now\"}";
+        assert_eq!(
+            parse_reply(reply),
+            Some((200, "{\"restart\":\"now\"}".to_string()))
+        );
+    }
+
+    #[test]
+    fn a_cut_off_answer_gives_nothing() {
+        assert_eq!(parse_reply(b"HTTP/1.1 200 OK\r\ncontent-ty"), None);
+        assert_eq!(parse_reply(b""), None);
     }
 }

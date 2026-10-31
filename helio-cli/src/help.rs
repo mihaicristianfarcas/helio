@@ -166,6 +166,10 @@ const HOST: Page = Page {
                  UI answers on this computer. --json:\none line, for programs",
             ),
             (
+                "restart",
+                "the running host starts again: now, or when the session\nthat runs ends",
+            ),
+            (
                 "identity",
                 "the host's public keys, for `helio add-host` on a client",
             ),
@@ -191,11 +195,12 @@ const HOST: Page = Page {
     }],
     notes: &[
         "On Windows, enable and disable need an administrator: Windows asks. identity,\n\
-         clients, permissions, add-client and remove-client read the host's data, which\n\
-         only administrators may read there: run them in an administrator terminal.",
-        "What permissions, add-client and remove-client change reaches a running host\n\
-         when it starts again (helio host disable, then enable); Helio's window and the\n\
-         host's web UI change it at once.",
+         clients, permissions, add-client, remove-client and restart read the host's\n\
+         data, which only administrators may read there: run them in an administrator\n\
+         terminal.",
+        "A running host reads its clients when it starts, so permissions, add-client\n\
+         and remove-client restart it: now, or when the session that runs ends.\n\
+         Helio's window and the host's web UI change them without a restart.",
     ],
 };
 

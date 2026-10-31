@@ -5,7 +5,8 @@
 //! Pages: dashboard (the live session; an AI agent's, with what it does and
 //! buttons to pause or stop it), pairing (type the PIN a client shows, and
 //! choose what it may do), clients (unpair; what each one may do), settings
-//! (config.toml), logs.
+//! (config.toml; what the host reads only when it starts restarts it:
+//! `restart`), logs.
 //!
 //! The same API serves Helio's This computer pages (`helio-app/src/host`),
 //! which send a bearer token instead of a cookie: the local token this host
@@ -437,6 +438,8 @@ async fn status(State(web): State<Shared>, headers: HeaderMap) -> Response {
         "public": h.stun.public().iter().map(|a| a.to_string()).collect::<Vec<_>>(),
         "port_mapping": *h.port_mapping.lock(),
         "grants": grants(),
+        "restart": h.restart_pending().map(|w| w.word()),
+        "started_unix": h.started_unix,
     }))
     .into_response()
 }
@@ -684,10 +687,7 @@ async fn put_config(
                 }
             }
         }
-        old.port != new.port
-            || old.pairing_port != new.pairing_port
-            || old.web_port != new.web_port
-            || old.name != new.name
+        taken_at_start(&old, &new)
     };
     if let Err(e) = new.save(&web.host.data_dir) {
         return (
@@ -697,7 +697,59 @@ async fn put_config(
             .into_response();
     }
     *web.host.config.write() = new;
-    Json(json!({"ok": true, "restart_needed": restart})).into_response()
+    // Saved first: the host that starts again reads it.
+    let when = restart.map(|why| web.host.request_restart(why));
+    Json(json!({"ok": true, "restart": when.map(|w| w.word())})).into_response()
+}
+
+/// Why the host has to start again for `new` to apply over `old`, if it
+/// does: what it takes in only when it starts (`restart`). The rest applies
+/// at once or at the next session.
+fn taken_at_start(old: &HostConfig, new: &HostConfig) -> Option<&'static str> {
+    if old.name != new.name {
+        Some("the name changed")
+    } else if old.port != new.port || old.pairing_port != new.pairing_port {
+        Some("a port changed")
+    } else if old.web_port != new.web_port {
+        Some("the web UI's port changed")
+    } else if old.nvidia_max_power != new.nvidia_max_power
+        || old.nvidia_dxgi_present != new.nvidia_dxgi_present
+    {
+        Some("an NVIDIA setting changed")
+    } else {
+        None
+    }
+}
+
+/// Restart the host: now, or when the session that runs ends. Helio's
+/// window, the web UI and `helio host restart` ask for it.
+async fn restart(State(web): State<Shared>, headers: HeaderMap) -> Response {
+    require_auth!(web, headers);
+    let when = web.host.request_restart("asked for");
+    Json(json!({"ok": true, "restart": when.word()})).into_response()
+}
+
+/// Whether macOS has allowed Screen Recording since this host asked, which
+/// the host cannot learn by asking again itself (`permissions`); allowed,
+/// the host restarts to have it. Helio's window asks when it comes back to
+/// the front (from System Settings). Elsewhere there is nothing to grant.
+async fn check_grants(State(web): State<Shared>, headers: HeaderMap) -> Response {
+    require_auth!(web, headers);
+    #[cfg(target_os = "macos")]
+    {
+        let host = web.host.clone();
+        let when = tokio::task::spawn_blocking(move || {
+            crate::permissions::follow_grant(|why| host.request_restart(why))
+        })
+        .await
+        .ok()
+        .flatten();
+        Json(json!({"ok": true, "restart": when.map(|w| w.word())})).into_response()
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        Json(json!({"ok": true, "restart": null})).into_response()
+    }
 }
 
 async fn end_session(State(web): State<Shared>, headers: HeaderMap) -> Response {
@@ -795,6 +847,8 @@ pub fn serve(host: Arc<Host>) {
         .route("/api/agent/log", get(agent_log))
         .route("/api/agent/{op}", post(agent_op))
         .route("/api/config", get(get_config).put(put_config))
+        .route("/api/restart", post(restart))
+        .route("/api/grants/check", post(check_grants))
         .route("/api/session", delete(end_session))
         .route("/api/logs", get(logs))
         .with_state(web);
@@ -831,7 +885,58 @@ pub fn serve(host: Arc<Host>) {
 
 #[cfg(test)]
 mod tests {
-    use super::INDEX;
+    use super::{taken_at_start, INDEX};
+    use crate::config::HostConfig;
+
+    #[test]
+    fn a_new_name_port_or_nvidia_setting_needs_the_host_to_start_again() {
+        let old = HostConfig::default();
+        let changed = [
+            HostConfig {
+                name: format!("{} 2", old.name),
+                ..old.clone()
+            },
+            HostConfig {
+                port: old.port + 1,
+                ..old.clone()
+            },
+            HostConfig {
+                pairing_port: old.pairing_port + 1,
+                ..old.clone()
+            },
+            HostConfig {
+                web_port: old.web_port + 1,
+                ..old.clone()
+            },
+            HostConfig {
+                nvidia_max_power: !old.nvidia_max_power,
+                ..old.clone()
+            },
+            HostConfig {
+                nvidia_dxgi_present: !old.nvidia_dxgi_present,
+                ..old.clone()
+            },
+        ];
+        for new in &changed {
+            assert!(taken_at_start(&old, new).is_some());
+        }
+    }
+
+    #[test]
+    fn settings_a_running_host_follows_need_no_restart() {
+        let old = HostConfig::default();
+        let new = HostConfig {
+            internet_access: !old.internet_access,
+            port_mapping: !old.port_mapping,
+            allow_takeover: !old.allow_takeover,
+            keep_host_displays: !old.keep_host_displays,
+            max_bitrate_kbps: 50_000,
+            clipboard: !old.clipboard,
+            ..old.clone()
+        };
+        assert_eq!(taken_at_start(&old, &new), None);
+        assert_eq!(taken_at_start(&old, &old), None);
+    }
 
     /// The page's script must parse: one stray quote in a setting's text
     /// stops all of it, and the web UI is a blank page. Needs Node.js (on

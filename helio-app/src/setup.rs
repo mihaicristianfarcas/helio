@@ -468,8 +468,8 @@ impl HelioApp {
         let (subtitle, foot) = if cfg!(target_os = "macos") {
             (
                 "macOS asks for each of these once, for the host (Helio Host), when hosting starts.",
-                "Allowed later in System Settings → Privacy & Security, macOS asks to quit and \
-                 reopen the host: Helio notices when it is back.",
+                "Allowed later in System Settings → Privacy & Security, the host restarts to \
+                 have it when you come back to Helio, or when a device next connects.",
             )
         } else if cfg!(windows) {
             (

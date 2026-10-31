@@ -102,6 +102,7 @@ reason other than you quitting.
 | `helio host enable` | Turn hosting on: the host starts now and at every start after (see [usage.md](usage.md#hosting-on-and-off)). Windows asks for an administrator |
 | `helio host disable` | Turn hosting off: the host stops and no longer starts. Windows asks for an administrator |
 | `helio host status [--json]` | `off`, `starting`, `on` or `failed` (with why); for `on`, whether the host's web UI answers on this computer |
+| `helio host restart` | Restart the running host: at once, or when the stream that runs ends. Exits with 1 when no host runs |
 | `helio host identity` | Print the host's public keys |
 | `helio host clients` | List paired devices and agents: name, X25519 key, `person` or `agent`, and what each may do |
 | `helio host permissions X25519 [LIST]` | Show what a paired device or agent may do, or set it. `LIST`: `all`, `none`, `see-only`, or names joined by commas (`view,keyboard,mouse`; the names are in [usage.md](usage.md#what-each-device-may-do)). What a client of its kind cannot have is left out |
@@ -128,15 +129,17 @@ Declined, nothing changes, and `helio` exits with 1.
 `https://localhost:WEB_PORT` with the certificate it made for itself. A host
 that has just started takes a moment to answer.
 
-`identity`, `clients`, `permissions`, `add-client` and `remove-client` read
-and change the host's data folder. On Windows only administrators may read
-it (`C:\ProgramData\Helio Host`, [platforms/windows.md](platforms/windows.md)),
-so run them in an administrator terminal there: from another, they change
-nothing and exit with 740 (Windows's `ERROR_ELEVATION_REQUIRED`).
+`identity`, `clients`, `permissions`, `add-client`, `remove-client` and
+`restart` read and change the host's data folder. On Windows only
+administrators may read it (`C:\ProgramData\Helio Host`,
+[platforms/windows.md](platforms/windows.md)), so run them in an
+administrator terminal there: from another, they change nothing and exit
+with 740 (Windows's `ERROR_ELEVATION_REQUIRED`).
 
-What `add-client`, `remove-client` and `permissions` change reaches a running
-host when it next starts (`helio host disable`, then `helio host enable`);
-Helio's This computer pages and the web UI change it at once.
+A running host reads its clients only when it starts, so `add-client`,
+`remove-client` and `permissions` restart it, as `helio host restart` does:
+at once, or when the stream that runs ends. Helio's This computer pages and
+the web UI change them without a restart.
 
 ### Exit status
 

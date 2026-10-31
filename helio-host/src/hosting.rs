@@ -171,6 +171,65 @@ pub fn print_status(dir: &Path, json: bool) -> std::process::ExitCode {
     std::process::ExitCode::SUCCESS
 }
 
+/// `helio-host restart`'s exit code when no host runs to restart: `helio
+/// host` changing the host's data then has nothing to say (a host reads it
+/// when it starts).
+pub const NOT_RUNNING: u8 = 3;
+
+/// `helio-host restart`: the running host starts again, now or when its
+/// session ends (`restart`), asked through its web API with the token it
+/// keeps for its own computer. On Windows only administrators may read
+/// that token: from another terminal this exits with [`NEEDS_ELEVATION`].
+pub fn ask_restart(dir: &Path) -> std::process::ExitCode {
+    use std::process::ExitCode;
+    let port = crate::web::probe::web_port(dir);
+    let token = match std::fs::read_to_string(dir.join("local-token")) {
+        Ok(t) => t.trim().to_string(),
+        Err(e) if e.kind() == std::io::ErrorKind::PermissionDenied => {
+            eprintln!(
+                "helio-host restart needs an administrator: run it again from an elevated \
+                    terminal (exit code {NEEDS_ELEVATION}; nothing was changed)"
+            );
+            std::process::exit(NEEDS_ELEVATION);
+        }
+        Err(_) => {
+            eprintln!("Helio Host is not running: it has not started on this computer yet.");
+            return ExitCode::from(NOT_RUNNING);
+        }
+    };
+    match crate::web::probe::post(dir, port, "/api/restart", &token) {
+        Some((200, body)) => {
+            let when = serde_json::from_str::<serde_json::Value>(&body)
+                .ok()
+                .and_then(|v| v.get("restart")?.as_str().map(str::to_string));
+            println!("{}", restart_said(when.as_deref()));
+            ExitCode::SUCCESS
+        }
+        Some((code, _)) => {
+            eprintln!(
+                "Helio Host did not restart: it answered {code} (its local token may be one it \
+                    has replaced since; try again)."
+            );
+            ExitCode::FAILURE
+        }
+        None => {
+            eprintln!("Helio Host is not running (nothing answers its web API on port {port}).");
+            ExitCode::from(NOT_RUNNING)
+        }
+    }
+}
+
+/// What `helio-host restart` says of the host's answer (`restart::When`'s
+/// words).
+fn restart_said(when: Option<&str>) -> &'static str {
+    match when {
+        Some("after_session") => {
+            "Helio Host restarts when the session that runs ends: a device streams now."
+        }
+        _ => "Helio Host is restarting.",
+    }
+}
+
 /// The app bundle `exe` is the main program of (`X.app/Contents/MacOS/…`),
 /// where a Mac host must run from: macOS grants Screen Recording and
 /// Accessibility to an app, by its bundle and signature.
