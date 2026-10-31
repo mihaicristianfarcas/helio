@@ -283,7 +283,7 @@ fn native_x64() -> bool {
 
 /// `C:\Windows\System32`, from the system rather than `%SystemRoot%`: an
 /// elevated process keeps the environment of whoever started it.
-fn system_dir() -> Result<PathBuf, String> {
+pub fn system_dir() -> Result<PathBuf, String> {
     use windows::Win32::System::SystemInformation::GetSystemDirectoryW;
     let mut buf = [0u16; 260];
     // SAFETY: the buffer is a local of the length given.
