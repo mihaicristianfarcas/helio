@@ -38,7 +38,9 @@ and `helio host` use, answers on localhost only (127.0.0.1 and ::1):
 nothing on the network reaches it. It uses a self-signed certificate the
 host makes for itself, and every call carries a token: one the host writes
 for its own user, or, from a Windows Helio (which is not an administrator),
-one it got by signing in once with an admin account made in Helio.
+one it got by signing in once with an admin account made in Helio. On macOS
+and Linux there is no account and no other token: every user of the
+computer can reach localhost, and Helio there reads the host's own token.
 
 **Secrets at rest.** On macOS and Linux, each device's private keys, the
 agent's API keys and the host's tokens are written readable only by their
