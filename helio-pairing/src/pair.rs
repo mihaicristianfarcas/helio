@@ -9,7 +9,9 @@
 //!    key. Both derive the pairing's keys from the SPAKE2 secret and the
 //!    ML-KEM secret together, each proves it derived them (a confirmation MAC
 //!    over the whole transcript), then sends its X25519 and ML-KEM-768 public
-//!    keys (and its extras) sealed under them.
+//!    keys (and its extras) sealed under them. The host's prompt showed the
+//!    device's name and role from its first message, which is not sealed:
+//!    the host pairs only if the sealed ones are the same.
 //!
 //! A wrong PIN fails the confirmation; an eavesdropper learns nothing it can
 //! brute-force offline (that is what SPAKE2 buys over Moonlight's PIN-derived
@@ -97,7 +99,8 @@ pub enum Msg {
         port: u16,
     },
     /// Client → host: start pairing. `agent`: the identity is an AI agent's
-    /// (shown with the PIN prompt; the sealed `Extras::agent` is what counts).
+    /// (shown with the PIN prompt; the host pairs only if the sealed
+    /// `Extras::agent` and name say the same).
     Hello {
         version: u32,
         name: String,
@@ -292,6 +295,12 @@ fn public_of(s: &Sealed) -> Result<PublicIdentity, PairError> {
     PublicIdentity::from_b64(&s.x25519, &s.mlkem).map_err(|e| PairError::Protocol(e.to_string()))
 }
 
+/// A device's name as the host's prompt shows it: no control characters,
+/// 64 at most.
+fn shown_name(name: &str) -> String {
+    name.chars().filter(|c| !c.is_control()).take(64).collect()
+}
+
 /// A random 4-digit PIN, as Moonlight shows.
 pub fn new_pin() -> String {
     let n = rand_core::RngCore::next_u32(&mut rand_core::OsRng) % 10_000;
@@ -483,8 +492,8 @@ pub fn host_info(addr: SocketAddr) -> Result<(String, String, String, u16), Pair
 /// Host side: a client asking to pair, waiting for the PIN.
 pub struct PairRequest {
     pub client_name: String,
-    /// The client says it is an AI agent (for the prompt; the sealed extras
-    /// confirm it).
+    /// The client says it is an AI agent (for the prompt; `complete` pairs
+    /// only if the sealed extras say the same).
     pub agent: bool,
     pub peer: SocketAddr,
     stream: TcpStream,
@@ -562,7 +571,7 @@ pub fn accept(mut stream: TcpStream, me: &HostDescription) -> Result<Incoming, P
                 );
                 return Err(e);
             }
-            let name: String = name.chars().filter(|c| !c.is_control()).take(64).collect();
+            let name = shown_name(&name);
             write_msg(&mut stream, &Msg::Waiting)?;
             Ok(Incoming::Pair(PairRequest {
                 client_name: name,
@@ -651,6 +660,23 @@ impl PairRequest {
         }
         let client = open(&keys, 0, &sealed)?;
         let public = public_of(&client)?;
+        // The prompt showed the Hello, which is not sealed: someone on the
+        // way could have changed it (a person's device shown, an agent
+        // recorded). What the person typing the PIN saw must be what the
+        // device says under the PIN's key, or nothing is paired.
+        if client.agent != self.agent || shown_name(&client.name) != self.client_name {
+            let _ = write_msg(
+                &mut self.stream,
+                &Msg::Refused {
+                    reason: "The pairing request changed on its way to the host. Pair again, \
+                        on a network you trust."
+                        .into(),
+                },
+            );
+            return Err(PairError::Protocol(
+                "the request the host showed is not the one the device sealed".into(),
+            ));
+        }
         write_msg(
             &mut self.stream,
             &Msg::Welcome {
@@ -849,6 +875,128 @@ mod tests {
         let r = pair_client(proxy_addr, "mac", &client, "4821", || {});
         assert!(matches!(r, Err(PairError::WrongPin)), "{r:?}");
         assert!(host.join().unwrap().is_err());
+    }
+
+    /// A relay that changes the client's Hello (what the host's prompt
+    /// shows), then passes everything on unchanged.
+    fn relay_changing_hello(host: SocketAddr, change: fn(Msg) -> Msg) -> SocketAddr {
+        let proxy = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = proxy.local_addr().unwrap();
+        std::thread::spawn(move || {
+            let (mut c, _) = proxy.accept().unwrap();
+            let mut h = TcpStream::connect(host).unwrap();
+            let hello = read_msg(&mut c).unwrap();
+            write_msg(&mut h, &change(hello)).unwrap();
+            let (mut c2, mut h2) = (c.try_clone().unwrap(), h.try_clone().unwrap());
+            std::thread::spawn(move || std::io::copy(&mut h2, &mut c2));
+            let _ = std::io::copy(&mut c, &mut h);
+        });
+        addr
+    }
+
+    type Shown = (String, bool);
+
+    /// The host side for a relayed pairing: what its prompt showed (name,
+    /// agent), and how completing it went.
+    fn host_showing(
+        pin: &'static str,
+    ) -> (SocketAddr, std::thread::JoinHandle<(Shown, HostResult)>) {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        let t = std::thread::spawn(move || {
+            let (stream, _) = listener.accept().unwrap();
+            let me = HostDescription {
+                name: "box".into(),
+                id: "id".into(),
+                version: "3".into(),
+                port: 47800,
+            };
+            let Ok(Incoming::Pair(req)) = accept(stream, &me) else {
+                panic!("expected a pairing request")
+            };
+            let shown = (req.client_name.clone(), req.agent);
+            let host = Keys2::generate().public().clone();
+            (shown, req.complete(pin, "box", &host, &HOST_EXTRAS))
+        });
+        (addr, t)
+    }
+
+    fn pair_through(relay: SocketAddr, name: &str, agent: bool) -> Result<PairedHost, PairError> {
+        let client = Keys2::generate().public().clone();
+        let extras = Extras {
+            agent,
+            ..Extras::default()
+        };
+        pair_client_with(
+            relay,
+            name,
+            &client,
+            &extras,
+            "4821",
+            &Cancel::default(),
+            || {},
+        )
+    }
+
+    /// The Hello with `name` and `agent` in place of what the client said.
+    fn hello_as(m: Msg, name: Option<&str>, agent: bool) -> Msg {
+        match m {
+            Msg::Hello {
+                version,
+                name: said,
+                spake,
+                kem,
+                ..
+            } => Msg::Hello {
+                version,
+                name: name.map_or(said, str::to_string),
+                spake,
+                agent,
+                kem,
+            },
+            m => m,
+        }
+    }
+
+    /// What the person typing the PIN was shown is what the host records,
+    /// or nothing is: a Hello changed on its way (it is not sealed) cannot
+    /// pair an agent shown as a person's device, or the reverse.
+    #[test]
+    fn a_hello_changed_on_the_way_pairs_nothing() {
+        // How the relay changes the Hello, whether the device is an agent,
+        // and what the host's prompt then shows.
+        type Case = (fn(Msg) -> Msg, bool, (&'static str, bool));
+        let cases: [Case; 3] = [
+            (
+                |m| hello_as(m, Some("Living Room TV"), false),
+                true,
+                ("Living Room TV", false),
+            ),
+            (|m| hello_as(m, None, true), false, ("bot", true)),
+            (
+                |m| hello_as(m, Some("Living Room TV"), false),
+                false,
+                ("Living Room TV", false),
+            ),
+        ];
+        for (change, agent, shown) in cases {
+            let (host_addr, host) = host_showing("4821");
+            let relay = relay_changing_hello(host_addr, change);
+            let client = pair_through(relay, "bot", agent);
+            let ((name, was_agent), done) = host.join().unwrap();
+            assert_eq!((name.as_str(), was_agent), shown);
+            assert!(done.is_err(), "the host recorded {done:?}");
+            assert!(
+                matches!(client, Err(PairError::Refused(_))),
+                "the client was told {client:?}"
+            );
+        }
+        // Unchanged, the same relay pairs.
+        let (host_addr, host) = host_showing("4821");
+        let relay = relay_changing_hello(host_addr, |m| m);
+        pair_through(relay, "bot", true).unwrap();
+        let ((_, shown_agent), done) = host.join().unwrap();
+        assert!(shown_agent && done.unwrap().2.agent);
     }
 
     #[test]
