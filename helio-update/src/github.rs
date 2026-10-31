@@ -380,6 +380,7 @@ mod tests {
             version,
             commit,
             release: false,
+            release_key: "",
         }
     }
 

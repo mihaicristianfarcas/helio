@@ -35,6 +35,13 @@
 # neither, the Windows release is unsigned and says so; with only one of
 # them, it fails.
 #
+# Every package is also signed with the release key (minisign, Ed25519),
+# whose public half Helio is built with: its own update installs nothing
+# without that signature (helio-update/src/signature.rs). The job `sign`
+# does it, on main only, from the `release` environment's secrets
+# MINISIGN_SECRET_KEY (the key file, as `minisign -G` wrote it) and
+# MINISIGN_PASSWORD; without them a push to main publishes nothing.
+#
 # Actions are pinned to commits, with the version beside each: a tag can be
 # moved, and these jobs hold the signing secrets. A repository ruleset keeps
 # version tags from being moved or deleted once this workflow has made them.
@@ -321,9 +328,59 @@ jobs:
           path: target/dist/*.tar.gz
           if-no-files-found: error
 
+  # A job of its own: no build runs here, and the job that writes the
+  # release never holds the key. Each signature's trusted comment names its
+  # file (product, version, system), which the updater requires, so an
+  # older package cannot pass for a newer one.
+  sign:
+    name: Signatures
+    needs: [macos, windows-package, linux]
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    environment: release
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: dist-*
+          path: dist
+          merge-multiple: true
+      - name: minisign
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends minisign
+      - name: Sign every package
+        env:
+          KEY: ${{ secrets.MINISIGN_SECRET_KEY }}
+          PASSWORD: ${{ secrets.MINISIGN_PASSWORD }}
+        run: |
+          if [ -z "$KEY" ] || [ -z "$PASSWORD" ]; then
+            echo "::error::no release key: set the release environment's secrets MINISIGN_SECRET_KEY and MINISIGN_PASSWORD (docs/development.md, Release signing)"
+            exit 1
+          fi
+          umask 077
+          printf '%s\n' "$KEY" > "$RUNNER_TEMP/release.key"
+          mkdir signatures
+          for path in dist/*; do
+            name=$(basename "$path")
+            printf '%s\n' "$PASSWORD" |
+              minisign -S -s "$RUNNER_TEMP/release.key" -m "$path" -x "signatures/$name.minisig" -t "file:$name"
+            # Against the key Helio is built with: a secret that is not
+            # its pair fails here, not in every update.
+            minisign -V -p helio-update/release-signing.pub -m "$path" -x "signatures/$name.minisig"
+          done
+          rm -f "$RUNNER_TEMP/release.key"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: dist-signatures
+          path: signatures/*.minisig
+          if-no-files-found: error
+
   downloads:
     name: Website downloads
-    needs: [macos, windows-package, linux]
+    needs: [macos, windows-package, linux, sign]
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
@@ -344,7 +401,7 @@ jobs:
 
   release:
     name: GitHub release
-    needs: [macos, windows-package, linux]
+    needs: [macos, windows-package, linux, sign]
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     # The only job that writes: the release, the cask branch and pull
@@ -373,6 +430,7 @@ jobs:
           pattern: dist-*
           path: dist
           merge-multiple: true
+      # The packages and their signatures (dist-signatures).
       - name: The release, with the apps
         if: steps.version.outputs.new
         env:

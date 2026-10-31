@@ -11,12 +11,16 @@
 # URL is where the server will be, as the other computer reaches it
 # (http://192.168.1.20:8080); VERSION the release's
 # (1.0.1); each PACKAGE a file named as the packaging scripts name it,
-# for that version (Helio-1.0.1-windows-x86_64-setup.exe). DIR then holds
-# repos/OWNER/NAME/releases/latest, the release with each file's size and
-# SHA-256, and OWNER/NAME/releases/download/vVERSION/FILE. To check that a
-# changed package is refused, change the file in DIR after this lists it.
+# for that version (Helio-1.0.1-windows-x86_64-setup.exe), and its
+# signature, which the older Helio requires: `minisign -S -s KEY -m PACKAGE
+# -t file:NAME` writes PACKAGE.minisig, with a key whose public half that
+# Helio was built with (HELIO_RELEASE_KEY); give both files. DIR then
+# holds repos/OWNER/NAME/releases/latest, the release with each file's size
+# and SHA-256, and OWNER/NAME/releases/download/vVERSION/FILE. To check
+# that a changed package is refused, change the file in DIR after this
+# lists it.
 set -euo pipefail
-[[ $# -ge 4 ]] || { sed -n '2,17p' "$0" >&2; exit 2; }
+[[ $# -ge 4 ]] || { sed -n '2,21p' "$0" >&2; exit 2; }
 URL=${1%/} DIR=$2 VERSION=$3
 shift 3
 REPO=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)

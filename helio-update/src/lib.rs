@@ -18,6 +18,7 @@
 
 mod github;
 pub mod install;
+mod signature;
 mod version;
 
 use std::path::{Path, PathBuf};
@@ -66,6 +67,9 @@ pub struct Build {
     /// A packaged release, as opposed to a build someone made from a
     /// checkout.
     pub release: bool,
+    /// The public key, in minisign's form, that an update's package must
+    /// be signed with ([`install`] refuses any other).
+    pub release_key: &'static str,
 }
 
 impl Build {
@@ -75,6 +79,7 @@ impl Build {
             version: env!("CARGO_PKG_VERSION"),
             commit: env!("HELIO_BUILD_COMMIT"),
             release: !env!("HELIO_BUILD_RELEASE").is_empty(),
+            release_key: env!("HELIO_BUILD_RELEASE_KEY"),
         }
     }
 
@@ -529,6 +534,7 @@ mod tests {
             version: "0.6.0",
             commit,
             release,
+            release_key: "",
         }
     }
 
@@ -633,6 +639,7 @@ mod tests {
             version: "0.7.0",
             commit: "",
             release: true,
+            release_key: "",
         };
         assert_eq!(Saved::load(dir.path(), &newer), Saved::default());
     }

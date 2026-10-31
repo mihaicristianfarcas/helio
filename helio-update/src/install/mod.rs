@@ -4,10 +4,13 @@
 //! The release's own package for this system is downloaded from GitHub (the
 //! file the website and the Homebrew cask hand out too), and its SHA-256
 //! checked against the one GitHub keeps for it (the API's `digest`, worked
-//! out by GitHub when the file was uploaded). The package is the whole app,
-//! the host it runs when hosting is on included, so an update brings both,
-//! and hosting stays as it was. Then each system checks who made it and
-//! puts it in place its own way:
+//! out by GitHub when the file was uploaded), and it must carry the
+//! release key's signature, made for its file name (`crate::signature`),
+//! which is fetched first: GitHub's SHA-256 says only that the file is the
+//! one uploaded. The package is the whole app, the host it runs when
+//! hosting is on included, so an update brings both, and hosting stays as
+//! it was. Then each system checks who made it and puts it in place its own
+//! way:
 //!
 //! - **Windows**: the package is the installer (`setup.exe`), which must
 //!   carry an Authenticode signature by Helio's publisher. Once the app has
@@ -56,7 +59,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use crate::github::{self, Asset, Fetch};
-use crate::{Build, Status, Version, REPOSITORY};
+use crate::{signature, Build, Status, Version, REPOSITORY};
 
 /// The release's package of `version` for this system, as the packaging
 /// scripts name it: `Helio-0.9.0-macos-arm64.zip`,
@@ -304,7 +307,7 @@ fn install(
         installing();
         return place(&method, &offer.version, &stage, &stage, dir);
     }
-    let package = download(&api, &offer, &stage, downloading)?;
+    let package = download(&api, build, &offer, &stage, downloading)?;
     installing();
     let opened = platform::open(&package, &stage)?;
     place(&method, &offer.version, &opened, &stage, dir)
@@ -316,6 +319,9 @@ struct Offer {
     /// Its package for this system ([`package`]), if it lists one with a
     /// checksum.
     package: Option<Asset>,
+    /// The package's signature by the release key
+    /// ([`signature::signature_name`]), if the release lists one.
+    signature: Option<Asset>,
 }
 
 /// The latest release, when it is newer than `build`.
@@ -332,17 +338,22 @@ fn offer(fetch: &dyn Fetch, build: &Build) -> Result<Offer, String> {
     }
     let version = latest.version.to_string();
     let name = package(&version);
+    let signed = signature::signature_name(&name);
+    let find = |name: &str| latest.assets.iter().find(|a| a.name == name).cloned();
     Ok(Offer {
-        package: latest.assets.into_iter().find(|a| a.name == name),
+        package: find(&name),
+        signature: find(&signed),
         version,
     })
 }
 
 /// The offered package, downloaded into `stage` and kept only if it is the
-/// file the release lists ([`save_verified`]). `downloading` hears the
-/// bytes so far, of how many.
+/// file the release lists ([`save_verified`]) and carries the release's
+/// signature ([`signature`]), which is fetched first. `downloading` hears
+/// the bytes so far, of how many.
 fn download(
     api: &github::Api,
+    build: &Build,
     offer: &Offer,
     stage: &Path,
     downloading: &dyn Fn(u64, u64),
@@ -360,6 +371,26 @@ fn download(
             asset.name
         ));
     }
+    let key = signature::ReleaseKey::parse(build.release_key)?;
+    let signed = offer
+        .signature
+        .as_ref()
+        .filter(|s| s.size <= signature::MAX_SIGNATURE)
+        .ok_or_else(|| {
+            format!(
+                "release {} has no signature for {}, so it is not installed",
+                offer.version, asset.name
+            )
+        })?;
+    let signed_path = stage.join(&signed.name);
+    save_verified(
+        api.download(&signed.url, signed.size)?,
+        &signed_path,
+        signed,
+        &|_| {},
+    )?;
+    let signed_text = std::fs::read_to_string(&signed_path)
+        .map_err(|_| format!("{}'s signature is not text", asset.name))?;
     let path = stage.join(&asset.name);
     tracing::info!(version = offer.version, package = %asset.name, "downloading the update");
     downloading(0, asset.size);
@@ -374,6 +405,10 @@ fn download(
             downloading(done, asset.size);
         }
     })?;
+    if let Err(e) = signature::check(&key, &signed_text, &path, &asset.name) {
+        let _ = std::fs::remove_file(&path);
+        return Err(e);
+    }
     Ok(path)
 }
 
@@ -421,7 +456,7 @@ pub fn rehearse(
         .join(format!("{}-{}", crate::APP, offer.version));
     let _ = std::fs::remove_dir_all(&stage);
     std::fs::create_dir_all(&stage).map_err(|e| e.to_string())?;
-    let rehearsed = download(&api, &offer, &stage, progress)
+    let rehearsed = download(&api, build, &offer, &stage, progress)
         .and_then(|package| platform::open(&package, &stage))
         .and_then(|opened| {
             std::fs::create_dir_all(folder).map_err(|e| e.to_string())?;
@@ -557,6 +592,7 @@ mod tests {
             version: "0.9.0",
             commit: "",
             release: true,
+            release_key: "",
         };
         let new = Build {
             version: "0.10.0",

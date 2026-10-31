@@ -485,6 +485,7 @@ mod tests {
                 version: "0.6.0",
                 commit: "",
                 release: true,
+                release_key: "",
             },
         };
         let mut status = Status::default();

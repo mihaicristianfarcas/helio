@@ -83,11 +83,17 @@ account, sending nothing but the request and the version in its
 links it passes on for opening are pages of this repository. Nothing is
 downloaded or installed until you choose **Install and Restart**. That
 downloads the release's package for your system from the repository's
-releases, keeps it only if it is the file GitHub's SHA-256 says, and then
-only if it is signed by Helio's maker: on macOS with the same team's
-Developer ID as the app it replaces; on Windows, the installer with
-Helio's Authenticode certificate (required by releases built once Helio
-had one; before that the SHA-256 is the only check). On Windows, while
+releases, and keeps it only if it is the file GitHub's SHA-256 says and
+carries the release's own signature. That is an Ed25519 key, in
+minisign's format, that only the release workflow's signing job can use
+(a secret of the `release` environment, on `main`), and whose public half
+Helio is built with (`helio-update/release-signing.pub`). The signature
+names the package's file, so an older package, or another system's,
+cannot pass for the one offered; on Linux it is the only check of who made
+the package. Then each system checks its own signature by Helio's maker:
+on macOS the same team's Developer ID as the app it replaces; on Windows,
+on the installer, Helio's Authenticode certificate (required by releases
+built once Helio had one). On Windows, while
 hosting is on, the host's engine in Program Files is replaced only by the
 new engine's own `enable`, which checks the signature of its copy there
 as turning hosting on does. The check can be turned off
