@@ -13,6 +13,11 @@
 //! with the admin account (kept hashed here, in app-tokens.toml), which a
 //! Windows Helio needs: it is not elevated, and the host's folder is
 //! administrators' only.
+//!
+//! Only Windows has the account and app tokens ([`ACCOUNTS`]). Every user of
+//! the computer, and every program they run, reaches localhost; on a Mac or
+//! Linux, where Helio reads the local token and never makes the account,
+//! whoever asked first would have made it theirs, and with it the host.
 
 pub mod probe;
 
@@ -40,6 +45,12 @@ use crate::pairing::PinResult;
 use helio_proto::permission::Permissions;
 
 const LOCAL_TOKEN: &str = "local-token";
+/// Whether this host has an admin account and app tokens at all: only on
+/// Windows, where the host is a service and Helio, not an administrator,
+/// cannot read the local token. Elsewhere the host runs as its user, whose
+/// Helio reads the local token, so an account would only ever be made by
+/// someone else on the computer.
+const ACCOUNTS: bool = cfg!(windows);
 const APP_TOKENS: &str = "app-tokens.toml";
 
 #[derive(Serialize, Deserialize, Default)]
@@ -150,6 +161,9 @@ impl Web {
         if self.local_token.as_deref().is_some_and(|l| same(l, &t)) {
             return true;
         }
+        if !ACCOUNTS {
+            return false;
+        }
         let hash = sha256_hex(&t);
         self.app_tokens
             .lock()
@@ -176,7 +190,7 @@ macro_rules! require_auth {
 }
 
 async fn state(State(web): State<Shared>, headers: HeaderMap) -> Response {
-    let setup_needed = load_credentials(&web.host.data_dir).is_none();
+    let setup_needed = ACCOUNTS && load_credentials(&web.host.data_dir).is_none();
     Json(json!({
         "setup_needed": setup_needed,
         "signed_in": web.authed(&headers),
@@ -285,6 +299,17 @@ struct AppLogin {
 
 /// Helio Host's app signs in once: an app token for it to keep.
 async fn app_token(State(web): State<Shared>, Json(req): Json<AppLogin>) -> Response {
+    if !ACCOUNTS {
+        tracing::warn!("API: an account or app token asked for; this host has none");
+        return (
+            StatusCode::FORBIDDEN,
+            Json(
+                json!({"error": "Helio Host has no account on this system: Helio reads the \
+                token the host writes for the user it runs as. Open Helio as that user."}),
+            ),
+        )
+            .into_response();
+    }
     let login = Login {
         user: req.user,
         password: req.password,

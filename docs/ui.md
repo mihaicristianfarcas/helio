@@ -195,7 +195,8 @@ token:
 
 `POST /api/app-token` (user, password, optional `setup` to create the
 account, a name) and `DELETE /api/app-token` give and take back an app
-token; every other endpoint but `/api/state` takes the bearer token.
+token, on Windows only: on a Mac or Linux the host has no account (anyone
+on the computer could make it) and takes only its local token; every other endpoint but `/api/state` takes the bearer token.
 `/api/status` says, on a Mac, what macOS allows the host (`grants`: Screen
 Recording, Accessibility), and whether a restart is ahead (`restart`) and
 when the host started (`started_unix`): the settings pages say "restarting"
