@@ -24,6 +24,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use boringtun::noise::handshake::{parse_pqs_handshake_anon, parse_pqs_segment0_anon};
+use boringtun::noise::rate_limiter::RateLimiter;
 use boringtun::noise::{Packet, Tunn, TunnResult};
 use parking_lot::{Mutex, RwLock};
 use socket2::{Domain, Protocol, Socket, Type};
@@ -52,6 +53,14 @@ const SOCKET_BUFFER: usize = 8 << 20;
 /// How long `recv` blocks before returning `Received::Timeout`.
 pub const RECV_TIMEOUT: Duration = Duration::from_millis(100);
 const KEEPALIVE_SECS: u16 = 25;
+/// Handshake datagrams per second (`RateLimiter::reset_count` runs from
+/// `tick`) that are answered before a sender must show a cookie: the value
+/// pq-boringtun gives each peer's own limiter (`PEER_HANDSHAKE_RATE_LIMIT`).
+/// A segmented static-KEM initiation is several datagrams, and a client sends
+/// one a rekey, so a few clients never meet it.
+const HANDSHAKE_RATE_LIMIT: u64 = 10;
+/// pq-boringtun's `COOKIE_REPLY_SZ`.
+const COOKIE_REPLY: usize = 64;
 
 thread_local! {
     static ENCAP: RefCell<Vec<u8>> = RefCell::new(vec![0u8; SCRATCH]);
@@ -241,6 +250,9 @@ pub struct Endpoint {
     peers: RwLock<HashMap<PeerId, Arc<Peer>>>,
     by_key: RwLock<HashMap<[u8; 32], PeerId>>,
     seg_routes: Mutex<HashMap<(SocketAddr, u32), (PeerId, Instant)>>,
+    /// The check every first handshake datagram passes before its sender is
+    /// looked up: mac1, and under load a cookie (see [`Endpoint::admit`]).
+    handshake_gate: RateLimiter,
     epoch: Instant,
     test_loss: Option<TestLoss>,
 }
@@ -356,10 +368,11 @@ impl Endpoint {
             #[cfg(target_os = "macos")]
             inbox: recv_batch().map(|n| Mutex::new(Inbox::new(n))),
             dual_stack,
-            identity,
+            identity: identity.clone(),
             peers: RwLock::new(HashMap::new()),
             by_key: RwLock::new(HashMap::new()),
             seg_routes: Mutex::new(HashMap::new()),
+            handshake_gate: RateLimiter::new(&identity.x25519_public(), HANDSHAKE_RATE_LIMIT),
             epoch: Instant::now(),
             test_loss: TestLoss::from_env(),
         })
@@ -730,6 +743,7 @@ impl Endpoint {
     /// Pump every peer's timers: rekey, keepalive, handshake retry. Call at
     /// least every 250 ms.
     pub fn tick(&self) {
+        self.handshake_gate.reset_count();
         for peer in self.peers() {
             let Some(to) = peer.addr() else { continue };
             let post =
@@ -744,6 +758,32 @@ impl Endpoint {
         }
     }
 
+    /// Whether a datagram that starts a handshake may cost the ML-KEM-768
+    /// decapsulation that finding its sender takes (22 to 32 us in a release
+    /// build, 1.6 us for the check here; see the commit that added it): it
+    /// must carry the mac1 only someone who knows this host's public key can
+    /// make, and past `HANDSHAKE_RATE_LIMIT` a second also a cookie, which
+    /// proves the sender's address (WireGuard's design, whitepaper §5.3).
+    /// The peer's own tunnel checks again in `decapsulate`, as pq-boringtun's
+    /// device does after its own gate (`device/mod.rs`). A sender asked for a
+    /// cookie is sent one here; the datagram is dropped.
+    fn admit(&self, datagram: &[u8], src: SocketAddr) -> bool {
+        let mut reply = [0u8; COOKIE_REPLY];
+        match self
+            .handshake_gate
+            .verify_packet(Some(src.ip()), datagram, &mut reply)
+        {
+            Ok(_) => true,
+            Err(TunnResult::WriteToNetwork(cookie)) => {
+                if !self.dark() {
+                    let _ = self.socket.send_to(cookie, self.wire_addr(src));
+                }
+                false
+            }
+            Err(_) => false,
+        }
+    }
+
     fn route(&self, datagram: &[u8], src: SocketAddr) -> Option<Arc<Peer>> {
         let by_index = |idx: u32| self.peer(idx >> 8);
         let own_public = self.identity.x25519_public();
@@ -754,12 +794,18 @@ impl Endpoint {
             Packet::PqHandshakeResponse(p) => by_index(p.receiver_idx),
             Packet::PqsHandshakeResponse(p) => by_index(p.receiver_idx),
             Packet::PqsHandshakeInit(ref p) => {
+                if !self.admit(datagram, src) {
+                    return None;
+                }
                 let hh = parse_pqs_handshake_anon(self.identity.mlkem(), &own_public, p).ok()?;
                 self.peer_by_key(&hh.peer_static_public)
             }
             Packet::PqSegment(p) => {
                 let mut routes = self.seg_routes.lock();
                 if p.seg_idx == 0 {
+                    if !self.admit(datagram, src) {
+                        return None;
+                    }
                     if let Ok(hh) =
                         parse_pqs_segment0_anon(self.identity.mlkem(), &own_public, p.chunk)
                     {
@@ -1012,4 +1058,63 @@ fn bind_dual_stack(port: u16) -> io::Result<Socket> {
     s.set_only_v6(false)?;
     s.bind(&SocketAddr::new(IpAddr::V6(Ipv6Addr::UNSPECIFIED), port).into())?;
     Ok(s)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The first datagram of a client's initiation to `host`: segment 0 of
+    /// the segmented type-8 handshake, the one whose routing needs the
+    /// host's ML-KEM decapsulation.
+    fn first_initiation_datagram(host: &Endpoint, client: &Identity) -> Vec<u8> {
+        let mut tunn = new_tunn(client, host.identity().public(), 1).unwrap();
+        let mut scratch = vec![0u8; SCRATCH];
+        match tunn.format_handshake_initiation(&mut scratch, false) {
+            TunnResult::WriteToNetwork(p) => p.to_vec(),
+            TunnResult::WriteManyToNetwork(s) => s.iter().next().unwrap().to_vec(),
+            _ => panic!("no initiation"),
+        }
+    }
+
+    fn host_with(client: &Identity) -> Endpoint {
+        let host = Endpoint::bind(Arc::new(Identity::generate()), 0).unwrap();
+        host.add_peer(client.public().clone(), None).unwrap();
+        host
+    }
+
+    const SRC: &str = "192.0.2.9:40000";
+
+    #[test]
+    fn an_initiation_is_routed_to_its_peer() {
+        let client = Identity::generate();
+        let host = host_with(&client);
+        let datagram = first_initiation_datagram(&host, &client);
+        assert!(host.route(&datagram, SRC.parse().unwrap()).is_some());
+    }
+
+    #[test]
+    fn an_initiation_without_a_valid_mac1_is_dropped_before_the_kem() {
+        let client = Identity::generate();
+        let host = host_with(&client);
+        let mut datagram = first_initiation_datagram(&host, &client);
+        let mac1 = datagram.len() - 32;
+        datagram[mac1] ^= 1;
+        assert!(host.route(&datagram, SRC.parse().unwrap()).is_none());
+    }
+
+    #[test]
+    fn initiations_past_the_rate_limit_need_a_cookie_before_the_kem() {
+        let client = Identity::generate();
+        let host = host_with(&client);
+        let datagram = first_initiation_datagram(&host, &client);
+        let src: SocketAddr = SRC.parse().unwrap();
+        let routed = (0..HANDSHAKE_RATE_LIMIT * 3)
+            .filter(|_| host.route(&datagram, src).is_some())
+            .count();
+        assert_eq!(
+            routed as u64, HANDSHAKE_RATE_LIMIT,
+            "then it wants a cookie"
+        );
+    }
 }
