@@ -257,7 +257,9 @@ impl HelioApp {
                         Some("Risky steps: deleting, spending, sending, changing settings, \
                             typing a password or a key. The model asks, and rules catch \
                             the commands and keys it did not ask about. A notification \
-                            asks when Helio is in the background.".into()),
+                            asks when Helio is in the background. An agent outside Helio \
+                            (Helio mcp) cannot be asked: such steps are refused, unless \
+                            this is Never.".into()),
                         ask,
                         t,
                     )
