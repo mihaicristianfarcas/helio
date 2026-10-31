@@ -151,7 +151,10 @@ fn check(args: &[String]) -> ExitCode {
     };
     let subject = match what.as_str() {
         "--click" => match point(args.get(2)) {
-            Some(at) => Some(Subject::Click { at, doing: "click" }),
+            Some(at) => Some(Subject::Click {
+                at: Some(at),
+                doing: "click",
+            }),
             None => return fail(USAGE),
         },
         "--enter" => Some(Subject::Enter),
