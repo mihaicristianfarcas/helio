@@ -143,6 +143,14 @@ impl Run {
                     let result = run(&ctx);
                     // Over: whatever still follows the run lets go.
                     ctx.stop.store(true, Ordering::Relaxed);
+                    if ctx.session.is_none() {
+                        // A one-off run's folder holds its screenshots and,
+                        // in the asks, whole typed text: nothing reads it
+                        // once the run is over (its events were read as
+                        // they came), so it goes. A conversation's folder
+                        // goes with the conversation.
+                        let _ = std::fs::remove_dir_all(&ctx.run_dir);
+                    }
                     if let Some(link) = &ctx.session {
                         // An action of a model that is gone may still wait
                         // for a person: it ends here.
@@ -303,5 +311,46 @@ fn run_turn(ctx: &RunContext, link: &SessionLink) -> Result<String, String> {
                 _ => providers::chat::run(&told, &mut computer),
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_one_off_run_leaves_no_folder_and_keeps_its_folder_private() {
+        let dir = tempfile::tempdir().unwrap();
+        let runs = helio_client::store::agent_dir(dir.path()).join("runs");
+        // While it runs, its folder is the user's alone.
+        let during = providers::cli::run_dir(dir.path()).unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mode =
+                |p: &std::path::Path| std::fs::metadata(p).unwrap().permissions().mode() & 0o777;
+            assert_eq!(mode(&during), 0o700);
+            assert_eq!(mode(&runs), 0o700);
+        }
+        std::fs::remove_dir(&during).unwrap();
+        // A run that ends (here at once: no task) takes its folder with it.
+        let (tx, rx) = crossbeam_channel::unbounded();
+        let run = Run::start(
+            Task {
+                data_dir: dir.path().to_path_buf(),
+                host: "gaming-pc".into(),
+                task: String::new(),
+                settings: AgentSettings::default(),
+                session: None,
+            },
+            Arc::new(move |e| {
+                let _ = tx.send(e);
+            }),
+            Arc::new(|_: &str| false),
+        );
+        run.join();
+        assert!(matches!(rx.try_iter().last(), Some(RunEvent::Failed(_))));
+        let left: Vec<_> = std::fs::read_dir(&runs).unwrap().flatten().collect();
+        assert!(left.is_empty(), "{left:?}");
     }
 }

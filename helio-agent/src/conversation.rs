@@ -48,7 +48,7 @@ impl Conversation {
         let dir = helio_client::store::agent_dir(data_dir)
             .join("conversations")
             .join(stamp.to_string());
-        std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+        crate::providers::cli::private_dir(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
         let mut config = Config::new(data_dir.to_path_buf());
         config.default_host = Some(host.to_string());
         config.host_only = true;

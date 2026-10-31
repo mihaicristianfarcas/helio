@@ -130,7 +130,8 @@ pub fn claude_program(settings: &AgentSettings) -> Result<PathBuf, String> {
         })
 }
 
-/// Where a run keeps its events, thumbnails and control folder.
+/// Where a run keeps its events, thumbnails and control folder (the
+/// runner removes it when the run ends).
 pub fn run_dir(data_dir: &Path) -> Result<PathBuf, String> {
     let stamp = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -139,8 +140,24 @@ pub fn run_dir(data_dir: &Path) -> Result<PathBuf, String> {
     let dir = helio_client::store::agent_dir(data_dir)
         .join("runs")
         .join(stamp.to_string());
-    std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+    private_dir(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
     Ok(dir)
+}
+
+/// Make `dir` (a run's or a conversation's folder) and its parent, readable
+/// by this user only: they hold what the agent saw (thumbnails), did and
+/// was asked to approve (typed text, whole), and a session's endpoint
+/// token. On Windows they are in the user's own profile.
+pub fn private_dir(dir: &Path) -> std::io::Result<()> {
+    std::fs::create_dir_all(dir)?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        for d in [Some(dir), dir.parent()].into_iter().flatten() {
+            std::fs::set_permissions(d, std::fs::Permissions::from_mode(0o700))?;
+        }
+    }
+    Ok(())
 }
 
 /// The MCP server's command line for this run.
