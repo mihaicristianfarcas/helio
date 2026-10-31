@@ -10,7 +10,8 @@
 //! into a folder of this end's, put on the clipboard as files (a paste in
 //! Finder or Explorer copies them from there).
 //!
-//! Left alone: copies a password manager marks as concealed, and copies
+//! Left alone: copies a password manager marks as concealed (on macOS and
+//! Windows; see `Board::concealed` for Linux), and copies
 //! larger than `clip::MAX_TRANSFER` (files beyond it are not sent; the text
 //! or image of the copy still is).
 //!

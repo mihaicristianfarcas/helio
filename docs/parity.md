@@ -71,7 +71,7 @@ it applies), **no** (not built, with the reason), **n/a** (does not apply).
 | Swap mouse buttons, reverse scrolling | Same, Input settings (imported from Moonlight) | done |
 | Command as the Windows key (option) | Same; always Command on a Mac host | done |
 | Paste the clipboard (Ctrl-Alt-Shift-V) | Same, Unicode, survives 10% burst loss | done |
-| Clipboard sync (Apollo, with its Artemis client: text, when the client asks) | Both ways as you copy: text, images, files and folders; password managers' copies stay put ([usage.md](usage.md#sharing-the-clipboard)) | done, beyond Apollo's |
+| Clipboard sync (Apollo, with its Artemis client: text, when the client asks) | Both ways as you copy: text, images, files and folders; password managers' copies stay put on macOS and Windows, not on Linux ([usage.md](usage.md#sharing-the-clipboard)) | done, beyond Apollo's |
 | Controllers, several, with rumble | Same (virtual Xbox 360 pads); rumble reaches the pad ~7 ms after the game sets it | done (Xbox Wireless Controller) |
 | Controller's Xbox button | Reaches the host as Guide (read from the pad's HID reports, as Moonlight does); macOS 26 opens its Games overlay too, as with Moonlight | done |
 | Controller as a mouse (hold Start) | Same | done |
