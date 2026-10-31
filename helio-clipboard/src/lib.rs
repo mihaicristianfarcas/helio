@@ -531,9 +531,95 @@ fn walk(p: &Path, rel: &str, items: &mut Vec<Item>, total: &mut usize, max: usiz
     Some(())
 }
 
+/// Where files copied on the other end land at this end: a folder named
+/// `name` that only this user can use. Not a fixed name in a shared temporary
+/// folder: on Linux that is `/tmp`, where another user could read the files,
+/// or create the folder first and have them land in it. With a runtime
+/// folder (`XDG_RUNTIME_DIR`, which the system makes 0700 and the user's own)
+/// the folder is in it; otherwise it is in the temporary folder with the
+/// user's id in its name. macOS and Windows already give each user a
+/// temporary folder of their own. [`land`] checks the folder before it
+/// writes (see [`private_dir`]).
+pub fn files_dir(name: &str) -> PathBuf {
+    files_dir_in(
+        std::env::var_os("XDG_RUNTIME_DIR").map(PathBuf::from),
+        &std::env::temp_dir(),
+        name,
+    )
+}
+
+fn files_dir_in(runtime: Option<PathBuf>, temp: &Path, name: &str) -> PathBuf {
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        match runtime {
+            Some(r) if r.is_absolute() => r.join(name),
+            // SAFETY: geteuid has no arguments and cannot fail.
+            _ => temp.join(format!("{name} {}", unsafe { libc::geteuid() })),
+        }
+    }
+    #[cfg(not(all(unix, not(target_os = "macos"))))]
+    {
+        let _ = runtime;
+        temp.join(name)
+    }
+}
+
+/// Make sure `dir` is a real folder of this user that nobody else can enter,
+/// creating it (0700) if it is not there. It is never followed through a
+/// link: a link of this user's is replaced, any other link, file or folder
+/// of someone else's is an error, and the caller writes nothing. On Windows
+/// the user's temporary folder is already theirs alone.
+#[cfg(unix)]
+fn private_dir(dir: &Path) -> Result<(), String> {
+    use std::os::unix::fs::{DirBuilderExt, MetadataExt, PermissionsExt};
+    let fail = |why: &str| format!("{}: {why}", dir.display());
+    // SAFETY: geteuid has no arguments and cannot fail.
+    let me = unsafe { libc::geteuid() };
+    match std::fs::symlink_metadata(dir) {
+        Ok(m) if m.is_dir() && m.uid() == me => {
+            if m.mode() & 0o077 != 0 {
+                std::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o700))
+                    .map_err(|e| fail(&e.to_string()))?;
+            }
+            return Ok(());
+        }
+        // A link or file of this user's only stands in the way.
+        Ok(m) if m.uid() == me => {
+            std::fs::remove_file(dir).map_err(|e| fail(&e.to_string()))?;
+        }
+        Ok(_) => {
+            return Err(fail(
+                "belongs to another user, so the copied files are not put there",
+            ))
+        }
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+        Err(e) => return Err(fail(&e.to_string())),
+    }
+    if let Some(parent) = dir.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| fail(&e.to_string()))?;
+    }
+    // Fails if anything is there by now, so a folder made by someone else in
+    // between is never taken for ours.
+    std::fs::DirBuilder::new()
+        .mode(0o700)
+        .create(dir)
+        .map_err(|e| fail(&e.to_string()))?;
+    Ok(())
+}
+
+#[cfg(not(unix))]
+fn private_dir(dir: &Path) -> Result<(), String> {
+    std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))
+}
+
 /// Write the files and folders among `items` under `dir` (a fresh folder);
-/// the top-level ones, in order, to put on the clipboard.
+/// the top-level ones, in order, to put on the clipboard. `dir`'s parent is
+/// the folder every copy lands in: it must be this user's own and private
+/// (see [`files_dir`]), or nothing is written.
 pub fn land(items: &[Item], dir: &Path) -> Result<Vec<PathBuf>, String> {
+    if let Some(parent) = dir.parent() {
+        private_dir(parent)?;
+    }
     // Older copies' files go: the clipboard now holds this one.
     if let Some(parent) = dir.parent() {
         for e in std::fs::read_dir(parent).into_iter().flatten().flatten() {
@@ -621,6 +707,62 @@ mod tests {
         );
         assert!(dir.join("Project/src/empty").is_dir());
         assert!(!out.path().join("old").exists(), "older copies go");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_planted_link_in_place_of_the_folder_is_not_followed() {
+        let root = tempfile::tempdir().unwrap();
+        let victim = root.path().join("elsewhere");
+        std::fs::create_dir_all(victim.join("keep")).unwrap();
+        let link = root.path().join("Helio Clipboard");
+        std::os::unix::fs::symlink(&victim, &link).unwrap();
+        let items = [Item::File {
+            path: "a.txt".into(),
+            data: b"x".to_vec(),
+        }];
+        let landed = land(&items, &link.join("7"));
+        // The link is this user's own, so it is replaced by a real folder;
+        // what it led to is untouched either way.
+        assert!(victim.join("keep").is_dir());
+        assert!(
+            !victim.join("7").exists(),
+            "nothing written through the link"
+        );
+        let real = std::fs::symlink_metadata(&link).unwrap();
+        assert!(real.is_dir() && !real.file_type().is_symlink());
+        assert!(landed.is_ok());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn the_folder_copies_land_in_is_private() {
+        use std::os::unix::fs::PermissionsExt;
+        let root = tempfile::tempdir().unwrap();
+        let shared = root.path().join("Helio Clipboard");
+        std::fs::create_dir(&shared).unwrap();
+        std::fs::set_permissions(&shared, std::fs::Permissions::from_mode(0o755)).unwrap();
+        land(&[Item::Dir { path: "d".into() }], &shared.join("1")).unwrap();
+        let mode = |p: &Path| std::fs::metadata(p).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode(&shared), 0o700, "an open folder is closed");
+        let fresh = root.path().join("fresh");
+        land(&[Item::Dir { path: "d".into() }], &fresh.join("1")).unwrap();
+        assert_eq!(mode(&fresh), 0o700, "a new folder is made private");
+    }
+
+    #[cfg(all(unix, not(target_os = "macos")))]
+    #[test]
+    fn the_folder_is_in_the_runtime_folder_or_named_for_the_user() {
+        let tmp = Path::new("/tmp");
+        assert_eq!(
+            files_dir_in(Some("/run/user/1000".into()), tmp, "Helio Clipboard"),
+            Path::new("/run/user/1000/Helio Clipboard")
+        );
+        for runtime in [None, Some(PathBuf::from("relative"))] {
+            let dir = files_dir_in(runtime, tmp, "Helio Clipboard");
+            assert!(dir.starts_with("/tmp"), "{dir:?}");
+            assert_ne!(dir, tmp.join("Helio Clipboard"), "not the shared name");
+        }
     }
 
     #[test]

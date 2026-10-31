@@ -311,7 +311,7 @@ pub fn run(args: &[String]) -> ExitCode {
         .init();
     let opts = helio_clipboard::Options {
         // The user's own temporary folder.
-        files_dir: std::env::temp_dir().join("Helio Host Clipboard"),
+        files_dir: helio_clipboard::files_dir("Helio Host Clipboard"),
         rate,
         offer_current: false,
         peer: "the client".into(),

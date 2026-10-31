@@ -302,7 +302,7 @@ impl Clip {
         #[cfg(not(windows))]
         {
             let opts = helio_clipboard::Options {
-                files_dir: std::env::temp_dir().join("Helio Host Clipboard"),
+                files_dir: helio_clipboard::files_dir("Helio Host Clipboard"),
                 rate,
                 offer_current: false,
                 peer: peer_name,
