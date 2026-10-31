@@ -18,6 +18,11 @@ pub fn assess(action: &Action) -> Option<String> {
     match action {
         Action::Type { text } => typed(text),
         Action::Key { keys, .. } | Action::HoldKey { keys, .. } => chord(keys),
+        // Keys held around a click are pressed all the same (`keys`
+        // refuses any but modifiers there, after this has judged them).
+        Action::Click { modifiers, .. }
+        | Action::Drag { modifiers, .. }
+        | Action::Scroll { modifiers, .. } => modifiers.as_deref().and_then(chord),
         _ => None,
     }
 }
@@ -218,17 +223,21 @@ fn card_number(t: &str) -> bool {
     sum.is_multiple_of(10)
 }
 
+/// Why the chord `keys` waits, judged on the keys it presses as
+/// `keys::parse` reads them (every alias, either side's modifier, the keys
+/// in any order), not on how it is written. A chord the parser refuses is
+/// never pressed.
 fn chord(keys: &str) -> Option<String> {
-    let k = keys.to_lowercase().replace(' ', "");
-    let parts: Vec<&str> = k.split('+').collect();
-    let has = |names: &[&str]| parts.iter().any(|p| names.contains(p));
-    let ctrl = has(&["ctrl", "control"]);
-    let alt = has(&["alt", "option"]);
-    let shift = has(&["shift"]);
-    let cmd = has(&["super", "cmd", "command", "win", "meta"]);
-    let key = parts.last().copied().unwrap_or_default();
-    let delete = matches!(key, "delete" | "del");
-    let backspace = matches!(key, "backspace" | "back_space");
+    use helio_proto::input::{scancode, Key};
+    let pressed = crate::keys::parse(keys).ok()?.keys;
+    let has = |any: &[Key]| any.iter().any(|&k| pressed.contains(&scancode(k)));
+    let ctrl = has(&[Key::ControlLeft, Key::ControlRight]);
+    let alt = has(&[Key::AltLeft, Key::AltRight]);
+    let shift = has(&[Key::ShiftLeft, Key::ShiftRight]);
+    let cmd = has(&[Key::SuperLeft, Key::SuperRight]);
+    let delete = has(&[Key::Delete]);
+    let backspace = has(&[Key::Backspace]);
+    let (l, q) = (has(&[Key::KeyL]), has(&[Key::KeyQ]));
     if shift && delete && !ctrl && !alt {
         return Some("Shift+Delete deletes for good, past the Recycle Bin.".into());
     }
@@ -243,7 +252,7 @@ fn chord(keys: &str) -> Option<String> {
     if cmd && shift && (backspace || delete) {
         return Some("Shift+Command+Delete empties the Trash.".into());
     }
-    if (cmd && key == "l" && !ctrl && !shift) || (ctrl && cmd && key == "q") {
+    if (cmd && l && !ctrl && !shift) || (ctrl && cmd && q) {
         return Some("It locks the screen: only a person can unlock it.".into());
     }
     None
@@ -356,5 +365,52 @@ mod tests {
             }),
             None
         );
+    }
+
+    #[test]
+    fn every_name_the_key_parser_takes_for_a_risky_chord_waits() {
+        for keys in [
+            "Shift_R+Delete",
+            "lshift+Delete",
+            "shift+Delete+a",
+            "Delete+shift",
+            "Control_L+Alt_L+Delete",
+            "rctrl+ralt+del",
+            "windows+l",
+            "Super_L+l",
+            "cmd+L",
+            "Meta_R+alt+BackSpace",
+            "ctrl+win+q",
+        ] {
+            assert!(crate::keys::parse(keys).is_ok(), "{keys}");
+            assert!(k(keys).is_some(), "{keys}");
+        }
+        for fine in ["alt+l", "ctrl+l", "shift+super+l", "ctrl+shift+Delete"] {
+            assert_eq!(k(fine), None, "{fine}");
+        }
+    }
+
+    #[test]
+    fn keys_held_around_a_click_a_drag_or_a_scroll_are_judged() {
+        use crate::computer::Mouse;
+        let click = Action::Click {
+            at: Some((1, 1)),
+            button: Mouse::Left,
+            count: 1,
+            modifiers: Some("ctrl+alt+Delete".into()),
+        };
+        let scroll = Action::Scroll {
+            at: None,
+            down: 1,
+            right: 0,
+            modifiers: Some("shift_r+Delete".into()),
+        };
+        let drag = Action::Drag {
+            path: vec![(1, 1), (2, 2)],
+            modifiers: Some("super+l".into()),
+        };
+        for a in [click, scroll, drag] {
+            assert!(assess(&a).is_some(), "{a:?}");
+        }
     }
 }

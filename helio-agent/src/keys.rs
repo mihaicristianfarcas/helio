@@ -217,12 +217,36 @@ pub fn char_key(c: char) -> Option<Vec<Key>> {
     }
 }
 
+/// The modifier keys, either side.
+const MODIFIERS: [Key; 8] = [
+    Key::ControlLeft,
+    Key::ControlRight,
+    Key::ShiftLeft,
+    Key::ShiftRight,
+    Key::AltLeft,
+    Key::AltRight,
+    Key::SuperLeft,
+    Key::SuperRight,
+];
+
 /// Modifier names (`shift`, `ctrl+shift`) held around a click or scroll.
+/// Only modifiers: any other key would be pressed with the click, a chord
+/// by another route than `key` (and its rules: see `risk`).
 pub fn modifiers(text: Option<&str>) -> Result<Vec<u16>, String> {
-    match text.map(str::trim).filter(|t| !t.is_empty()) {
-        None => Ok(Vec::new()),
-        Some(t) => Ok(parse(t)?.keys),
+    let Some(t) = text.map(str::trim).filter(|t| !t.is_empty()) else {
+        return Ok(Vec::new());
+    };
+    let keys = parse(t)?.keys;
+    if keys
+        .iter()
+        .any(|k| !MODIFIERS.iter().any(|&m| scancode(m) == *k))
+    {
+        return Err(format!(
+            "{t:?} is not only modifier keys: hold shift, ctrl, alt or super around a click \
+                or scroll, and press other keys with `key`."
+        ));
     }
+    Ok(keys)
 }
 
 #[cfg(test)]
@@ -299,5 +323,17 @@ mod tests {
             modifiers(Some("ctrl+shift")).unwrap(),
             vec![sc(Key::ControlLeft), sc(Key::ShiftLeft)]
         );
+    }
+
+    #[test]
+    fn only_modifier_keys_are_held_around_a_click() {
+        assert_eq!(
+            modifiers(Some("Shift_R+cmd")).unwrap(),
+            vec![sc(Key::ShiftRight), sc(Key::SuperLeft)]
+        );
+        for chord in ["ctrl+alt+Delete", "shift+a", "Return", "plus"] {
+            let e = modifiers(Some(chord)).unwrap_err();
+            assert!(e.contains("modifier"), "{chord}: {e}");
+        }
     }
 }
