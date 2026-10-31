@@ -163,6 +163,17 @@ impl Action {
         self.words(|text| format!("type ({} characters)", text.chars().count()))
     }
 
+    /// What a yes to the model's own request must quote for it to cover
+    /// this action (`control::Step::quote`): the text typed, the keys
+    /// pressed. None for a click, a drag or a scroll.
+    pub fn quote(&self) -> Option<&str> {
+        match self {
+            Action::Type { text } => Some(text),
+            Action::Key { keys, .. } | Action::HoldKey { keys, .. } => Some(keys),
+            _ => None,
+        }
+    }
+
     /// The action in a few words, with `typed` saying what of a text to
     /// show.
     fn words(&self, typed: impl Fn(&str) -> String) -> String {
@@ -561,7 +572,9 @@ impl Computer {
         let answer = control.request(&ask, &stop, hold);
         self.count_waited(waited.elapsed());
         Ok(Outcome::text(if answer? {
-            "Approved: go ahead, as you described it."
+            "Approved: go ahead, as you described it. The yes covers the text you quoted \
+                and the keys you named, as you wrote them; anything else that needs a \
+                go-ahead is asked about again."
         } else {
             "The person said no. Don't do it: find another way, or stop and tell them."
         }))
@@ -990,6 +1003,7 @@ impl Computer {
         let step = crate::control::Step {
             what: &what,
             label: &label,
+            quote: action.quote(),
         };
         let gated = self
             .control

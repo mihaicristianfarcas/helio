@@ -434,7 +434,7 @@ pub fn prompt_for(ctx: &RunContext) -> String {
 /// steps (unless they turned approvals off).
 pub const APPROVAL_NOTE: &str = "Before a step that deletes files or data, spends money, sends or posts anything on the person's \
     behalf, changes account, security or system settings, installs software, or types a password or secret, call \
-    ask_approval with exactly what you will do (quote the command or text) and why, and wait for the answer. If the \
+    ask_approval with exactly what you will do (quote the command, text or keys) and why, and wait for the answer. If the \
     answer is no, don't do it: find another way or stop and say so. Don't ask about routine steps (opening, reading, \
     navigating, typing ordinary text).";
 

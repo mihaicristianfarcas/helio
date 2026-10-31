@@ -130,7 +130,7 @@ pub fn tool_list() -> Value {
             approved or not.",
             "inputSchema": {"type": "object", "properties": {
                 "action": {"type": "string", "description": "Exactly what you will do, \
-                    quoting the command or text (\"Delete the 3 files in Downloads/old\", \
+                    quoting the command, text or keys (\"Delete the 3 files in Downloads/old\", \
                     \"type `rm -rf build` and press Return\")"},
                 "reason": {"type": "string", "description": "Why it is needed, in a few words"}}, "required": ["action"]}},
         {"name": "wake_host", "description": "Wake a sleeping host (Wake-on-LAN, on its \

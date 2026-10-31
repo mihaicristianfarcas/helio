@@ -70,7 +70,9 @@ something, look over its shoulder, do a bit yourself, ask again.
   `\n`. A question waits up to 15 minutes (not counted against the turn);
   no answer is a no. A yes to the model's own request covers the next few
   risky actions that carry it out (2 minutes, 3 actions), so you are not
-  asked twice.
+  asked twice: those it quoted, the command or text it types and the keys
+  it presses, word for word. Anything else, a click clef holds among them,
+  is asked about again.
 - **Notifications** (macOS): when a session is not on screen, Helio tells you
   when the agent asks for your go-ahead (with **Allow** and **Don't** on the
   notification), waits at a sign-in or administrator prompt, is done, or
