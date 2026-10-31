@@ -11,6 +11,9 @@
 //!   (`every`), or a screen with personal information the model is to see
 //!   (`screen`, whatever the approvals: see `judge`);
 //! - `answer-N`: `yes` or `no`.
+//!
+//! Whoever can write in the folder answers, so it is used only if it is
+//! this user's alone (`own_folder`).
 
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
@@ -52,11 +55,17 @@ pub struct Control {
     approvals: Approvals,
     next: u32,
     covered: Option<Cover>,
+    /// Why `dir` is not used (see [`own_folder`]): nothing there is the
+    /// person's, so every question is a no and no pause is heeded.
+    refused: Option<String>,
 }
 
 impl Control {
     pub fn new(dir: PathBuf, approvals: Approvals) -> Control {
-        let _ = std::fs::create_dir_all(&dir);
+        let refused = own_folder(&dir).err();
+        if let Some(e) = &refused {
+            tracing::error!(error = e, "control folder not used; nobody can be asked");
+        }
         // Numbered on from the clock: a turn's questions never share a
         // number with an earlier turn's in the same folder.
         let next = std::time::SystemTime::now()
@@ -68,6 +77,7 @@ impl Control {
             approvals,
             next,
             covered: None,
+            refused,
         }
     }
 
@@ -87,7 +97,7 @@ impl Control {
         max_wait: Duration,
     ) -> Result<(), String> {
         let started = Instant::now();
-        while self.dir.join("pause").exists() {
+        while self.refused.is_none() && self.dir.join("pause").exists() {
             if let Some(why) = stop() {
                 return Err(why);
             }
@@ -188,6 +198,13 @@ impl Control {
         stop: &dyn Fn() -> Option<String>,
         max_wait: Duration,
     ) -> Result<bool, String> {
+        if self.refused.is_some() {
+            tracing::warn!(from, action = label, "nobody can be asked");
+            return Err(format!(
+                "Nobody can be asked whether to {label}. Don't do it: stop here and report \
+                    that it needs the person's go-ahead."
+            ));
+        }
         self.next += 1;
         let n = self.next;
         let started = Instant::now();
@@ -232,6 +249,47 @@ impl Control {
         let _ = std::fs::remove_file(&answer);
         result
     }
+}
+
+/// Make `dir` a control folder of this user's alone, or say why it cannot
+/// be one: whoever can write in it answers the questions. On Unix it is
+/// made 0700 (with any folder it needs above it), and used only if it is a
+/// folder of this user's, not a link to one.
+fn own_folder(dir: &Path) -> Result<(), String> {
+    #[cfg(unix)]
+    {
+        extern "C" {
+            fn geteuid() -> u32;
+        }
+        // SAFETY: geteuid takes nothing and always succeeds.
+        own_folder_of(dir, unsafe { geteuid() })
+    }
+    #[cfg(not(unix))]
+    {
+        // Windows: Helio's data folder and %TEMP% are in the user's own
+        // profile, which other users cannot open.
+        std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))
+    }
+}
+
+/// [`own_folder`] for the user `uid`.
+#[cfg(unix)]
+fn own_folder_of(dir: &Path, uid: u32) -> Result<(), String> {
+    use std::os::unix::fs::{DirBuilderExt, MetadataExt, PermissionsExt};
+    let err = |e: std::io::Error| format!("{}: {e}", dir.display());
+    std::fs::DirBuilder::new()
+        .recursive(true)
+        .mode(0o700)
+        .create(dir)
+        .map_err(err)?;
+    let meta = std::fs::symlink_metadata(dir).map_err(err)?;
+    if !meta.file_type().is_dir() {
+        return Err(format!("{} is a link, not a folder", dir.display()));
+    }
+    if meta.uid() != uid {
+        return Err(format!("{} belongs to another user", dir.display()));
+    }
+    std::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o700)).map_err(err)
 }
 
 /// Whether the model's `request` names `part` (a text to type, keys to
@@ -600,6 +658,61 @@ mod tests {
         assert!(pending(&d).is_empty());
         let e = c.show(&ask, &|| Some("Stopped.".into()), WAIT).unwrap_err();
         assert_eq!(e, "Stopped.");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_control_folder_is_the_users_alone_or_nothing_is_asked_there() {
+        use std::os::unix::fs::PermissionsExt;
+        use std::sync::atomic::{AtomicBool, Ordering};
+        let mode = |p: &Path| std::fs::metadata(p).unwrap().permissions().mode() & 0o777;
+        let dir = tempfile::tempdir().unwrap();
+        // A folder someone else made, where whoever writes answers: a link
+        // to one stands for it here (a test has one user).
+        let theirs = dir.path().join("theirs");
+        std::fs::create_dir(&theirs).unwrap();
+        let link = dir.path().join("control");
+        std::os::unix::fs::symlink(&theirs, &link).unwrap();
+        let done = std::sync::Arc::new(AtomicBool::new(false));
+        let stranger = {
+            let (theirs, done) = (theirs.clone(), done.clone());
+            std::thread::spawn(move || {
+                while !done.load(Ordering::Relaxed) {
+                    for (n, _) in pending(&theirs) {
+                        answer(&theirs, n, true);
+                    }
+                    std::thread::sleep(Duration::from_millis(5));
+                }
+            })
+        };
+        let mut c = Control::new(link.clone(), Approvals::Risky);
+        let gate = c.gate(
+            &step("type \"rm -rf ~\"", "type (8 characters)"),
+            Some("deletes files"),
+            &|| None,
+            Duration::from_secs(5),
+        );
+        done.store(true, Ordering::Relaxed);
+        stranger.join().unwrap();
+        assert!(gate.is_err(), "a yes from a folder not the user's");
+        assert!(std::fs::read_dir(&theirs).unwrap().next().is_none());
+        // The user's own, left open to others, is closed; a new one is made
+        // private.
+        let open = dir.path().join("open");
+        std::fs::create_dir(&open).unwrap();
+        std::fs::set_permissions(&open, std::fs::Permissions::from_mode(0o777)).unwrap();
+        Control::new(open.clone(), Approvals::Risky);
+        assert_eq!(mode(&open), 0o700);
+        let new = dir.path().join("a").join("control");
+        Control::new(new.clone(), Approvals::Risky);
+        assert_eq!(mode(&new), 0o700);
+        // One of another user's is not used, nor changed.
+        let uid = std::os::unix::fs::MetadataExt::uid(&std::fs::metadata(&new).unwrap());
+        std::fs::set_permissions(&open, std::fs::Permissions::from_mode(0o777)).unwrap();
+        let e = own_folder_of(&open, uid + 1).unwrap_err();
+        assert!(e.contains("another user"), "{e}");
+        assert_eq!(mode(&open), 0o777);
+        assert!(own_folder_of(&open, uid).is_ok());
     }
 
     #[test]
