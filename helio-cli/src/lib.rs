@@ -120,9 +120,7 @@ pub(crate) fn list(
             style::table(header, rows, style::colour(To::Out), look)
         );
     } else {
-        for row in rows {
-            println!("{}", row.join("\t"));
-        }
+        print!("{}", style::tab_separated(rows));
     }
 }
 
