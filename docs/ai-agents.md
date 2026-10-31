@@ -63,7 +63,8 @@ something, look over its shoulder, do a bit yourself, ask again.
   overwrite for good (`rm -rf`, `del /s`, `Remove-Item -Recurse`, `format`,
   `git push --force`, `DROP TABLE`, `curl … | sh`, …), what looks like a
   password, a key or a card number, and Shift+Delete, Ctrl+Alt+Delete,
-  emptying the Trash or locking the screen. A click is never judged by rule:
+  emptying the Trash or locking the screen, under any name the agent gives
+  the keys and held around a click too. A click is never judged by rule:
   only the model knows what is under it, and clef, if you turn its
   [screen checks](#screen-checks-cloudflare-clef) on. A question about a
   step shows it whole: all of a text the agent would type, a newline as
@@ -218,7 +219,8 @@ The tools, named as in Claude's computer-use toolset:
 - `list_hosts`, `connect` (host, width, height), `disconnect`, `wake_host`
 - `screenshot`, `zoom` (a region, enlarged)
 - `left_click`, `right_click`, `middle_click`, `double_click`,
-  `triple_click` (at `coordinate`, with modifier keys in `text`)
+  `triple_click` (at `coordinate`, with modifier keys in `text`: shift,
+  ctrl, alt or super, no other key)
 - `left_click_drag`, `mouse_move`, `left_mouse_down`, `left_mouse_up`,
   `scroll`
 - `type`, `key` (xdotool names: `ctrl+s`, `Return`, `alt+Tab`, `super`),
