@@ -11,7 +11,7 @@ needs to be run, forwarded or paid for.
 | Port | Protocol | What | Reachable from |
 |---|---|---|---|
 | 47800 | UDP | The tunnel: every stream, all paired clients | wherever clients are |
-| 47801 | TCP | Pairing (PIN) and host information | the local network |
+| 47801 | TCP | Pairing (PIN) and host information | the local network: private, link-local and loopback addresses, and Tailscale's 100.64.0.0/10; the host closes a connection from any other address unanswered |
 | 47802 | TCP (HTTPS) | Helio Host's API, for Helio and `helio host` on the host | the host itself (localhost) |
 
 All three are settings on the host (**Settings → Hosting**, under Ports, or
@@ -19,7 +19,11 @@ All three are settings on the host (**Settings → Hosting**, under Ports, or
 deliberately local: a device is paired once, at home, and then connects from
 anywhere. A VPN that puts both on one network (Tailscale, say) counts as
 local: Helio pairs at whichever of the host's addresses last answered on its
-pairing port, so away from home that is the VPN's.
+pairing port, so away from home that is the VPN's. The host itself holds the
+pairing port to that, whatever a router or firewall lets through
+(`helio-host/src/pairing.rs`, `may_pair_from`). 100.64.0.0/10 is also the
+range carrier-grade NAT uses (RFC 6598): a host whose own address is in it
+answers others on that provider's network.
 The client's own tunnel port is chosen once and kept (`port` in its data
 folder), so its NAT keeps giving it the same public port.
 

@@ -5,8 +5,13 @@
 //! to `helio host pair` (or declines, or five minutes pass). With the PIN, the user may choose what the client may do
 //! here; each request says what it gets otherwise
 //! (`Permissions::on_pairing`), so the choice can start from that.
+//!
+//! Pairing is local (docs/networking.md): the listener answers only
+//! addresses of a local network ([`may_pair_from`]), whatever reaches its
+//! port, so a host with a public address, or a port forwarded to it by
+//! mistake, shows nobody on the internet its name or a PIN prompt.
 
-use std::net::{SocketAddr, TcpListener};
+use std::net::{IpAddr, SocketAddr, TcpListener};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -181,6 +186,25 @@ impl Pairing {
     }
 }
 
+/// Whether a device at `ip` may ask to pair, or for the host's description:
+/// only from a local network. Private, link-local and loopback addresses,
+/// and 100.64.0.0/10, where Tailscale puts its devices (a VPN that puts
+/// both on one network counts as local; that range is also carrier-grade
+/// NAT's). IPv6: loopback, link-local and unique-local (Tailscale's
+/// fd7a:115c:a1e0::/48 among them).
+pub fn may_pair_from(ip: IpAddr) -> bool {
+    match ip {
+        IpAddr::V4(v4) => {
+            let tailscale = v4.octets()[0] == 100 && v4.octets()[1] & 0xc0 == 64;
+            v4.is_private() || v4.is_link_local() || v4.is_loopback() || tailscale
+        }
+        IpAddr::V6(v6) => match v6.to_ipv4_mapped() {
+            Some(v4) => may_pair_from(IpAddr::V4(v4)),
+            None => v6.is_loopback() || v6.is_unicast_link_local() || v6.is_unique_local(),
+        },
+    }
+}
+
 /// Accept pairing connections forever.
 pub fn serve(host: Arc<Host>, port: u16) {
     let listener = match TcpListener::bind(("0.0.0.0", port)) {
@@ -193,6 +217,17 @@ pub fn serve(host: Arc<Host>, port: u16) {
     tracing::info!(port, "pairing listener up");
     for stream in listener.incoming() {
         let Ok(stream) = stream else { continue };
+        // Closed unanswered: not even the host's name leaves for an
+        // address off the local network.
+        match stream.peer_addr() {
+            Ok(peer) if may_pair_from(peer.ip()) => {}
+            Ok(peer) => {
+                tracing::info!(peer = %peer.ip(), "a pairing connection from outside the local \
+                    network refused");
+                continue;
+            }
+            Err(_) => continue,
+        }
         let host = host.clone();
         std::thread::spawn(move || {
             let me = {
@@ -210,5 +245,42 @@ pub fn serve(host: Arc<Host>, port: u16) {
                 Err(e) => tracing::debug!(error = %e, "pairing connection"),
             }
         });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::may_pair_from;
+
+    #[test]
+    fn only_a_local_network_or_tailscale_may_ask_to_pair() {
+        let ok = [
+            "192.168.1.20",
+            "10.0.0.7",
+            "172.16.4.1",
+            "169.254.10.2",
+            "127.0.0.1",
+            "100.64.0.7",
+            "100.127.255.254",
+            "::1",
+            "fe80::1",
+            "fd7a:115c:a1e0::1",
+            "::ffff:192.168.1.20",
+        ];
+        let refused = [
+            "203.0.113.7",
+            "8.8.8.8",
+            "100.63.255.255",
+            "100.128.0.1",
+            "172.32.0.1",
+            "2001:db8::1",
+            "::ffff:203.0.113.7",
+        ];
+        for ip in ok {
+            assert!(may_pair_from(ip.parse().unwrap()), "{ip} refused");
+        }
+        for ip in refused {
+            assert!(!may_pair_from(ip.parse().unwrap()), "{ip} allowed");
+        }
     }
 }
