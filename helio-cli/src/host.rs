@@ -237,8 +237,13 @@ fn state_in_colour(said: &str) -> String {
 fn with_data(command: &str, then: impl FnOnce(&Path) -> ExitCode) -> ExitCode {
     let dir = helio_host_data::data_dir();
     refuse_without_administrator(&dir, command);
-    if let Some(said) = private::secure_data_dir(&dir) {
-        eprintln!("{said}");
+    match private::secure_data_dir(&dir) {
+        Ok(Some(said)) => eprintln!("{said}"),
+        Ok(None) => {}
+        Err(e) => {
+            style::error(e);
+            return ExitCode::FAILURE;
+        }
     }
     then(&dir)
 }

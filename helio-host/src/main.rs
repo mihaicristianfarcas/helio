@@ -206,7 +206,15 @@ fn main() -> ExitCode {
     // status and often before the host ever ran: a folder this created
     // would be that user's own.
     let secured = if matches!(command, "host" | "service") {
-        private::secure_data_dir(&dir)
+        match private::secure_data_dir(&dir) {
+            Ok(said) => said,
+            Err(e) => {
+                // Nothing is read from or written to a folder that is not
+                // the host's, not even the log.
+                eprintln!("helio-host: {e}");
+                return ExitCode::FAILURE;
+            }
+        }
     } else {
         None
     };
