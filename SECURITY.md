@@ -35,6 +35,19 @@ port (TCP 47801) serves the local network only: the host closes a
 connection from anything but a private, link-local or loopback address, or
 Tailscale's 100.64.0.0/10.
 
+**Finding the host across the internet.** With internet access on, the
+host publishes its public addresses on the BitTorrent Mainline DHT, and
+clients publish theirs when they connect
+([docs/networking.md](docs/networking.md#what-the-dht-sees)). Pairing gives
+each client a 32-byte secret that only it and the host hold; every record
+between the two is signed, found and sealed (ChaCha20-Poly1305) with keys
+derived from it, in slots that change every UTC day. A client cannot read
+another client's records, and a removed client's secret is deleted with it:
+it can read nothing the host publishes afterwards. The DHT's nodes see
+random-looking keys that link neither devices nor days, but they see the
+addresses records are published from and looked up from, and when: enough
+to tell that two addresses talk, on a given day.
+
 **The host's API** (HTTPS on TCP 47802), which Helio's This computer pages
 and `helio host` use, answers on localhost only (127.0.0.1 and ::1):
 nothing on the network reaches it. It uses a self-signed certificate the
@@ -47,8 +60,9 @@ token: every user of the computer can reach localhost, and an account made
 through the API would have been whoever asked first's.
 
 **Secrets at rest.** On macOS and Linux, each device's private keys, the
-agent's API keys and the host's tokens are written readable only by their
-owner (0600). On Windows, Helio's files are in the user's own `%APPDATA%`,
+rendezvous secrets (the host's in `clients.toml`, a client's in
+`hosts.toml`), the agent's API keys and the host's tokens are written
+readable only by their owner (0600). On Windows, Helio's files are in the user's own `%APPDATA%`,
 and the host makes its data folder (`C:\ProgramData\Helio Host`) private when it
 starts: only SYSTEM, Administrators and the folder's owner can read or write
 it, except `config.toml` and `web-cert.pem`, which Helio's This computer pages

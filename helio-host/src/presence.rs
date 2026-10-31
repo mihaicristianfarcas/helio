@@ -1,8 +1,8 @@
 //! Being reachable from the internet with no port forwarding (docs/networking.md).
 //!
 //! The host learns the public address its NAT gives the tunnel's socket (STUN,
-//! on that socket), publishes it as a sealed rendezvous record on the Mainline
-//! DHT, and watches its paired clients' records:
+//! on that socket), publishes it on the Mainline DHT in one sealed rendezvous
+//! record per paired client, and watches each client's records:
 //!
 //! - a client that is open (Helio running) publishes its presence; the host
 //!   sends it a small packet every 20 s, which keeps the host's NAT open
@@ -11,6 +11,13 @@
 //! - a client that wants to connect now publishes an intent; the host answers
 //!   with handshake initiations towards it at once (the slower path, for
 //!   when the warm one did not hold).
+//!
+//! Each client's records are sealed with its own secret (`helio_nat::keys`),
+//! so no client can read another's, and the host publishes one record per
+//! client, all at once (a put takes seconds): when its addresses change,
+//! every 30 minutes, and when the UTC day turns and the slots move. A
+//! removed client is not published for again; its last record expires from
+//! the DHT within about two hours.
 //!
 //! All of it only while internet access is on (`internet_access`): off, the
 //! host is not on the DHT at all (it leaves it when the setting goes off),
@@ -23,7 +30,8 @@ use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use helio_nat::rendezvous::{client_salt, Kind, Record, Rendezvous, SALT};
+use helio_nat::keys::utc_day;
+use helio_nat::rendezvous::{now_ms, Kind, Record, Rendezvous, Secret};
 use helio_transport::PublicIdentity;
 
 use crate::host::Host;
@@ -46,25 +54,118 @@ const MAPPING_LEASE: Duration = Duration::from_secs(3600);
 /// A router that did not map is asked again this much later.
 const MAPPING_RETRY: Duration = Duration::from_secs(15 * 60);
 
+/// A paired client the host publishes for and watches.
 struct Watched {
     name: String,
     public: PublicIdentity,
-    rendezvous: [u8; 32],
+    secret: Secret,
+}
+
+/// What the host last published for one client.
+struct Published {
+    endpoints: Vec<SocketAddr>,
+    at: Instant,
+    day: u64,
+}
+
+/// Whether a client's record is due: never published, the host's addresses
+/// changed, it is due for its refresh, or the UTC day turned (its slot moved).
+fn due(last: Option<&Published>, endpoints: &[SocketAddr], today: u64) -> bool {
+    last.is_none_or(|p| {
+        p.endpoints != endpoints || p.at.elapsed() >= REPUBLISH_EVERY || p.day != today
+    })
+}
+
+/// The paired clients the host can publish for: those with a tunnel key and
+/// a rendezvous secret.
+fn watched(host: &Host) -> Vec<Watched> {
+    host.clients
+        .lock()
+        .list()
+        .iter()
+        .filter_map(|c| {
+            Some(Watched {
+                name: c.name.clone(),
+                public: c.public()?,
+                secret: c.rendezvous_secret()?,
+            })
+        })
+        .collect()
+}
+
+/// Publish the host's addresses for every client whose record is due, all at
+/// once: each put takes seconds (docs/networking.md, Measured). True if any
+/// was published.
+fn publish_due(
+    host: &Host,
+    rv: &Rendezvous,
+    clients: &[Watched],
+    published: &mut HashMap<[u8; 32], Published>,
+    endpoints: &[SocketAddr],
+) -> bool {
+    let today = utc_day(now_ms());
+    let due: Vec<&Watched> = clients
+        .iter()
+        .filter(|c| due(published.get(&c.public.x25519), endpoints, today))
+        .collect();
+    let results: Vec<(&Watched, Result<(), String>)> = std::thread::scope(|s| {
+        let running: Vec<_> = due
+            .into_iter()
+            .map(|c| {
+                let record = Record::new(Kind::Host, endpoints.to_vec());
+                let put = std::thread::Builder::new()
+                    .name("rendezvous-publish".into())
+                    .spawn_scoped(s, move || {
+                        rv.publish(&c.secret, &record, &host.rendezvous_seq)
+                    });
+                (c, put)
+            })
+            .collect();
+        running
+            .into_iter()
+            .map(|(c, put)| {
+                let result = match put {
+                    Ok(put) => put
+                        .join()
+                        .unwrap_or_else(|_| Err("the publish panicked".into())),
+                    Err(e) => Err(e.to_string()),
+                };
+                (c, result)
+            })
+            .collect()
+    });
+    let mut any = false;
+    for (c, result) in results {
+        match result {
+            Ok(()) => {
+                any = true;
+                published.insert(
+                    c.public.x25519,
+                    Published {
+                        endpoints: endpoints.to_vec(),
+                        at: Instant::now(),
+                        day: today,
+                    },
+                );
+            }
+            Err(e) => tracing::debug!(client = c.name, error = %e, "rendezvous publish failed"),
+        }
+    }
+    any
 }
 
 pub fn run(host: Arc<Host>) {
-    let Some(secret) = host.rendezvous.secret else {
-        return;
-    };
     // The DHT, joined while internet access is on.
     let mut dht: Option<Rendezvous> = None;
     let port = host.endpoint.local_port();
-    let mut published: Option<(Vec<SocketAddr>, Instant)> = None;
+    // What was published for each client, by its tunnel key.
+    let mut published: HashMap<[u8; 32], Published> = HashMap::new();
+    // The addresses last said to be reachable, for the log.
+    let mut reachable: Vec<SocketAddr> = Vec::new();
     let mut last_probe: Option<Instant> = None;
     let mut seen: HashMap<[u8; 32], u64> = HashMap::new();
-    let mut present: HashMap<[u8; 32], (Vec<SocketAddr>, Instant, [u8; 32])> = HashMap::new();
+    let mut present: HashMap<[u8; 32], (Vec<SocketAddr>, Instant)> = HashMap::new();
     let mut last_warm = Instant::now();
-    let salt = client_salt(&host.rendezvous.public());
     let mut turn = 0usize;
     let mut mapping = Mapping::default();
 
@@ -77,7 +178,8 @@ pub fn run(host: Arc<Host>) {
             mapping.release(&host);
             if dht.take().is_some() {
                 tracing::info!("internet access off: left the DHT");
-                published = None;
+                published.clear();
+                reachable.clear();
                 present.clear();
             }
             std::thread::sleep(IDLE);
@@ -122,74 +224,56 @@ pub fn run(host: Arc<Host>) {
             }
         }
         endpoints.extend(helio_nat::keys::global_ipv6(port));
-        let changed = published
-            .as_ref()
-            .is_none_or(|(e, at)| *e != endpoints || at.elapsed() >= REPUBLISH_EVERY);
-        if !endpoints.is_empty() && changed {
-            match rv.publish(
-                &host.rendezvous.seed,
-                &secret,
-                SALT,
-                &Record::new(Kind::Host, endpoints.clone()),
-            ) {
-                Ok(()) => {
-                    if published.as_ref().is_none_or(|(e, _)| *e != endpoints) {
-                        tracing::info!(endpoints = ?endpoints, symmetric_nat = host.stun.looks_symmetric(), "reachable from the internet");
-                    }
-                    published = Some((endpoints, Instant::now()));
-                }
-                Err(e) => tracing::debug!(error = %e, "rendezvous publish failed"),
-            }
+        let clients = watched(&host);
+        // A client removed: nothing more is published for it or done
+        // towards it.
+        let paired = |key: &[u8; 32]| clients.iter().any(|c| c.public.x25519 == *key);
+        published.retain(|k, _| paired(k));
+        seen.retain(|k, _| paired(k));
+        present.retain(|k, _| paired(k));
+        if !endpoints.is_empty()
+            && publish_due(&host, rv, &clients, &mut published, &endpoints)
+            && reachable != endpoints
+        {
+            tracing::info!(endpoints = ?endpoints, symmetric_nat = host.stun.looks_symmetric(), "reachable from the internet");
+            reachable = endpoints;
         }
 
         // One paired client per round: each look-up is a few DHT round trips.
-        let watched: Vec<Watched> = host
-            .clients
-            .lock()
-            .list()
-            .iter()
-            .filter_map(|c| {
-                Some(Watched {
-                    name: c.name.clone(),
-                    public: c.public()?,
-                    rendezvous: c.rendezvous_key()?,
-                })
-            })
-            .collect();
-        if watched.is_empty() {
+        if clients.is_empty() {
             std::thread::sleep(IDLE);
             continue;
         }
-        let c = &watched[turn % watched.len()];
+        let c = &clients[turn % clients.len()];
         turn = turn.wrapping_add(1);
-        match rv.resolve(&c.rendezvous, &secret, &salt) {
-            Some(r)
-                if r.kind == Kind::Intent
-                    && r.age() < INTENT_FRESH
-                    && seen.get(&c.rendezvous) != Some(&r.nonce) =>
-            {
-                seen.insert(c.rendezvous, r.nonce);
+        let key = c.public.x25519;
+        let (intent, presence) = std::thread::scope(|s| {
+            let presence = std::thread::Builder::new()
+                .name("rendezvous-watch".into())
+                .spawn_scoped(s, || rv.resolve(&c.secret, Kind::Presence));
+            let intent = rv.resolve(&c.secret, Kind::Intent);
+            (intent, presence.ok().and_then(|h| h.join().ok()).flatten())
+        });
+        if let Some(r) = intent {
+            if r.age() < INTENT_FRESH && seen.get(&key) != Some(&r.nonce) {
+                seen.insert(key, r.nonce);
                 punch(&host, c, &r.endpoints);
             }
-            Some(r) if r.kind == Kind::Presence && r.age() < PRESENCE_FRESH => {
-                let fresh_until = Instant::now() + PRESENCE_FRESH.saturating_sub(r.age());
-                if present
-                    .get(&c.rendezvous)
-                    .is_none_or(|(e, _, _)| *e != r.endpoints)
-                {
-                    tracing::info!(client = c.name, endpoints = ?r.endpoints, "keeping a path open to a client");
-                }
-                present.insert(c.rendezvous, (r.endpoints, fresh_until, c.public.x25519));
+        }
+        if let Some(r) = presence.filter(|r| r.age() < PRESENCE_FRESH) {
+            let fresh_until = Instant::now() + PRESENCE_FRESH.saturating_sub(r.age());
+            if present.get(&key).is_none_or(|(e, _)| *e != r.endpoints) {
+                tracing::info!(client = c.name, endpoints = ?r.endpoints, "keeping a path open to a client");
             }
-            _ => {}
+            present.insert(key, (r.endpoints, fresh_until));
         }
 
         // Keep the host's NAT open towards every present client not
         // streaming right now.
         if last_warm.elapsed() >= WARM_EVERY {
             last_warm = Instant::now();
-            present.retain(|_, (_, until, _)| *until > Instant::now());
-            for (endpoints, _, x25519) in present.values() {
+            present.retain(|_, (_, until)| *until > Instant::now());
+            for (x25519, (endpoints, _)) in &present {
                 let busy = host.endpoint.peer_by_key(x25519).is_some_and(|p| {
                     host.endpoint
                         .since_rx(&p)
@@ -308,5 +392,25 @@ fn punch(host: &Host, c: &Watched, endpoints: &[SocketAddr]) {
         if host.stop_flag().load(Ordering::Relaxed) {
             return;
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_record_is_due_when_the_addresses_change_or_the_day_turns() {
+        let here: Vec<SocketAddr> = vec!["203.0.113.7:47800".parse().unwrap()];
+        let moved: Vec<SocketAddr> = vec!["198.51.100.9:47800".parse().unwrap()];
+        assert!(due(None, &here, 20_000), "never published");
+        let last = Published {
+            endpoints: here.clone(),
+            at: Instant::now(),
+            day: 20_000,
+        };
+        assert!(!due(Some(&last), &here, 20_000));
+        assert!(due(Some(&last), &moved, 20_000), "the host moved");
+        assert!(due(Some(&last), &here, 20_001), "a new day: a new slot");
     }
 }

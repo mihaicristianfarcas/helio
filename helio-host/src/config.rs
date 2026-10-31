@@ -71,7 +71,7 @@ pub struct HostConfig {
     pub allow_takeover: bool,
     /// Lower the bitrate when the network congests; climb back when it clears.
     pub adaptive_bitrate: bool,
-    /// Publish this host's public address (sealed, for devices paired with it)
+    /// Publish this host's public address (sealed for each paired client)
     /// so they can connect from anywhere without port forwarding.
     pub internet_access: bool,
     /// Let paired AI agents start sessions (each agent's own access, set on

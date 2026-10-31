@@ -131,10 +131,10 @@ pub struct KnownHost {
     /// Where discovery last saw it on the local network. Tried first.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub local_address: Option<String>,
-    /// How to find the host across the internet: its rendezvous key and the
-    /// secret its records are sealed with (hex). From pairing.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub rendezvous: Option<String>,
+    /// How to find the host across the internet: the secret this client
+    /// and the host alone share (hex), from pairing or the host's offer at
+    /// a session's start. Every rendezvous record between the two is
+    /// derived from it (docs/networking.md).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rendezvous_secret: Option<String>,
     /// Where the host's rendezvous record last said it is on the internet.
@@ -158,7 +158,6 @@ impl KnownHost {
             name: name.to_string(),
             address: address.to_string(),
             local_address: None,
-            rendezvous: None,
             rendezvous_secret: None,
             wan_addresses: Vec::new(),
             wake: Vec::new(),
@@ -172,19 +171,15 @@ impl KnownHost {
         PublicIdentity::from_b64(&self.x25519, &self.mlkem).ok()
     }
 
-    /// The host's rendezvous key and secret, if pairing provided them.
-    pub fn rendezvous_keys(&self) -> Option<([u8; 32], [u8; 32])> {
-        let unhex = |h: &str| -> Option<[u8; 32]> {
-            let v: Vec<u8> = (0..h.len())
-                .step_by(2)
-                .filter_map(|i| u8::from_str_radix(h.get(i..i + 2)?, 16).ok())
-                .collect();
-            v.try_into().ok()
-        };
-        Some((
-            unhex(self.rendezvous.as_deref()?)?,
-            unhex(self.rendezvous_secret.as_deref()?)?,
-        ))
+    /// The rendezvous secret this client shares with the host, if it has
+    /// one.
+    pub fn rendezvous_secret(&self) -> Option<[u8; 32]> {
+        let h = self.rendezvous_secret.as_deref()?;
+        let v: Vec<u8> = (0..h.len())
+            .step_by(2)
+            .filter_map(|i| u8::from_str_radix(h.get(i..i + 2)?, 16).ok())
+            .collect();
+        v.try_into().ok()
     }
 
     /// Addresses to try, local network first (see [`KnownHost::local_address`]).
@@ -314,8 +309,7 @@ impl Hosts {
                     if existing.wake.is_empty() {
                         existing.wake = old.wake;
                     }
-                    if existing.rendezvous.is_none() {
-                        existing.rendezvous = old.rendezvous;
+                    if existing.rendezvous_secret.is_none() {
                         existing.rendezvous_secret = old.rendezvous_secret;
                     }
                 }
@@ -381,24 +375,22 @@ impl Hosts {
         })
     }
 
-    /// Record how to find the host with this tunnel key across the internet.
+    /// Record the rendezvous secret the host with this tunnel key offered.
     /// True if it changed.
-    pub fn set_rendezvous(
-        &mut self,
-        x25519: &str,
-        key: [u8; 32],
-        secret: [u8; 32],
-    ) -> std::io::Result<bool> {
-        let hex = |k: [u8; 32]| k.iter().map(|b| format!("{b:02x}")).collect::<String>();
-        let (k, sec) = (Some(hex(key)), Some(hex(secret)));
+    pub fn set_rendezvous(&mut self, x25519: &str, secret: [u8; 32]) -> std::io::Result<bool> {
+        let sec = Some(
+            secret
+                .iter()
+                .map(|b| format!("{b:02x}"))
+                .collect::<String>(),
+        );
         self.modify(|list| {
             let Some(h) = list.iter_mut().find(|h| h.x25519 == x25519) else {
                 return false;
             };
-            if h.rendezvous == k && h.rendezvous_secret == sec {
+            if h.rendezvous_secret == sec {
                 return false;
             }
-            h.rendezvous = k;
             h.rendezvous_secret = sec;
             true
         })

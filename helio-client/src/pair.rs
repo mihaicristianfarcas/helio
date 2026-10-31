@@ -175,7 +175,6 @@ fn pair_as(
     let identity = crate::store::identity(dir)?;
     let (_, _, _, tunnel_port) = pair::host_info(addr).map_err(describe)?;
     let mine = pair::Extras {
-        rendezvous: crate::wan::own_keys(dir).map(|k| k.public()),
         rendezvous_secret: None,
         agent,
     };
@@ -195,7 +194,6 @@ fn pair_as(
         name: paired.name,
         address: SocketAddr::new(addr.ip(), tunnel_port).to_string(),
         local_address: None,
-        rendezvous: paired.extras.rendezvous.map(hex),
         rendezvous_secret: paired.extras.rendezvous_secret.map(hex),
         wan_addresses: Vec::new(),
         wake: Vec::new(),

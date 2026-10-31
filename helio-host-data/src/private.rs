@@ -2,10 +2,11 @@
 //!
 //! Helio Host's data folder there is under `C:\ProgramData`, whose default
 //! permissions let every local user read what is in it and create files in
-//! it. The folder holds the host's private keys, its rendezvous keys, the
-//! API's TLS key and token, and the paired clients: readable, they let a
-//! local user impersonate the host or use its API; and a file planted before
-//! the host first wrote it (`clients.toml`) would be a paired device.
+//! it. The folder holds the host's private keys, the API's TLS key and
+//! token, and the paired clients with their rendezvous secrets: readable,
+//! they let a local user impersonate the host or use its API; and a file
+//! planted before the host first wrote it (`clients.toml`) would be a paired
+//! device.
 //!
 //! So the folder is private by default: only SYSTEM, Administrators and the
 //! folder's owner may read or write it, and everything created in it inherits

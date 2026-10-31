@@ -506,7 +506,7 @@ impl NetLoop {
                 }
             }
             Control::Permissions(bits) => self.on_permissions(bits),
-            Control::RendezvousOffer { key, secret } => self.on_rendezvous_offer(key, secret),
+            Control::RendezvousOffer { secret } => self.on_rendezvous_offer(secret),
             Control::PingReply { sent_us, .. } => self.on_ping_reply(sent_us, h.capture_ts_us),
             Control::Ping { id, sent_us } => {
                 send_control(&self.ctx, Control::PingReply { id, sent_us })
@@ -626,18 +626,15 @@ impl NetLoop {
         }
     }
 
-    /// The host offers its rendezvous keys (so it can be found from the
-    /// internet): keep them, and answer with ours.
-    fn on_rendezvous_offer(&self, key: [u8; 32], secret: [u8; 32]) {
+    /// The host offers this client's rendezvous secret (so it can be found
+    /// from the internet): keep it.
+    fn on_rendezvous_offer(&self, secret: [u8; 32]) {
         let Some(dir) = &self.ctx.data_dir else {
             return;
         };
         let (x, _) = self.ctx.peer.public().to_b64();
-        if let Ok(true) = crate::store::Hosts::load(dir).set_rendezvous(&x, key, secret) {
+        if let Ok(true) = crate::store::Hosts::load(dir).set_rendezvous(&x, secret) {
             tracing::info!("the host can now be reached from the internet");
-        }
-        if let Some(mine) = crate::wan::own_keys(dir) {
-            send_control(&self.ctx, Control::RendezvousKey { key: mine.public() });
         }
     }
 
