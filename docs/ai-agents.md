@@ -133,7 +133,7 @@ never drives the host; it holds steps for you. Turn each check on under
 
 | Check | Before | Clef is asked | When it is 50% sure or more |
 |---|---|---|---|
-| Clicks | A left click, a drag's drop, Enter | With a ring where the click lands: does it delete, spend, send or post, change settings, or install? | The step waits for your go-ahead, as a rule's catch does (with **Ask for your go-ahead** on risky steps) |
+| Clicks | A left click, a drag's drop, Enter (a key, a held key, or a new line in typed text) | With a ring where the click lands (none when Helio does not know where the pointer is): does it delete, spend, send or post, change settings, or install? | The step waits for your go-ahead, as a rule's catch does (with **Ask for your go-ahead** on risky steps) |
 | Typing a secret | Typing | Is the focus in a field for a password, a PIN, a key or a card number? Clef is told how many characters, never which | The step waits for your go-ahead |
 | Personal information | Every screen the model gets | Does it show passwords or keys, payment or bank details, ID numbers, health records, private messages, or people's addresses or phone numbers? | Helio asks whether the model may see it. A yes covers screens with that kind for the rest of the turn; on a no, or no answer in 15 minutes, the model gets no picture, only a note saying why and to stop |
 

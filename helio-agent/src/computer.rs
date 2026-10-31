@@ -1022,23 +1022,26 @@ impl Computer {
         if self.control.as_ref()?.approvals() != crate::providers::Approvals::Risky {
             return None;
         }
-        let subject = crate::judge::Subject::of(action, self.pointer, judge.checks())?;
+        let looks = crate::judge::Subject::of(action, self.pointer, judge.checks());
+        if looks.is_empty() {
+            return None;
+        }
         let screen = self.session.as_ref()?.frames.latest()?.picture.to_rgb();
-        match judge.judge(&screen, &subject) {
-            Ok(Some(why)) => {
-                tracing::info!(action = action.for_log(), why, "clef holds the action");
-                Some(why)
-            }
-            Ok(None) => None,
-            Err(e) => {
-                tracing::warn!(
+        for subject in &looks {
+            match judge.judge(&screen, subject) {
+                Ok(Some(why)) => {
+                    tracing::info!(action = action.for_log(), why, "clef holds the action");
+                    return Some(why);
+                }
+                Ok(None) => {}
+                Err(e) => tracing::warn!(
                     action = action.for_log(),
                     error = e,
                     "clef could not judge the action; the rules alone decide"
-                );
-                None
+                ),
             }
         }
+        None
     }
 
     /// `out` as the model may have it: a screen clef finds personal

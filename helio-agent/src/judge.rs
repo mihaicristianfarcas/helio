@@ -8,9 +8,10 @@
 //! Three checks, each one the person turns on (Agent setup; `checks` in the
 //! agent's settings):
 //!
-//! - **clicks**: before a left click, a drag's drop or Enter, the screen
-//!   with a ring where it lands: does it delete, spend, send, change
-//!   settings or install? `risk`'s rules judge typed text and chords but no
+//! - **clicks**: before a left click, a drag's drop or Enter (a key, a
+//!   held key or a line end in typed text), the screen with a ring where it
+//!   lands (none where Helio does not know where the pointer is): does it
+//!   delete, spend, send, change settings or install? `risk`'s rules judge typed text and chords but no
 //!   click, since only something that sees the screen knows what is under
 //!   the pointer. A likely yes waits for the person's go-ahead, as a rule's
 //!   catch does.
@@ -294,7 +295,12 @@ pub fn showing(found: &[Personal], answered: &BTreeMap<Personal, bool>) -> Showi
 #[derive(Debug, Clone, PartialEq)]
 pub enum Subject {
     /// A click (or a drop) at a point of the screen: the ring's centre.
-    Click { at: (u32, u32), doing: &'static str },
+    /// None: where the pointer is, which this computer does not know (a
+    /// session's pointer until the agent moves it); judged without a ring.
+    Click {
+        at: Option<(u32, u32)>,
+        doing: &'static str,
+    },
     /// Enter: it acts on what has the keyboard focus.
     Enter,
     /// Typing this many characters where the focus is.
@@ -303,65 +309,85 @@ pub enum Subject {
 
 impl Subject {
     /// What clef would look at in `action` (`pointer`: where the pointer
-    /// is), if a check in `checks` covers it.
-    pub fn of(action: &Action, pointer: Option<(u32, u32)>, checks: &Checks) -> Option<Subject> {
+    /// is, if this computer knows), for the checks in `checks`: each look
+    /// the action calls for, by every route it has to its effect (Enter as
+    /// a key, a held key or a line end in typed text). Nothing to look at
+    /// means no look, so a route left out here is a click or an Enter clef
+    /// never sees.
+    pub fn of(action: &Action, pointer: Option<(u32, u32)>, checks: &Checks) -> Vec<Subject> {
+        let mut looks = Vec::new();
         match action {
             Action::Click {
                 at,
                 button: Mouse::Left,
                 count,
                 ..
-            } if checks.clicks => Some(Subject::Click {
-                at: at.or(pointer)?,
+            } if checks.clicks => looks.push(Subject::Click {
+                at: at.or(pointer),
                 doing: match count {
                     2 => "double-click",
                     3 => "triple-click",
                     _ => "click",
                 },
             }),
-            Action::Drag { path, .. } if checks.clicks => Some(Subject::Click {
-                at: *path.last()?,
+            Action::Drag { path, .. } if checks.clicks => looks.push(Subject::Click {
+                at: path.last().copied(),
                 doing: "drag something and drop it",
             }),
             // A press and a release made apart are a click all the same.
             Action::MouseUp {
                 button: Mouse::Left,
-            } if checks.clicks => Some(Subject::Click {
-                at: pointer?,
+            } if checks.clicks => looks.push(Subject::Click {
+                at: pointer,
                 doing: "let go of the mouse button (ending a click or a drag)",
             }),
-            Action::Key { keys, .. } if checks.clicks && presses_enter(keys) => {
-                Some(Subject::Enter)
+            Action::Key { keys, .. } | Action::HoldKey { keys, .. }
+                if checks.clicks && presses_enter(keys) =>
+            {
+                looks.push(Subject::Enter)
             }
-            Action::Type { text } if checks.secret_fields && !text.trim().is_empty() => {
-                Some(Subject::Typing {
-                    chars: text.chars().count(),
-                })
+            Action::Type { text } => {
+                if checks.secret_fields && !text.trim().is_empty() {
+                    looks.push(Subject::Typing {
+                        chars: text.chars().count(),
+                    });
+                }
+                // A line end is typed as Enter (helio-client's `type_text`).
+                if checks.clicks && text.contains(['\n', '\r']) {
+                    looks.push(Subject::Enter);
+                }
             }
-            _ => None,
+            _ => {}
         }
+        looks
     }
 }
 
-/// Whether the chord ends in Enter (with or without modifiers: Ctrl+Enter
-/// sends in many mail and chat apps).
+/// Whether the chord presses Enter, with or without modifiers and in any
+/// order: Ctrl+Enter sends in many mail and chat apps, and every key of a
+/// chord is pressed.
 fn presses_enter(keys: &str) -> bool {
-    crate::keys::parse(keys)
-        .ok()
-        .and_then(|c| c.keys.last().copied())
-        .is_some_and(|k| k == scancode(Key::Enter) || k == scancode(Key::NumpadEnter))
+    crate::keys::parse(keys).is_ok_and(|c| {
+        c.keys
+            .iter()
+            .any(|&k| k == scancode(Key::Enter) || k == scancode(Key::NumpadEnter))
+    })
 }
 
 const SCREEN: &str = "The image is the screen of a computer that an AI agent operates.";
 
-/// The question for a click at the ring (`doing`), or for Enter (`None`).
-pub fn click_request(model: &str, image: String, doing: Option<&str>) -> Value {
+/// The question for a click (`doing`) at the ring, or where the pointer
+/// is when the picture has no ring (`ring` false), or for Enter (`None`).
+pub fn click_request(model: &str, image: String, doing: Option<&str>, ring: bool) -> Value {
     let state = match doing {
-        Some(doing) => {
+        Some(doing) if ring => {
             format!(
                 "{SCREEN} The agent is about to {doing} at the magenta dot, in the middle of \
                     the magenta ring."
             )
+        }
+        Some(doing) => {
+            format!("{SCREEN} The agent is about to {doing} where the mouse pointer is.")
         }
         None => format!(
             "{SCREEN} The agent is about to press Enter, which acts on what has the keyboard \
@@ -618,9 +644,9 @@ impl Judge {
     pub fn request(&self, screen: &Rgb, subject: &Subject) -> Value {
         match subject {
             Subject::Click { at, doing } => {
-                click_request(self.model, picture(screen, Some(*at)), Some(doing))
+                click_request(self.model, picture(screen, *at), Some(doing), at.is_some())
             }
-            Subject::Enter => click_request(self.model, picture(screen, None), None),
+            Subject::Enter => click_request(self.model, picture(screen, None), None, false),
             Subject::Typing { chars } => typing_request(self.model, picture(screen, None), *chars),
         }
     }
@@ -717,58 +743,111 @@ mod tests {
         let c = checks();
         assert_eq!(
             Subject::of(&click(Some((5, 6)), Mouse::Left, 2), None, &c),
-            Some(Subject::Click {
-                at: (5, 6),
+            [Subject::Click {
+                at: Some((5, 6)),
                 doing: "double-click"
-            })
+            }]
         );
         // A click where the pointer is.
         assert_eq!(
             Subject::of(&click(None, Mouse::Left, 1), Some((7, 8)), &c),
-            Some(Subject::Click {
-                at: (7, 8),
+            [Subject::Click {
+                at: Some((7, 8)),
                 doing: "click"
-            })
+            }]
         );
-        assert_eq!(Subject::of(&click(None, Mouse::Left, 1), None, &c), None);
+        assert_eq!(
+            Subject::of(&click(None, Mouse::Left, 1), None, &c),
+            [Subject::Click {
+                at: None,
+                doing: "click"
+            }]
+        );
         assert_eq!(
             Subject::of(&click(Some((1, 1)), Mouse::Right, 1), None, &c),
-            None
+            []
         );
         let drag = Action::Drag {
             path: vec![(1, 1), (90, 40)],
             modifiers: None,
         };
         assert!(matches!(
-            Subject::of(&drag, None, &c),
-            Some(Subject::Click { at: (90, 40), .. })
+            Subject::of(&drag, None, &c)[..],
+            [Subject::Click {
+                at: Some((90, 40)),
+                ..
+            }]
         ));
         for keys in ["Return", "ctrl+Return", "KP_Enter", "ENTER"] {
             let key = Action::Key {
                 keys: keys.into(),
                 repeat: 1,
             };
-            assert_eq!(Subject::of(&key, None, &c), Some(Subject::Enter), "{keys}");
+            assert_eq!(Subject::of(&key, None, &c), [Subject::Enter], "{keys}");
         }
         let tab = Action::Key {
             keys: "Tab".into(),
             repeat: 1,
         };
-        assert_eq!(Subject::of(&tab, None, &c), None);
+        assert_eq!(Subject::of(&tab, None, &c), []);
         let typed = Action::Type {
             text: "hunter2".into(),
         };
         assert_eq!(
             Subject::of(&typed, None, &c),
-            Some(Subject::Typing { chars: 7 })
+            [Subject::Typing { chars: 7 }]
         );
         // Each check only when it is on.
         let off = Checks::default();
-        assert_eq!(Subject::of(&typed, None, &off), None);
+        assert_eq!(Subject::of(&typed, None, &off), []);
         assert_eq!(
             Subject::of(&click(Some((5, 6)), Mouse::Left, 1), None, &off),
-            None
+            []
         );
+    }
+
+    #[test]
+    fn every_way_to_press_enter_or_click_is_looked_at() {
+        let c = checks();
+        let clicks_only = Checks {
+            clicks: true,
+            ..Checks::default()
+        };
+        let looked_at =
+            |a: &Action, c: &Checks| Subject::of(a, None, c).into_iter().collect::<Vec<_>>();
+        let key = |keys: &str| Action::Key {
+            keys: keys.into(),
+            repeat: 1,
+        };
+        for action in [
+            Action::HoldKey {
+                keys: "Return".into(),
+                seconds: 0.1,
+            },
+            key("Return+shift"),
+            Action::Type {
+                text: "yes\n".into(),
+            },
+            Action::Type {
+                text: "yes\r".into(),
+            },
+            // Where the pointer is, which this computer does not know (a
+            // new session's, until it moves it).
+            click(None, Mouse::Left, 1),
+            Action::MouseUp {
+                button: Mouse::Left,
+            },
+        ] {
+            assert!(!looked_at(&action, &clicks_only).is_empty(), "{action:?}");
+        }
+        // A secret typed into a form and sent with its Enter: both looks.
+        let both = looked_at(
+            &Action::Type {
+                text: "hunter2\n".into(),
+            },
+            &c,
+        );
+        assert_eq!(both.len(), 2, "{both:?}");
     }
 
     #[test]
@@ -822,6 +901,7 @@ mod tests {
             "clef",
             picture(&screen(), Some((2000, 1000))),
             Some("click"),
+            true,
         );
         let picture = decoded(body["images"][0].as_str().unwrap());
         assert_eq!(picture.dimensions(), (1280, 800));
