@@ -273,6 +273,8 @@ only**. It starts from what the device gets otherwise: the first device
 paired with the host may do everything, and later ones see only, as Apollo
 gives its first client every permission and later ones only watching.
 Choose **Everything** for a device of your own. An agent may see and act.
+A device that pairs again counts as one already paired (the host learns
+which device it is only from the PIN step), and gets what the step showed.
 
 What the device hears:
 
