@@ -324,8 +324,8 @@ impl HostPages {
                     "clipboard",
                     "Share this computer's clipboard",
                     "Text, images and files copied on either side can be pasted on the other, \
-                     when the device asks for it too. Password managers' copies are never \
-                     shared.",
+                     when the device asks for it too. Password managers' copies are not shared on macOS and \
+                     Windows.",
                     t,
                     cx,
                 )],

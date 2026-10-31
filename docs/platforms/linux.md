@@ -197,6 +197,10 @@ Data and logs are in `~/.config/helio-host`.
 
 ## Not built yet
 
+- Holding back a password manager's copy of the clipboard: macOS and Windows
+  do not send a copy marked concealed, Linux sends it. The mark there is the
+  `x-kde-passwordManagerHint` MIME type, and the clipboard library in use
+  (`arboard`) can set it but not read a clipboard's types.
 - Input on wlroots desktops (no RemoteDesktop portal there): uinput, or
   their virtual keyboard and pointer protocols.
 - The host at the client's resolution under X11 (RandR modes) rather than

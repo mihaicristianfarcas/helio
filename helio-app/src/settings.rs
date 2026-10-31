@@ -786,7 +786,7 @@ impl HelioApp {
             "share-clipboard",
             "Share the clipboard",
             "Copy on this computer, paste on the host, and back: text, images, files and \
-                folders. The host can turn it off. Password managers' copies stay here.",
+                folders. The host can turn it off. Password managers' copies stay here on macOS and Windows.",
             |p| p.share_clipboard,
             |p, v| p.share_clipboard = v,
             true,

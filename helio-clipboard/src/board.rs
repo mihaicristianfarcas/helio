@@ -59,6 +59,10 @@ impl Board {
     }
 
     /// A password manager put it there, and asked that it not be shared.
+    /// Always false on Linux: the mark there is the `x-kde-passwordManagerHint`
+    /// MIME type, and arboard (3.7) only writes it, it cannot list a
+    /// clipboard's types; reading it would take X11 and Wayland code of our
+    /// own.
     pub fn concealed(&self) -> bool {
         #[cfg(target_os = "macos")]
         {

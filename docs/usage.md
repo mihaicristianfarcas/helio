@@ -355,8 +355,12 @@ the ways the device's permissions allow (**Copy from this computer**,
   them from there.
 - Copies travel inside the tunnel, chunked and acknowledged, under a rate
   cap of half the stream's bitrate so the video goes first; up to 256 MB.
-- **Password managers' copies stay where they were made**: anything marked
-  concealed is never sent.
+- **Password managers' copies stay where they were made** on macOS and
+  Windows: anything marked concealed (`org.nspasteboard.ConcealedType`,
+  `ExcludeClipboardContentFromMonitorProcessing`) is never sent. Linux has no
+  such check, so a copy from a password manager there is sent like any other:
+  turn sharing off, or have the host turn off that direction, for
+  those copies ([Linux](platforms/linux.md#not-built-yet)).
 - AI agents' sessions and people watching them never share the clipboard.
 
 Ctrl+Alt+Shift+V still types the clipboard's text on the host, as Moonlight
