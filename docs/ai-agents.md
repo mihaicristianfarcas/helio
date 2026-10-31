@@ -276,7 +276,10 @@ the runs and sessions Helio starts, and neither changes the other.
 
 ## The rules the host holds agents to
 
-Helio Host enforces these, whatever the agent or its model does:
+Helio Host enforces these on what arrives, whatever the agent's model does.
+Two of them lean on the agent's program, so a modified one holding an
+agent's key gets around them: the host tells someone at it from the agent
+by time (rule 4), and what it logs is what the agent says (rule 8).
 
 1. **Never over a person.** An agent is refused while a person streams, even
    with take-over allowed.
@@ -290,7 +293,10 @@ Helio Host enforces these, whatever the agent or its model does:
    agent until 10 s after it stops. On a Windows host whose monitors the
    session turned off, it ends the agent's session instead, and refuses its
    next until then: the person there would otherwise sit at a dark screen.
-   A Linux host under Wayland cannot see it
+   The host tells their input from the agent's by time, which input
+   injected without a 300 ms break hides (**Telling someone at the host
+   from the agent**, [below](#design-decisions-and-why)). A Linux host under
+   Wayland cannot see it at all
    ([platforms/linux.md](platforms/linux.md#ai-agents)).
 5. **Permissions per agent.** Without **See the screen** it is refused.
    Without the keyboard or the mouse, an action that needs it is refused,
@@ -303,8 +309,10 @@ Helio Host enforces these, whatever the agent or its model does:
    other agent takes over a session a person paused or took over.
 7. **A person's hold lasts.** A pause, a take-over or a stop is not undone
    by the agent ending its session and starting another.
-8. **Everything is written down.** The agent says what each action is, and
-   Helio Host logs it and shows it.
+8. **Everything is written down.** Helio's agent says what each action is
+   before doing it, and Helio Host logs it and shows it. The words are the
+   agent's: the host does not check them against the input, and a note
+   lost on the way is missing (control messages are not resent).
 
 The agent hears why it is held. Its next action waits for the hold to end
 (up to 15 minutes in the runs and sessions Helio starts; 50 s for `Helio mcp`,
@@ -417,7 +425,11 @@ comes from on every system, so it compares times: input at the host more
 recent than the last the session injected, by more than 300 ms, is someone
 else's (a session's first three seconds excepted). It is a heuristic: a
 person pressing a key within 300 ms of the agent's own input goes unseen
-until their next one.
+until their next one, and input injected without a 300 ms break (a long
+text typed, a key held) hides theirs for as long as it lasts. Helio's agent
+leaves a longer break after every action, while it waits for the screen to
+settle; a modified client that never leaves one keeps someone at the host
+from holding it.
 
 **Text types at 66 characters a second on a Windows host.** Windows 11's
 WinUI text fields stall for a moment after each word and read the Unicode
@@ -436,16 +448,19 @@ It protects against an agent that is confused, or instructed by something on
 the screen (prompt injection), acting through helio. Such an agent cannot
 act while a person streams, over a person, on a secure screen, while someone
 uses the host (each as far as the host's system lets it tell:
-[platforms/linux.md](platforms/linux.md#ai-agents)), beyond its permissions, beyond its run's budget or after its run,
-or unseen: every action is in Helio Host's log, and a person can watch and stop
-it. The log names a text the agent typed by its length, never what it says:
-it is often a password.
+[platforms/linux.md](platforms/linux.md#ai-agents)), beyond its
+permissions, beyond its run's budget or after its run, or unseen: Helio's
+agent puts every action in Helio Host's log, and a person can watch and
+stop it. The log names a text the agent typed by its length, never what it
+says: it is often a password.
 
 It does not protect against:
 
 - **A malicious program on the client machine.** It can read the agent's
   key, as it can read Helio's: whoever owns the client owns its pairings.
-  Unpair the device on the host.
+  With the key, a program of its own can act without a word in the log,
+  and inject input without a break so that someone at the host does not
+  hold it (rules 4 and 8). Unpair the device on the host.
 - **An agent outside Helio's runner with other tools.** Claude Code or Codex
   run interactively with Helio added as an MCP server still have their
   shell on the client machine; that is their sandbox's business.
