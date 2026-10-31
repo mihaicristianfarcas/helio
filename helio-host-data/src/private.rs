@@ -24,6 +24,18 @@
 //! and the host starts afresh. Only an administrator (or the host, as
 //! SYSTEM) creates or moves it: anyone else's `helio host` command leaves it
 //! be (and does not run: helio-cli's `host`).
+//!
+//! Looks removable, is not: the reparse-point checks. Any user may also
+//! make the folder a junction (no privilege needed), and Windows reads an
+//! owner and sets permissions through it: a junction to a folder SYSTEM
+//! owns and users may write in would pass the owner check, and the host's
+//! permissions would be written over that folder's. So a folder that is a
+//! link is moved aside like one someone else made (the link moves, not
+//! what it points to), and a link inside the folder is deleted rather than
+//! given permissions. An owner that cannot be read counts as someone
+//! else's. When the folder still cannot be made the host's (a file in it
+//! held open stops the move), [`secure_data_dir`] says so and the host
+//! uses nothing in it, not even for its log.
 //! A data folder chosen with `HELIO_HOST_DATA_DIR` is its chooser's business, and
 //! is only made private.
 //!
@@ -40,10 +52,12 @@ const PUBLIC_FILES: [&str; 2] = ["config.toml", "web-cert.pem"];
 /// what is already in it. Called when the host starts, before it creates
 /// anything there.
 ///
-/// Best effort: a caller who may not change the folder (a user who is not
-/// an administrator, listing clients) changes nothing. Returns what it did
-/// that the log should say, as it runs before logging starts.
-pub fn secure_data_dir(dir: &Path) -> Option<String> {
+/// A caller who may not change the folder (a user who is not an
+/// administrator, listing clients) changes nothing. Returns what it did
+/// that the log should say, as it runs before logging starts; an error when
+/// the host's own folder could not be made the host's, which the caller
+/// must then not read or write at all.
+pub fn secure_data_dir(dir: &Path) -> Result<Option<String>, String> {
     imp::secure_data_dir(dir)
 }
 
@@ -82,7 +96,9 @@ mod imp {
         OWNER_SECURITY_INFORMATION, PROTECTED_DACL_SECURITY_INFORMATION, PSECURITY_DESCRIPTOR,
         PSID, SECURITY_ATTRIBUTES, SECURITY_MAX_SID_SIZE,
     };
-    use windows::Win32::Storage::FileSystem::CreateDirectoryW;
+    use windows::Win32::Storage::FileSystem::{
+        CreateDirectoryW, FILE_ATTRIBUTE_DIRECTORY, FILE_ATTRIBUTE_REPARSE_POINT,
+    };
 
     use super::PUBLIC_FILES;
 
@@ -145,33 +161,40 @@ mod imp {
         }
     }
 
-    pub fn secure_data_dir(dir: &Path) -> Option<String> {
+    pub fn secure_data_dir(dir: &Path) -> Result<Option<String>, String> {
         let mut said = None;
-        if std::env::var_os("HELIO_HOST_DATA_DIR").is_none() {
+        let default = std::env::var_os("HELIO_HOST_DATA_DIR").is_none();
+        if default {
             if !elevated() {
                 // The host, which is, does it when it starts.
-                return None;
+                return Ok(None);
             }
-            match claim(dir) {
-                Ok(moved) => said = moved,
-                Err(e) => {
-                    return Some(format!(
-                        "{} could not be made the host's own: {e}",
-                        dir.display()
-                    ))
-                }
-            }
+            said = claim(dir).map_err(|e| {
+                format!(
+                    "{} could not be made the host's own ({e}), so the host does not use it: \
+                        sign out the other users of this PC (one may hold a file in it open), \
+                        or remove the folder as an administrator, and start the host again",
+                    dir.display()
+                )
+            })?;
         } else if std::fs::create_dir_all(dir).is_err() {
-            return None;
+            return Ok(None);
         }
         if set_dacl(dir, FOLDER).is_err() {
             // Not ours to change (not an administrator).
-            return said;
+            return Ok(said);
         }
         // What is already there keeps the permissions it was created with
         // (changing a folder's does not reach into it), so set each.
-        secure_entries(dir, true);
-        said
+        secure_entries(dir, true, default);
+        Ok(said)
+    }
+
+    /// Whether `meta` (read without following links) is a reparse point: a
+    /// junction or a symbolic link, which Windows follows by path.
+    fn is_link(meta: &std::fs::Metadata) -> bool {
+        use std::os::windows::fs::MetadataExt;
+        meta.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT.0 != 0
     }
 
     /// Make sure the default folder `dir` is one SYSTEM or Administrators
@@ -179,8 +202,14 @@ mod imp {
     /// was moved, for the log.
     fn claim(dir: &Path) -> std::io::Result<Option<String>> {
         let mut moved = None;
-        if dir.exists() {
-            if owned_by_host(dir)? {
+        let found = match std::fs::symlink_metadata(dir) {
+            Ok(meta) => Some(meta),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => None,
+            Err(e) => return Err(e),
+        };
+        if let Some(meta) = found {
+            // An owner that cannot be read is no proof it is ours.
+            if !is_link(&meta) && owned_by_host(dir).unwrap_or(false) {
                 return Ok(None);
             }
             let secs = std::time::SystemTime::now()
@@ -190,9 +219,9 @@ mod imp {
             let aside = dir.with_file_name(format!("{name}.untrusted-{secs}"));
             std::fs::rename(dir, &aside)?;
             moved = Some(format!(
-                "{} was not made by the host (its owner is neither SYSTEM nor Administrators), \
-                    so anything in it may have been planted: it is now {}, and the host \
-                    starts afresh (devices pair again)",
+                "{} was not made by the host (a link elsewhere, or its owner is neither SYSTEM \
+                    nor Administrators), so anything in it may have been planted: it is now {}, \
+                    and the host starts afresh (devices pair again)",
                 dir.display(),
                 aside.display()
             ));
@@ -254,12 +283,32 @@ mod imp {
         }
     }
 
-    fn secure_entries(dir: &Path, top: bool) {
+    /// Set the permissions of what is in `dir` (the data folder when `top`).
+    /// A link is never followed: in the host's own folder (`remove_links`)
+    /// it is deleted (see the module's doc), in a chosen one left as it is.
+    fn secure_entries(dir: &Path, top: bool, remove_links: bool) {
         let Ok(entries) = std::fs::read_dir(dir) else {
             return;
         };
         for entry in entries.flatten() {
             let path = entry.path();
+            // A directory entry's metadata is the link's own, not followed.
+            if let Some(meta) = entry.metadata().ok().filter(is_link) {
+                if remove_links {
+                    use std::os::windows::fs::MetadataExt;
+                    // The link goes, not what it points to.
+                    let removed = if meta.file_attributes() & FILE_ATTRIBUTE_DIRECTORY.0 != 0 {
+                        std::fs::remove_dir(&path)
+                    } else {
+                        std::fs::remove_file(&path)
+                    };
+                    if let Err(e) = removed {
+                        tracing::warn!(path = %path.display(), error = %e,
+                            "could not remove a link the host did not make");
+                    }
+                }
+                continue;
+            }
             let is_dir = entry.file_type().is_ok_and(|t| t.is_dir());
             let name = entry.file_name();
             let public = top && PUBLIC_FILES.iter().any(|p| name == *p);
@@ -276,7 +325,7 @@ mod imp {
                 tracing::warn!(path = %path.display(), error = %e, "could not set permissions");
             }
             if is_dir {
-                secure_entries(&path, false);
+                secure_entries(&path, false, remove_links);
             }
         }
     }
@@ -306,8 +355,8 @@ mod imp {
 mod imp {
     use std::path::Path;
 
-    pub fn secure_data_dir(_dir: &Path) -> Option<String> {
-        None
+    pub fn secure_data_dir(_dir: &Path) -> Result<Option<String>, String> {
+        Ok(None)
     }
 
     pub fn make_public(_path: &Path) {}

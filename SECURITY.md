@@ -53,9 +53,11 @@ it, except `config.toml` and `web-cert.pem`, which Helio's This computer pages
 need and every user may read; the host's tokens are closed to everyone but SYSTEM and
 Administrators. The host uses that folder only if SYSTEM or Administrators
 own it: any user may create it before the host first runs and put an
-account or a device of their own in it, so a folder someone else made is
-moved aside (`Helio Host.untrusted-…`) and the host starts afresh, in one it
-creates owned by Administrators and private from the start. Whoever can
+account or a device of their own in it, so a folder someone else made, or
+a link (a junction) to another folder, is moved aside (`Helio
+Host.untrusted-…`) and the host starts afresh, in one it creates owned by
+Administrators and private from the start; while it cannot be moved, the
+host does not run. Whoever can
 read a device's keys can act as that device: unpair a device you lost.
 
 **The host's privileges.** On Windows, Helio Host runs as SYSTEM so it can

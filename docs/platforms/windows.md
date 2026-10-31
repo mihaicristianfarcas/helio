@@ -90,9 +90,15 @@ paired clients, the API's certificate, tokens and admin account, and `logs\`. Th
 makes that folder private when it starts (`helio-host/src/private.rs`): only
 SYSTEM and Administrators can read it, apart from the two files Helio Host's
 window needs (`config.toml`, `web-cert.pem`). It uses the folder only if
-SYSTEM or Administrators own it; one another user made first is moved
+SYSTEM or Administrators own it and it is a folder, not a link (a
+junction) to somewhere else; one another user made first, or a link, is moved
 aside as `C:\ProgramData\Helio Host.untrusted-…` (the service's log says so) and
-the host starts afresh, so devices pair again. A `helio host` command run
+the host starts afresh, so devices pair again. A link inside the folder is
+deleted, not followed. If the folder cannot be moved aside (another user
+holds a file in it open), the service, the host and `helio host` use
+nothing in it, not even for their logs, and do not run: `helio-host
+status` reports `failed`. Sign the other user out, or remove the folder as
+an administrator, then turn hosting on again. A `helio host` command run
 without an administrator neither creates nor moves it: those that read it
 say they need an administrator's terminal, and exit with 740.
 
