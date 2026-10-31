@@ -157,22 +157,12 @@ jobs:
           persist-credentials: false
       - name: Rust
         run: rustup toolchain install stable --profile minimal && rustup default stable
-      # As in ci.yml: FFmpeg's current shared build (its DLLs go beside
+      # As in ci.yml: FFmpeg's shared build, pinned by release and SHA-256
+      # (tools/windows/ffmpeg-ci.ps1; its DLLs go beside
       # Helio.exe), and LLVM's libclang (on the runner already).
       - name: FFmpeg
         shell: pwsh
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          $asset = gh release view latest --repo BtbN/FFmpeg-Builds --json assets --jq '.assets[].name' |
-            Where-Object { $_ -match '^ffmpeg-n[0-9.]+-latest-win64-lgpl-shared-[0-9.]+\.zip$' } |
-            Sort-Object -Descending | Select-Object -First 1
-          if (-not $asset) { throw 'no FFmpeg build found' }
-          gh release download latest --repo BtbN/FFmpeg-Builds --pattern $asset --dir $env:RUNNER_TEMP
-          Expand-Archive (Join-Path $env:RUNNER_TEMP $asset) -DestinationPath $env:RUNNER_TEMP
-          $dir = Join-Path $env:RUNNER_TEMP ($asset -replace '\.zip$', '')
-          "FFMPEG_DIR=$dir" >> $env:GITHUB_ENV
-          "LIBCLANG_PATH=C:\Program Files\LLVM\bin" >> $env:GITHUB_ENV
+        run: ./tools/windows/ffmpeg-ci.ps1
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           key: release
