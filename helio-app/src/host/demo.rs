@@ -14,8 +14,8 @@ use super::{now_ms, HostPages};
 
 /// The host a check pretends to have, whoever looks at it (the window and
 /// the tray icon alike): the made-up one (`host-sample`), or the real one
-/// signed out (`host-signin`), before its account is made (`host-setup`),
-/// or not answering (`host-offline`); a restart it has ahead
+/// as another user's (`host-not-allowed`) or not answering
+/// (`host-offline`); a restart it has ahead
 /// (`host-restart=now|after_session`); and its paired agents stopped
 /// (`host-stopped`).
 #[derive(Default)]
@@ -34,8 +34,7 @@ fn pretence() -> &'static Pretence {
             for part in spec.split(',').map(str::trim) {
                 match part {
                     "host-sample" => p.sample = true,
-                    "host-signin" => p.conn = Some(Conn::SignIn { setup: false }),
-                    "host-setup" => p.conn = Some(Conn::SignIn { setup: true }),
+                    "host-not-allowed" => p.conn = Some(Conn::NotAllowed),
                     "host-offline" => p.conn = Some(Conn::NotRunning),
                     "host-stopped" => p.stopped = true,
                     _ => {
@@ -70,13 +69,6 @@ pub fn pretend(s: &mut Snapshot) {
 }
 
 impl HostPages {
-    /// `signin-as=USER:PASSWORD`: type them and sign in.
-    pub fn demo_sign_in(&mut self, user: String, password: String, cx: &mut Context<Self>) {
-        self.user.update(cx, |f, cx| f.set_text(user, cx));
-        self.password.update(cx, |f, cx| f.set_text(password, cx));
-        self.sign_in(cx);
-    }
-
     /// `permissions=NAME`: the permissions sheet of the paired device so
     /// called.
     pub fn demo_permissions(&mut self, name: &str, cx: &mut Context<Self>) {

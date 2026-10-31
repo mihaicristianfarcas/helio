@@ -87,8 +87,7 @@ the logs, reporting an issue).
     mode, End Session; an agent's with Pause, Hand Back, Stop) with its
     numbers (frames, bitrate, host latency, round trip,
     loss, recoveries); this host (ID, tunnel port, internet address, the
-    router's port mapping, devices, version); the agent's recent actions;
-    Sign Out when the window signed in with an account (Windows).
+    router's port mapping, devices, version); the agent's recent actions.
   - **Devices**: pairing requests first, each with its PIN field (Return
     pairs) and what the device may do once paired; then the paired devices
     and agents, each with a button that names what it may do and opens the
@@ -184,19 +183,17 @@ token:
 
 - **The local token.** The host writes a fresh one at every start
   (`local-token` in its data folder), readable only by its own user on a
-  Mac or Linux, where the host runs as that user. The app uses it and asks
-  nothing.
-- **An app token, on Windows.** The host is a service there, and its token
-  is readable by SYSTEM and Administrators only, so an app that is not
-  elevated **signs in once** with the host's admin account (creating it
-  if there is none yet). It gets an app token, which it keeps in the user's
-  profile (`%APPDATA%\Helio Host\app-token`) and the host keeps hashed
-  (`app-tokens.toml`). Signing out drops it on both sides.
+  Mac or Linux, where the host runs as that user; on Windows, where the
+  host is a service, by SYSTEM, Administrators and the user who turned
+  hosting on (`helio-host enable --owner`, which Helio's switch runs with
+  that user's SID). The app uses it and asks nothing.
 
-`POST /api/app-token` (user, password, optional `setup` to create the
-account, a name) and `DELETE /api/app-token` give and take back an app
-token, on Windows only: on a Mac or Linux the host has no account (anyone
-on the computer could make it) and takes only its local token; every other endpoint but `/api/state` takes the bearer token.
+There is no account and no other token: every user of the computer can
+reach localhost, so an account made through the API would have been
+whoever asked first's. Every endpoint but `/api/state` takes the local
+token. A Helio that cannot read it (another user's host, or on Windows
+one another user turned on) shows **Another user's host**, and on Windows
+**Turn On Here**, which turns hosting on from this account.
 `/api/status` says, on a Mac, what macOS allows the host (`grants`: Screen
 Recording, Accessibility), and whether a restart is ahead (`restart`) and
 when the host started (`started_unix`): the settings pages say "restarting"
@@ -267,12 +264,12 @@ turned, for real), `hosting-page` (This computer with hosting off).
 
 This computer's host: `host=overview|devices|logs` (its pages; its
 settings are on the settings pages, `settings=hosting|video|input|agents`), `host-sample` (a made-up session, request, devices and
-settings), `host-signin`, `host-setup`, `host-offline` (the real host made
-signed out, without an account yet, or not answering),
+settings), `host-not-allowed`, `host-offline` (the real host made another
+user's, or not answering),
 `host-restart=now|after_session` (a restart the host has ahead, as its
 settings pages say it), `host-stopped` (its paired agents stopped, as the
 overview says it),
-`signin-as=USER:PASSWORD`, `permissions=NAME` (the permissions sheet of the
+`permissions=NAME` (the permissions sheet of the
 paired device called NAME). `HELIO_HOST_DATA_DIR` points the app at a test host's
 data folder; `HELIO_HOST_APP_URL`, `HELIO_HOST_APP_CERT` and `HELIO_HOST_APP_TOKEN` at another
 host altogether; `HELIO_HOST_PROGRAM` at the `helio-host` the switch runs.

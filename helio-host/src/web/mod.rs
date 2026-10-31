@@ -8,35 +8,26 @@
 //! on localhost only (127.0.0.1 and ::1): nothing on the network reaches
 //! it. A device a person cannot sit at pairs with `helio host pair PIN`
 //! over SSH. Every call but `/api/state` carries a bearer token: the local
-//! token this host writes where only its own user (on Windows, SYSTEM and
-//! Administrators) can read it, or an app token Helio got by signing in once
-//! with the admin account (kept hashed here, in app-tokens.toml), which a
-//! Windows Helio needs: it is not elevated, and the host's folder is
-//! administrators' only.
+//! token this host writes where only its own user can read it (on Windows,
+//! SYSTEM, Administrators and the user who turned hosting on:
+//! `hosting::owner`), which that user's Helio and `helio host` read.
 //!
-//! Only Windows has the account and app tokens ([`ACCOUNTS`]). Every user of
-//! the computer, and every program they run, reaches localhost; on a Mac or
-//! Linux, where Helio reads the local token and never makes the account,
-//! whoever asked first would have made it theirs, and with it the host.
+//! There is no account, and no other token. Every user of the computer,
+//! and every program they run, reaches localhost: an account made through
+//! the API would have been whoever asked first's, and with it the host.
 
 pub mod probe;
 
 use std::net::SocketAddr;
 use std::path::Path;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
 
-use argon2::password_hash::{
-    rand_core::OsRng, PasswordHash, PasswordHasher, PasswordVerifier, SaltString,
-};
-use argon2::Argon2;
 use axum::extract::{Path as UrlPath, State};
 use axum::http::{header, HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{delete, get, post};
 use axum::{Json, Router};
-use parking_lot::Mutex;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use serde_json::json;
 
 use crate::config::HostConfig;
@@ -45,66 +36,19 @@ use crate::pairing::PinResult;
 use helio_proto::permission::Permissions;
 
 const LOCAL_TOKEN: &str = "local-token";
-/// Whether this host has an admin account and app tokens at all: only on
-/// Windows, where the host is a service and Helio, not an administrator,
-/// cannot read the local token. Elsewhere the host runs as its user, whose
-/// Helio reads the local token, so an account would only ever be made by
-/// someone else on the computer.
-const ACCOUNTS: bool = cfg!(windows);
-const APP_TOKENS: &str = "app-tokens.toml";
-
-#[derive(Serialize, Deserialize, Default)]
-struct Credentials {
-    user: String,
-    hash: String,
-}
-
-/// Tokens Helio Host's app got by signing in, by their SHA-256.
-#[derive(Serialize, Deserialize, Default)]
-struct AppTokens {
-    #[serde(default)]
-    tokens: Vec<AppToken>,
-}
-
-#[derive(Serialize, Deserialize, Clone)]
-struct AppToken {
-    name: String,
-    sha256: String,
-    created_unix: u64,
-}
 
 struct Web {
     host: Arc<Host>,
-    failures: Mutex<Vec<Instant>>,
     /// Readable only by this host's own user: that user's Helio Host app.
     local_token: Option<String>,
-    app_tokens: Mutex<AppTokens>,
 }
 
 type Shared = Arc<Web>;
-
-fn credentials_path(dir: &Path) -> std::path::PathBuf {
-    dir.join("web-credentials.toml")
-}
-
-fn load_credentials(dir: &Path) -> Option<Credentials> {
-    std::fs::read_to_string(credentials_path(dir))
-        .ok()
-        .and_then(|t| toml::from_str(&t).ok())
-}
 
 fn token() -> String {
     let mut b = [0u8; 32];
     rand_core::RngCore::fill_bytes(&mut rand_core::OsRng, &mut b);
     b.iter().map(|x| format!("{x:02x}")).collect()
-}
-
-fn sha256_hex(text: &str) -> String {
-    use sha2::Digest;
-    sha2::Sha256::digest(text.as_bytes())
-        .iter()
-        .map(|b| format!("{b:02x}"))
-        .collect()
 }
 
 /// Equal, in time that does not depend on where they differ.
@@ -119,19 +63,6 @@ fn same(a: &str, b: &str) -> bool {
 fn bearer_of(headers: &HeaderMap) -> Option<String> {
     let raw = headers.get(header::AUTHORIZATION)?.to_str().ok()?;
     raw.strip_prefix("Bearer ").map(|t| t.trim().to_string())
-}
-
-fn load_app_tokens(dir: &Path) -> AppTokens {
-    std::fs::read_to_string(dir.join(APP_TOKENS))
-        .ok()
-        .and_then(|t| toml::from_str(&t).ok())
-        .unwrap_or_default()
-}
-
-fn save_app_tokens(dir: &Path, tokens: &AppTokens) -> std::io::Result<()> {
-    let text = toml::to_string(tokens).unwrap_or_default();
-    helio_transport::identity::write_private(&dir.join(APP_TOKENS), text.as_bytes())?;
-    crate::private::restrict_token(&dir.join(APP_TOKENS), None)
 }
 
 /// A fresh local token, where only this host's user can read it: 0600 on a
@@ -160,18 +91,7 @@ impl Web {
         let Some(t) = bearer_of(headers) else {
             return false;
         };
-        if self.local_token.as_deref().is_some_and(|l| same(l, &t)) {
-            return true;
-        }
-        if !ACCOUNTS {
-            return false;
-        }
-        let hash = sha256_hex(&t);
-        self.app_tokens
-            .lock()
-            .tokens
-            .iter()
-            .any(|a| same(&a.sha256, &hash))
+        self.local_token.as_deref().is_some_and(|l| same(l, &t))
     }
 }
 
@@ -192,183 +112,12 @@ macro_rules! require_auth {
 }
 
 async fn state(State(web): State<Shared>, headers: HeaderMap) -> Response {
-    let setup_needed = ACCOUNTS && load_credentials(&web.host.data_dir).is_none();
     Json(json!({
-        "setup_needed": setup_needed,
         "signed_in": web.authed(&headers),
         "name": web.host.config.read().name,
         "os": std::env::consts::OS,
     }))
     .into_response()
-}
-
-#[derive(Deserialize)]
-struct Login {
-    user: String,
-    password: String,
-}
-
-/// Make the admin account, which a Windows Helio signs in with (the first
-/// time, `/api/app-token` with `setup`).
-fn setup(web: &Web, req: &Login) -> Result<(), Box<Response>> {
-    let fail = |code: StatusCode, error: String| {
-        Err(Box::new(
-            (code, Json(json!({ "error": error }))).into_response(),
-        ))
-    };
-    let dir = &web.host.data_dir;
-    if load_credentials(dir).is_some() {
-        return fail(StatusCode::CONFLICT, "already set up".into());
-    }
-    if req.user.trim().is_empty() || req.password.len() < 8 {
-        return fail(
-            StatusCode::BAD_REQUEST,
-            "choose a user name and a password of at least 8 characters".into(),
-        );
-    }
-    let salt = SaltString::generate(&mut OsRng);
-    let Ok(hash) = Argon2::default().hash_password(req.password.as_bytes(), &salt) else {
-        return fail(StatusCode::INTERNAL_SERVER_ERROR, "hashing failed".into());
-    };
-    let creds = Credentials {
-        user: req.user.trim().to_string(),
-        hash: hash.to_string(),
-    };
-    tracing::info!(user = creds.user, "API: admin account created");
-    let text = toml::to_string(&creds).unwrap_or_default();
-    if let Err(e) =
-        helio_transport::identity::write_private(&credentials_path(dir), text.as_bytes())
-    {
-        return fail(StatusCode::INTERNAL_SERVER_ERROR, e.to_string());
-    }
-    Ok(())
-}
-
-/// The admin account's user name and password, rate-limited.
-fn check_password(web: &Web, req: &Login) -> Result<(), Box<Response>> {
-    {
-        let mut f = web.failures.lock();
-        f.retain(|t| t.elapsed() < Duration::from_secs(60));
-        if f.len() >= 10 {
-            return Err(Box::new(
-                (
-                    StatusCode::TOO_MANY_REQUESTS,
-                    Json(json!({"error": "too many attempts; wait a minute"})),
-                )
-                    .into_response(),
-            ));
-        }
-    }
-    let Some(creds) = load_credentials(&web.host.data_dir) else {
-        return Err(Box::new(
-            (StatusCode::CONFLICT, Json(json!({"error": "not set up"}))).into_response(),
-        ));
-    };
-    let ok = req.user == creds.user
-        && PasswordHash::new(&creds.hash)
-            .map(|h| {
-                Argon2::default()
-                    .verify_password(req.password.as_bytes(), &h)
-                    .is_ok()
-            })
-            .unwrap_or(false);
-    if !ok {
-        web.failures.lock().push(Instant::now());
-        tracing::warn!(user = req.user, "API: wrong user name or password");
-        return Err(Box::new(
-            (
-                StatusCode::UNAUTHORIZED,
-                Json(json!({"error": "wrong user name or password"})),
-            )
-                .into_response(),
-        ));
-    }
-    tracing::info!(user = req.user, "API: signed in");
-    Ok(())
-}
-
-#[derive(Deserialize)]
-struct AppLogin {
-    user: String,
-    password: String,
-    /// Who asks ("Helio Host on gaming-pc"), to tell tokens apart.
-    #[serde(default)]
-    name: String,
-    /// Create the admin account first (the first sign-in).
-    #[serde(default)]
-    setup: bool,
-}
-
-/// Helio Host's app signs in once: an app token for it to keep.
-async fn app_token(State(web): State<Shared>, Json(req): Json<AppLogin>) -> Response {
-    if !ACCOUNTS {
-        tracing::warn!("API: an account or app token asked for; this host has none");
-        return (
-            StatusCode::FORBIDDEN,
-            Json(
-                json!({"error": "Helio Host has no account on this system: Helio reads the \
-                token the host writes for the user it runs as. Open Helio as that user."}),
-            ),
-        )
-            .into_response();
-    }
-    let login = Login {
-        user: req.user,
-        password: req.password,
-    };
-    let checked = if req.setup {
-        setup(&web, &login)
-    } else {
-        check_password(&web, &login)
-    };
-    if let Err(r) = checked {
-        return *r;
-    }
-    let t = token();
-    let created_unix = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0);
-    let name = if req.name.trim().is_empty() {
-        "Helio Host app".to_string()
-    } else {
-        req.name.trim().to_string()
-    };
-    let saved = {
-        let mut tokens = web.app_tokens.lock();
-        tracing::info!(name, "API: app token issued");
-        tokens.tokens.push(AppToken {
-            name,
-            sha256: sha256_hex(&t),
-            created_unix,
-        });
-        save_app_tokens(&web.host.data_dir, &tokens)
-    };
-    match saved {
-        Ok(()) => Json(json!({"token": t})).into_response(),
-        Err(e) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({"error": e.to_string()})),
-        )
-            .into_response(),
-    }
-}
-
-/// Helio Host's app signs out: its token stops working.
-async fn drop_app_token(State(web): State<Shared>, headers: HeaderMap) -> Response {
-    require_auth!(web, headers);
-    let Some(t) = bearer_of(&headers) else {
-        return Json(json!({"ok": false})).into_response();
-    };
-    let hash = sha256_hex(&t);
-    let mut tokens = web.app_tokens.lock();
-    let before = tokens.tokens.len();
-    tokens.tokens.retain(|a| !same(&a.sha256, &hash));
-    if tokens.tokens.len() != before {
-        tracing::info!("API: app token revoked (signed out)");
-        let _ = save_app_tokens(&web.host.data_dir, &tokens);
-    }
-    Json(json!({"ok": true})).into_response()
 }
 
 async fn status(State(web): State<Shared>, headers: HeaderMap) -> Response {
@@ -817,16 +566,9 @@ pub fn serve(host: Arc<Host>) {
         }
     };
     let local_token = write_local_token(&host.data_dir);
-    let app_tokens = Mutex::new(load_app_tokens(&host.data_dir));
-    let web = Arc::new(Web {
-        host,
-        failures: Mutex::new(Vec::new()),
-        local_token,
-        app_tokens,
-    });
+    let web = Arc::new(Web { host, local_token });
     let app = Router::new()
         .route("/api/state", get(state))
-        .route("/api/app-token", post(app_token).delete(drop_app_token))
         .route("/api/status", get(status))
         .route("/api/pairing", get(pending))
         .route("/api/pairing/{id}", post(submit_pin).delete(decline))

@@ -53,7 +53,7 @@ pub fn state_line(state: &State, snap: &Snapshot) -> String {
     let doing = match (state, &snap.conn) {
         (State::Failed(_), _) => return "Helio hosting: on, but the host stopped".into(),
         (_, Conn::Connecting) | (_, Conn::NotRunning) => "starting…".into(),
-        (_, Conn::SignIn { .. }) => "signed out of the host".into(),
+        (_, Conn::NotAllowed) => "another user's host".into(),
         (_, Conn::Ready) => match snap.status.as_ref().and_then(|s| s.session.as_ref()) {
             Some(session) if session.agent.is_some() => {
                 format!("an AI agent is at work: {}", session.client)

@@ -1,6 +1,7 @@
 //! Talking to the host on this computer: its API over HTTPS on
 //! localhost, trusting only the certificate Helio Host made for itself, with the
-//! local token Helio Host leaves for its own user or an app token got by signing in.
+//! local token Helio Host leaves for its own user (on Windows, for SYSTEM,
+//! Administrators and the user who turned hosting on).
 //!
 //! HELIO_HOST_APP_URL, HELIO_HOST_APP_CERT and HELIO_HOST_APP_TOKEN point it at another host
 //! (tests).
@@ -45,31 +46,13 @@ pub fn data_dir() -> PathBuf {
     }
 }
 
-/// Where this app keeps what is its own and the signed-in user's (the app
-/// token, the window's settings, what the update check found): the user's
-/// profile on Windows, where the host's folder is the service's alone; else
-/// beside the host's state, which is the user's already.
-pub fn app_dir() -> PathBuf {
-    // A check with its own host folder keeps everything in it.
-    #[cfg(windows)]
-    if std::env::var_os("HELIO_HOST_DATA_DIR").is_none() {
-        if let Some(appdata) = std::env::var_os("APPDATA") {
-            return PathBuf::from(appdata).join("Helio Host");
-        }
-    }
-    data_dir()
-}
-
-fn app_token_path() -> PathBuf {
-    app_dir().join("app-token")
-}
-
 #[derive(Debug, Clone, PartialEq)]
 pub enum Failure {
     /// Nothing answers: Helio Host is not running.
     NotRunning,
-    /// The host wants the admin account (created first when `setup`).
-    SignIn,
+    /// The host runs, but takes no token this user may read: another
+    /// user's host, or (Windows) one another user turned on.
+    NotAllowed,
     Other(String),
 }
 
@@ -77,7 +60,7 @@ impl std::fmt::Display for Failure {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Failure::NotRunning => write!(f, "Helio Host is not running"),
-            Failure::SignIn => write!(f, "sign in to Helio Host"),
+            Failure::NotAllowed => write!(f, "Helio Host's token is not this user's to read"),
             Failure::Other(e) => write!(f, "{e}"),
         }
     }
@@ -87,8 +70,6 @@ pub struct Api {
     base: String,
     http: ureq::Agent,
     token: Option<String>,
-    /// The token is the local one (no signing out).
-    pub local: bool,
 }
 
 #[derive(Deserialize)]
@@ -147,19 +128,10 @@ impl Api {
             .http_status_as_error(false)
             .build()
             .into();
-        let (token, local) = match std::env::var("HELIO_HOST_APP_TOKEN")
+        let token = std::env::var("HELIO_HOST_APP_TOKEN")
             .ok()
-            .or_else(|| read_token(&dir.join("local-token")))
-        {
-            Some(t) => (Some(t), true),
-            None => (read_token(&app_token_path()), false),
-        };
-        Api {
-            base,
-            http,
-            token,
-            local,
-        }
+            .or_else(|| read_token(&dir.join("local-token")));
+        Api { base, http, token }
     }
 
     pub fn has_token(&self) -> bool {
@@ -206,7 +178,7 @@ impl Api {
                 let status = response.status().as_u16();
                 let text = response.body_mut().read_to_string().unwrap_or_default();
                 if status == 401 {
-                    return Err(Failure::SignIn);
+                    return Err(Failure::NotAllowed);
                 }
                 Ok((status, text))
             }
@@ -264,75 +236,6 @@ impl Api {
             Err(Failure::Other(format!("HTTP {status}")))
         }
     }
-
-    /// Sign in with the admin account (creating it when `setup`), and keep
-    /// the app token it gives.
-    pub fn sign_in(
-        &mut self,
-        user: &str,
-        password: &str,
-        setup: bool,
-        name: &str,
-    ) -> Result<(), String> {
-        let body =
-            serde_json::json!({"user": user, "password": password, "setup": setup, "name": name});
-        let v = self.post("/api/app-token", &body).map_err(|e| match e {
-            Failure::SignIn => "Wrong user name or password.".to_string(),
-            e => e.to_string(),
-        })?;
-        let token = v
-            .get("token")
-            .and_then(Value::as_str)
-            .ok_or("The host did not give a token.")?
-            .to_string();
-        let path = app_token_path();
-        if let Some(dir) = path.parent() {
-            let _ = std::fs::create_dir_all(dir);
-        }
-        write_private(&path, token.as_bytes())
-            .map_err(|e| format!("The token was not saved: {e}"))?;
-        self.token = Some(token);
-        self.local = false;
-        Ok(())
-    }
-
-    /// Forget this app's token (on the host too).
-    pub fn sign_out(&mut self) {
-        if self.local {
-            return;
-        }
-        let _ = self.delete("/api/app-token");
-        let _ = std::fs::remove_file(app_token_path());
-        self.token = None;
-    }
-
-    /// The host no longer takes the token: forget it.
-    pub fn drop_token(&mut self) {
-        if !self.local {
-            let _ = std::fs::remove_file(app_token_path());
-        }
-        self.token = None;
-    }
-}
-
-fn write_private(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
-    #[cfg(unix)]
-    {
-        use std::io::Write;
-        use std::os::unix::fs::OpenOptionsExt;
-        let mut f = std::fs::OpenOptions::new()
-            .write(true)
-            .create(true)
-            .truncate(true)
-            .mode(0o600)
-            .open(path)?;
-        f.write_all(bytes)
-    }
-    #[cfg(not(unix))]
-    {
-        // The user's own profile: private to them already.
-        std::fs::write(path, bytes)
-    }
 }
 
 // ---------------------------------------------------------------------------
@@ -341,7 +244,6 @@ fn write_private(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
 #[derive(Debug, Clone, Default, Deserialize, PartialEq)]
 #[serde(default)]
 pub struct HostState {
-    pub setup_needed: bool,
     pub signed_in: bool,
     pub name: String,
     pub os: String,

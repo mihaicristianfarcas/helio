@@ -86,10 +86,12 @@ loaded before it runs, from System32 alone (`helio-host/build.rs`), so a
 firewall rules and the copy.
 
 State lives in `C:\ProgramData\Helio Host\`: `config.toml`, the host's identity,
-paired clients, the API's certificate, tokens and admin account, and `logs\`. The host
+paired clients, the API's certificate and token, and `logs\`. The host
 makes that folder private when it starts (`helio-host/src/private.rs`): only
 SYSTEM and Administrators can read it, apart from the two files Helio Host's
-window needs (`config.toml`, `web-cert.pem`). It uses the folder only if
+window needs (`config.toml`, `web-cert.pem`) and `local-token`, which the
+user who turned hosting on may read too (recorded as `owner` beside the
+engine by `helio-host enable --owner`). It uses the folder only if
 SYSTEM or Administrators own it and it is a folder, not a link (a
 junction) to somewhere else; one another user made first, or a link, is moved
 aside as `C:\ProgramData\Helio Host.untrusted-…` (the service's log says so) and
