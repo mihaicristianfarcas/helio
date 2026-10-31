@@ -733,27 +733,56 @@ fn pretty(doc: &Value, indent: usize) -> String {
 
 /// Replace `path` with `text`: a temporary file beside it, renamed over it,
 /// with the old file's permissions (a new one is the owner's alone: it
-/// names a program to run).
+/// names a program to run). The temporary file is made new, with those
+/// permissions, before any text is in it: the text, which can hold the
+/// other agent's tokens, is never in a file others may read, nor written
+/// through a file or link already at that name.
 fn write(path: &Path, text: &str) -> Result<(), String> {
+    use std::io::Write;
     let fail = |e: std::io::Error| format!("{}: {e}", path.display());
     if let Some(dir) = path.parent() {
         std::fs::create_dir_all(dir).map_err(fail)?;
     }
     let temp = path.with_extension(format!("helio-{}.tmp", std::process::id()));
-    std::fs::write(&temp, text).map_err(fail)?;
+    // A stale one (a crash, a link) goes: the link, not what it names.
+    let _ = std::fs::remove_file(&temp);
     let permissions = std::fs::metadata(path).map(|m| m.permissions());
     #[cfg(unix)]
     let permissions = permissions.or_else(|_| {
         use std::os::unix::fs::PermissionsExt;
         Ok::<_, std::io::Error>(std::fs::Permissions::from_mode(0o600))
     });
-    if let Ok(p) = permissions {
-        let _ = std::fs::set_permissions(&temp, p);
+    let mut options = std::fs::OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    if let Ok(p) = &permissions {
+        use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+        // Narrowed by the umask: never wider than the old file.
+        options.mode(p.mode() & 0o777);
     }
-    std::fs::rename(&temp, path).map_err(|e| {
-        let _ = std::fs::remove_file(&temp);
-        fail(e)
-    })
+    let mut file = options.open(&temp).map_err(fail)?;
+    let written = (|| {
+        // Exactly the old file's (the umask may have narrowed it), before
+        // the text on Unix; on Windows after, as a read-only flag would
+        // refuse the write.
+        #[cfg(unix)]
+        if let Ok(p) = &permissions {
+            file.set_permissions(p.clone())?;
+        }
+        file.write_all(text.as_bytes())?;
+        #[cfg(not(unix))]
+        if let Ok(p) = &permissions {
+            file.set_permissions(p.clone())?;
+        }
+        Ok(())
+    })();
+    drop(file);
+    written
+        .and_then(|()| std::fs::rename(&temp, path))
+        .map_err(|e| {
+            let _ = std::fs::remove_file(&temp);
+            fail(e)
+        })
 }
 
 // ---------------------------------------------------------------------------
@@ -1104,6 +1133,36 @@ mod tests {
         std::fs::set_permissions(&file, std::fs::Permissions::from_mode(0o644)).unwrap();
         remove(App::Gemini, &places).unwrap();
         assert_eq!(mode(&file), 0o644);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn the_text_never_lands_in_a_file_wider_than_its_own() {
+        use std::os::unix::fs::PermissionsExt;
+        let (_d, places) = computer();
+        let dir = places.home.join(".gemini");
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("settings.json");
+        std::fs::write(&file, r#"{"token": "DUMMY-SECRET"}"#).unwrap();
+        std::fs::set_permissions(&file, std::fs::Permissions::from_mode(0o600)).unwrap();
+        // Where the temporary file goes, a link to a file others may read
+        // (a stale one, or another's): it is not written through.
+        let open = dir.join("open.txt");
+        std::fs::write(&open, "").unwrap();
+        std::fs::set_permissions(&open, std::fs::Permissions::from_mode(0o644)).unwrap();
+        let temp = file.with_extension(format!("helio-{}.tmp", std::process::id()));
+        std::os::unix::fs::symlink(&open, &temp).unwrap();
+        add(App::Gemini, &places, &helio()).unwrap();
+        assert_eq!(std::fs::read_to_string(&open).unwrap(), "");
+        let mode = |p: &Path| std::fs::metadata(p).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode(&open), 0o644);
+        assert_eq!(mode(&file), 0o600);
+        let text = std::fs::read_to_string(&file).unwrap();
+        assert!(
+            text.contains("DUMMY-SECRET") && text.contains("mcp"),
+            "{text}"
+        );
+        assert!(!temp.exists());
     }
 
     #[test]
