@@ -87,7 +87,7 @@ reason other than you quitting.
 
 | Command | Does |
 |---|---|
-| `helio discover` | List hosts on the local network, paired or not |
+| `helio discover` | List hosts on the local network, paired or not (a control character in a name shows as `?`) |
 | `helio pair HOST[:PORT]` | Pair with a host: shows a PIN to type on the host, in Helio (**This computer → Devices**) or with `helio host pair PIN` there |
 | `helio pair-agent HOST[:PORT]` | Pair this device's AI agent (a key of its own) |
 | `helio hosts` | List paired hosts |

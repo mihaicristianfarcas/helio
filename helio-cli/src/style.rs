@@ -156,6 +156,31 @@ pub fn warn(what: impl std::fmt::Display) {
     eprintln!("{} {what}", to(To::Err, Look::Warn, "warning:"));
 }
 
+/// A line of tab-separated cells per row, as programs read a list.
+pub fn tab_separated(rows: &[Vec<String>]) -> String {
+    rows.iter()
+        .map(|r| {
+            r.iter()
+                .map(|c| printable(c))
+                .collect::<Vec<_>>()
+                .join("\t")
+                + "\n"
+        })
+        .collect()
+}
+
+/// `text` with every control character (escape, newline, tab, DEL, the C1
+/// range) replaced by `?`. Text that came off the network -- a host's name in
+/// an mDNS announcement -- is printed through this: a terminal obeys the
+/// escape sequences in what it is given (moving the cursor, rewriting the
+/// line above, on some setting the clipboard), and a newline or tab forges a
+/// row or a cell in the output scripts read.
+pub fn printable(text: &str) -> String {
+    text.chars()
+        .map(|c| if c.is_control() { '?' } else { c })
+        .collect()
+}
+
 /// `rows` in columns two spaces apart, as wide as their widest cell, with
 /// `header` above them (quiet); each cell painted by `look`, given its
 /// column and text. The last column is not padded.
@@ -166,6 +191,10 @@ pub fn table(
     look: impl Fn(usize, &str) -> Option<Look>,
 ) -> String {
     let columns = header.len();
+    let rows: Vec<Vec<String>> = rows
+        .iter()
+        .map(|r| r.iter().map(|c| printable(c)).collect())
+        .collect();
     let widths: Vec<usize> = (0..columns)
         .map(|c| {
             rows.iter()
@@ -193,7 +222,7 @@ pub fn table(
             .map(|h| (paint(colour, Look::Quiet, h), h.chars().count()))
             .collect(),
     );
-    for row in rows {
+    for row in &rows {
         out.push_str(&line(
             row.iter()
                 .enumerate()
@@ -225,6 +254,23 @@ mod tests {
         assert!(wanted(None, Some("1"), None, false));
         assert!(!wanted(None, Some("0"), None, false));
         assert!(!wanted(Some("1"), Some("1"), None, true));
+    }
+
+    #[test]
+    fn control_characters_in_a_cell_never_reach_the_terminal() {
+        assert_eq!(printable("gaming-pc"), "gaming-pc");
+        assert_eq!(
+            printable("a\x1b]52;c;eA==\x07\nb\tc\x7f\u{9b}"),
+            "a?]52;c;eA==??b?c??"
+        );
+        let rows = vec![vec![
+            "pc\x1b[2J\nfake\trow".to_string(),
+            "linux".to_string(),
+        ]];
+        let out = table(&["NAME", "SYSTEM"], &rows, false, |_, _| None);
+        assert!(!out.contains('\x1b') && !out.contains('\t'), "{out:?}");
+        assert_eq!(out.lines().count(), 2, "one row for one host: {out:?}");
+        assert_eq!(tab_separated(&rows), "pc?[2J?fake?row\tlinux\n");
     }
 
     #[test]
