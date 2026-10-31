@@ -28,7 +28,9 @@ only from paired clients' keys. Keys rotate every two minutes.
 network: SPAKE2 over a four-digit PIN, with an ML-KEM-768 exchange beside it,
 then each side's tunnel keys sent under the result. An attacker must be in
 the middle *while* the pairing happens, and guess the PIN at the first try,
-to intervene; a recording of the pairing does not help later. The pairing
+to intervene; a recording of the pairing does not help later. What the
+prompt shows (the device's name, and whether it is an AI agent) is what the
+device then says under the PIN's key, or nothing is paired. The pairing
 port (TCP 47801) serves the local network only.
 
 **The host's API** (HTTPS on TCP 47802), which Helio's This computer pages
