@@ -141,6 +141,28 @@ later sessions start without asking. The screen is kept on through the
 Inhibit portal. `HELIO_HOST_CAPTURE=x11|portal` overrides the choice where the
 environment does not make it clear.
 
+### AI agents
+
+Two of the rules the host holds an agent to
+([../ai-agents.md](../ai-agents.md#the-rules-the-host-holds-agents-to))
+depend on what the desktop tells the host, and a Linux host is told less
+than a Windows or Mac one:
+
+- **A locked screen** holds the agent only when the lock screen tells
+  logind: the host follows logind's `LockedHint` on your graphical session
+  (`helio-host/src/linux/screen_lock.rs`), which GNOME's and KDE Plasma's
+  lock screens set. A lock screen that does not set it, or a system without
+  systemd's logind, is not seen: the agent's input reaches the lock screen.
+  Where logind cannot be asked, the log says `this host cannot tell when its
+  screen is locked`. There is no sign-in screen to guard: Helio Host starts
+  with your desktop session (`graphical-session.target`), after you sign in.
+- **Someone at the host** holds the agent only under X11, where the host
+  reads the X server's idle time. Under Wayland no program may read it, so
+  someone using the host's own keyboard or mouse does not hold an agent;
+  pause it from **This computer** or take over from a watching device
+  instead. The log says so as the host starts (`under Wayland this host
+  cannot tell when its own keyboard and mouse are used`).
+
 ### Running it
 
 Helio Host runs in the desktop session, as the user: `tools/linux/helio-host.service` is
@@ -182,6 +204,9 @@ Data and logs are in `~/.config/helio-host`.
   session's end does not wait for it (`helio-clipboard`'s `STOP_WITHIN`);
   whether a copy gets through, on that machine or on real hardware, is
   untried.
+- A lock screen holding an agent: following logind's `LockedHint` is
+  type-checked in the container, which has no logind, and has not run on a
+  desktop.
 - GNOME's on a desktop with real monitors (the tests ran headless mutter,
   whose own monitor is virtual too), and a client's density there (Linux
   clients do not send one; the scale chosen is unit-tested).
@@ -208,6 +233,9 @@ Data and logs are in `~/.config/helio-host`.
 - The host's monitors off for a session on KDE (KWin's output management),
   as on GNOME.
 - Controllers on a Linux host (uinput gamepads).
+- Someone at a Wayland host holding an agent: the desktop's own idle
+  readings (mutter's `IdleMonitor`, the `ext-idle-notify-v1` protocol) are
+  not read.
 - Packages: there is a systemd unit, a release archive and a per-user
   install script (which installs the libraries it needs with apt), but no
   `.deb` or Flatpak.

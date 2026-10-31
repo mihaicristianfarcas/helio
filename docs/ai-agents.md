@@ -283,11 +283,15 @@ Helio Host enforces these, whatever the agent or its model does:
 2. **A person always wins.** A person who starts a stream takes over from an
    agent, even with take-over off.
 3. **A secure screen is a person's.** On the sign-in screen, the lock
-   screen, a UAC prompt or Ctrl+Alt+Del, the agent's input is held.
+   screen, a UAC prompt or Ctrl+Alt+Del, the agent's input is held. A
+   Linux host sees only a lock screen that tells logind
+   ([platforms/linux.md](platforms/linux.md#ai-agents)).
 4. **Someone at the host comes first.** Input at the host itself holds the
    agent until 10 s after it stops. On a Windows host whose monitors the
    session turned off, it ends the agent's session instead, and refuses its
    next until then: the person there would otherwise sit at a dark screen.
+   A Linux host under Wayland cannot see it
+   ([platforms/linux.md](platforms/linux.md#ai-agents)).
 5. **Permissions per agent.** Without **See the screen** it is refused.
    Without the keyboard or the mouse, an action that needs it is refused,
    and the model is told what it may use instead; without both, it may
@@ -431,7 +435,8 @@ questions.
 It protects against an agent that is confused, or instructed by something on
 the screen (prompt injection), acting through helio. Such an agent cannot
 act while a person streams, over a person, on a secure screen, while someone
-uses the host, beyond its permissions, beyond its run's budget or after its run,
+uses the host (each as far as the host's system lets it tell:
+[platforms/linux.md](platforms/linux.md#ai-agents)), beyond its permissions, beyond its run's budget or after its run,
 or unseen: every action is in Helio Host's log, and a person can watch and stop
 it. The log names a text the agent typed by its length, never what it says:
 it is often a password.
