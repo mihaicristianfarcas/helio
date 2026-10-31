@@ -42,8 +42,11 @@ for one too, and also punches.
    its LAN addresses, the public address its NAT gives the tunnel's socket
    (STUN, on that same socket), and a port mapping if the router grants one.
 2. **Rendezvous.** Each device has an Ed25519 key, and the host a 32-byte
-   rendezvous secret; both are exchanged during PIN pairing, so only paired
-   devices can read each other's records. Records are BEP 44 mutable items
+   rendezvous secret; both are exchanged during PIN pairing, so only devices
+   that were paired with the host can read its records and each other's.
+   Unpairing a device does not change the secret, so the others go on
+   finding the host: the unpaired one can still read where the host is,
+   though the tunnel no longer lets it in. Records are BEP 44 mutable items
    on the Mainline DHT, signed by the device and sealed with
    ChaCha20-Poly1305 under the host's secret. The DHT sees ciphertext under
    a key it cannot link to anyone.

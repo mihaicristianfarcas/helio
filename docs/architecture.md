@@ -254,8 +254,8 @@ in the session's ack and when it changes ([usage.md](usage.md#what-each-device-m
 ## Away from home
 
 A host with internet access on publishes a sealed record of its public
-addresses on the BitTorrent Mainline DHT, readable only by devices paired
-with it; a client that wants to connect publishes an intent, and both punch
+addresses on the BitTorrent Mainline DHT, readable only by devices that
+were paired with it; a client that wants to connect publishes an intent, and both punch
 through their NATs. The router is asked to forward the port too (UPnP,
 NAT-PMP), where it can. No servers are involved. See
 [networking.md](networking.md).
