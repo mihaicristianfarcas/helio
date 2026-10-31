@@ -367,7 +367,10 @@ after the run's end or between a session's turns.
 Helio itself, or the MCP server Codex or Claude Code started — checks the
 run's control folder before each input action: a `pause` file holds it; a
 step to approve is written as `ask-N.json` and waits for `answer-N`. One
-mechanism for every provider, with no socket.
+mechanism for every provider, with no socket. Whoever can write in the
+folder answers, so on macOS and Linux it is made readable only by you, and
+one that is a link or another user's is not used: every question is then
+a no, and a pause there is ignored.
 
 **Risky steps: the model asks, rules back it up** (`helio-agent/src/risk.rs`).
 The model sees the screen and knows what a click will do, so it is told

@@ -182,7 +182,8 @@ and no other: `connect` and `wake_host` refuse the rest), `--size WxH`,
 `--max-actions N`, `--image-dir DIR` (screenshots also saved as files),
 `--events FILE` (a JSON line per action), `--no-auto-screenshot`,
 `--approvals off|risky|every` with `--control-dir DIR` (where questions and
-answers are exchanged; see [ai-agents.md](ai-agents.md#design-decisions-and-why)),
+answers are exchanged, `agent/control` in Helio's data folder when left
+out; see [ai-agents.md](ai-agents.md#design-decisions-and-why)),
 `--hold-wait SECS` (how long an action waits while a person has the
 keyboard and mouse), `--data-dir DIR`. `--until` and `--owner-pid` bound a
 run started by Helio (after them `connect` is refused too), and

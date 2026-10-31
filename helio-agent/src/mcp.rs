@@ -1015,6 +1015,7 @@ fn parse(args: &[String]) -> (crate::computer::Config, Options) {
         image_dir: None,
         events: None,
     };
+    let (mut control_dir, mut approvals) = (None, None);
     let mut it = args.iter();
     while let Some(a) = it.next() {
         match a.as_str() {
@@ -1048,31 +1049,29 @@ fn parse(args: &[String]) -> (crate::computer::Config, Options) {
                     config.hold_wait = std::time::Duration::from_secs(secs);
                 }
             }
-            "--control-dir" => {
-                if let Some(d) = it.next() {
-                    let approvals = config.control.as_ref().map_or(Approvals::Risky, |c| c.1);
-                    config.control = Some((d.into(), approvals));
-                }
-            }
+            "--control-dir" => control_dir = it.next().map(PathBuf::from).or(control_dir),
             // Which steps wait for the person's yes (off, risky, every),
             // answered through the control folder.
             "--approvals" | "--confirm-actions" => {
-                let approvals = if a == "--confirm-actions" {
+                approvals = Some(if a == "--confirm-actions" {
                     Approvals::Every
                 } else {
                     it.next()
                         .and_then(|v| Approvals::parse(v))
                         .unwrap_or(Approvals::Risky)
-                };
-                let dir = config
-                    .control
-                    .take()
-                    .map(|c| c.0)
-                    .unwrap_or_else(|| std::env::temp_dir().join("helio-agent-control"));
-                config.control = Some((dir, approvals));
+                });
             }
             other => eprintln!("ignoring unknown flag {other}"),
         }
+    }
+    if control_dir.is_some() || approvals.is_some() {
+        // With no folder named, one in the user's own data folder: whoever
+        // can write in it answers, so never a fixed name in a shared one
+        // (the system's temporary folder, on Linux), which another user
+        // could make first.
+        let dir = control_dir
+            .unwrap_or_else(|| helio_client::store::agent_dir(&config.data_dir).join("control"));
+        config.control = Some((dir, approvals.unwrap_or(Approvals::Risky)));
     }
     (config, opts)
 }
@@ -1095,6 +1094,34 @@ mod tests {
             },
             dir,
         )
+    }
+
+    #[test]
+    fn approvals_without_a_folder_named_use_one_in_the_users_data_folder() {
+        let control = |a: &[&str]| {
+            let args: Vec<String> = a.iter().map(|s| s.to_string()).collect();
+            parse(&args).0.control
+        };
+        let data = std::path::Path::new("data");
+        let own = helio_client::store::agent_dir(data).join("control");
+        assert_eq!(
+            control(&["--approvals", "risky", "--data-dir", "data"]),
+            Some((own.clone(), Approvals::Risky))
+        );
+        assert_eq!(
+            control(&["--data-dir", "data", "--confirm-actions"]),
+            Some((own, Approvals::Every))
+        );
+        // A folder named is used, whatever the order.
+        assert_eq!(
+            control(&["--approvals", "every", "--control-dir", "c"]),
+            Some(("c".into(), Approvals::Every))
+        );
+        assert_eq!(
+            control(&["--control-dir", "c"]),
+            Some(("c".into(), Approvals::Risky))
+        );
+        assert_eq!(control(&["--host", "gaming-pc"]), None);
     }
 
     #[test]
