@@ -1,53 +1,48 @@
 //! Rendezvous records on the BitTorrent Mainline DHT (BEP 44 mutable items):
-//! where a paired device can be reached, readable only by devices paired with
-//! the same host.
+//! where a host and one of its paired clients can reach each other, readable
+//! by those two alone.
 //!
-//! Each device signs its records with its own Ed25519 key (BEP 44 requires
-//! it; the DHT stores only what verifies). The content is sealed with
-//! ChaCha20-Poly1305 under the host's 32-byte rendezvous secret, which pairing
-//! hands to each client, so the DHT's nodes see ciphertext under a key they
-//! cannot link to anyone. The sequence number is the publication time in
-//! milliseconds, so a newer record always wins.
+//! Each host-client pair shares a 32-byte secret, which the host makes when
+//! the client pairs. Three kinds of record use it, each in a slot of its own:
+//! where the host is (`Host`, published by the host, one record per paired
+//! client, so removing a client stops its record and nothing else), a client
+//! asking to connect now (`Intent`), and a client that is open and may
+//! connect (`Presence`). A slot's Ed25519 key and BEP 44 salt are derived
+//! from the secret, the kind and the UTC day (`keys::Slot`), so they change
+//! at midnight UTC; a reader looks in today's slot and yesterday's at once.
+//! A record is sealed with ChaCha20-Poly1305 under a key derived from the
+//! secret, with its slot's key and salt as associated data: it opens only in
+//! the slot it was published in.
+//!
+//! What a DHT node still sees: the address a record is published from and
+//! looked up from, and when; how many records a host publishes together
+//! (one per paired client); and each record's size. A node that sees one
+//! address publish into a slot and another look it up learns that the two
+//! talk, on that day (docs/networking.md).
+//!
+//! A record's sequence number is its time in milliseconds unless the clock
+//! stepped back (`keys::Sequence`): the newer record always wins.
 
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use chacha20poly1305::aead::{Aead, KeyInit};
+use chacha20poly1305::aead::{Aead, KeyInit, Payload};
 use chacha20poly1305::{ChaCha20Poly1305, Key, Nonce};
-use mainline::{Dht, MutableItem, SigningKey};
+use mainline::{Dht, MutableItem};
 
-/// Distinguishes Helio's items under a device key (and versions them).
-/// A host publishes under this salt.
-pub const SALT: &[u8] = b"helio/rv/1";
+use crate::keys::{utc_day, Sequence, Slot};
 
-/// A client publishes one record per host it is paired with, each under a
-/// salt naming the host.
-pub fn client_salt(host_key: &[u8; 32]) -> Vec<u8> {
-    let mut s = SALT.to_vec();
-    s.push(b'/');
-    s.extend(
-        host_key[..8]
-            .iter()
-            .flat_map(|b| format!("{b:02x}").into_bytes()),
-    );
-    s
-}
 /// BEP 44's limit on a value.
 const MAX_VALUE: usize = 1000;
 const MAX_ENDPOINTS: usize = 12;
 
-pub type Seed = [u8; 32];
+/// The secret one host shares with one client.
 pub type Secret = [u8; 32];
 
 pub fn random_32() -> [u8; 32] {
     let mut b = [0u8; 32];
     rand_core::RngCore::fill_bytes(&mut rand_core::OsRng, &mut b);
     b
-}
-
-/// The public half of a device's rendezvous key.
-pub fn public_key(seed: &Seed) -> [u8; 32] {
-    SigningKey::from_bytes(seed).verifying_key().to_bytes()
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -154,23 +149,39 @@ impl Record {
     }
 }
 
-/// Seal a record for the devices that know `secret`.
-pub fn seal(secret: &Secret, record: &Record) -> Vec<u8> {
+/// Seal a record for `slot`.
+pub fn seal(slot: &Slot, record: &Record) -> Vec<u8> {
     let nonce: [u8; 12] = random_32()[..12].try_into().expect("12 bytes");
-    let cipher = ChaCha20Poly1305::new(Key::from_slice(secret));
+    let cipher = ChaCha20Poly1305::new(Key::from_slice(&slot.seal));
+    let plain = record.encode();
     let body = cipher
-        .encrypt(Nonce::from_slice(&nonce), record.encode().as_slice())
+        .encrypt(
+            Nonce::from_slice(&nonce),
+            Payload {
+                msg: &plain,
+                aad: &slot.associated_data(),
+            },
+        )
         .expect("in-memory encryption");
     let mut out = nonce.to_vec();
     out.extend_from_slice(&body);
     out
 }
 
-pub fn open(secret: &Secret, sealed: &[u8]) -> Option<Record> {
+/// The record in `sealed`, if it was sealed for `slot` and is of its kind.
+pub fn open(slot: &Slot, sealed: &[u8]) -> Option<Record> {
     let (nonce, body) = sealed.split_at_checked(12)?;
-    let cipher = ChaCha20Poly1305::new(Key::from_slice(secret));
-    let plain = cipher.decrypt(Nonce::from_slice(nonce), body).ok()?;
-    Record::decode(&plain)
+    let cipher = ChaCha20Poly1305::new(Key::from_slice(&slot.seal));
+    let plain = cipher
+        .decrypt(
+            Nonce::from_slice(nonce),
+            Payload {
+                msg: body,
+                aad: &slot.associated_data(),
+            },
+        )
+        .ok()?;
+    Record::decode(&plain).filter(|r| r.kind == slot.kind)
 }
 
 /// A DHT client. Joining the network takes a few seconds; keep one per
@@ -205,25 +216,21 @@ impl Rendezvous {
         self.dht.bootstrapped()
     }
 
-    /// Publish `record` under `seed`'s key and `salt` ([`SALT`] for a host,
-    /// [`client_salt`] for a client). Blocking (a few round trips).
+    /// Publish `record` in its slot: the one `secret` gives its kind on the
+    /// UTC day of its timestamp, numbered by `seq`. Blocking (a few round
+    /// trips: seconds on the Mainline DHT).
     #[allow(deprecated)]
-    pub fn publish(
-        &self,
-        seed: &Seed,
-        secret: &Secret,
-        salt: &[u8],
-        record: &Record,
-    ) -> Result<(), String> {
-        let value = seal(secret, record);
+    pub fn publish(&self, secret: &Secret, record: &Record, seq: &Sequence) -> Result<(), String> {
+        let slot = Slot::derive(secret, record.kind, utc_day(record.at_ms));
+        let value = seal(&slot, record);
         if value.len() > MAX_VALUE {
             return Err("record too large".into());
         }
         let item = MutableItem::new(
-            SigningKey::from_bytes(seed),
+            slot.signing.clone(),
             &value,
-            record.at_ms as i64,
-            Some(salt),
+            seq.next(record.at_ms),
+            Some(&slot.salt),
         );
         self.dht
             .put_mutable(item, None)
@@ -231,18 +238,57 @@ impl Rendezvous {
             .map_err(|e| e.to_string())
     }
 
-    /// The newest record published under `public`, if it opens with `secret`.
-    /// Blocking.
+    /// The newest record of `kind` sealed with `secret`. Blocking.
+    pub fn resolve(&self, secret: &Secret, kind: Kind) -> Option<Record> {
+        self.resolve_at(secret, kind, now_ms())
+    }
+
+    /// The newest record of `kind` sealed with `secret`, as of `now_ms`:
+    /// from today's slot or yesterday's (published before midnight UTC, or
+    /// by a clock a little behind ours), both looked up at once, so the
+    /// second costs no time. Blocking.
+    pub fn resolve_at(&self, secret: &Secret, kind: Kind, now_ms: u64) -> Option<Record> {
+        let today = utc_day(now_ms);
+        let (current, previous) = std::thread::scope(|s| {
+            let previous = std::thread::Builder::new()
+                .name("helio-rendezvous".into())
+                .spawn_scoped(s, || {
+                    self.resolve_slot(&Slot::derive(secret, kind, today.saturating_sub(1)))
+                });
+            let current = self.resolve_slot(&Slot::derive(secret, kind, today));
+            (current, previous.ok().and_then(|h| h.join().ok()).flatten())
+        });
+        // The higher sequence number is the later publication, whatever
+        // the publisher's clock said.
+        [current, previous]
+            .into_iter()
+            .flatten()
+            .max_by_key(|(seq, _)| *seq)
+            .map(|(_, r)| r)
+    }
+
     #[allow(deprecated)]
-    pub fn resolve(&self, public: &[u8; 32], secret: &Secret, salt: &[u8]) -> Option<Record> {
-        let item = self.dht.get_mutable_most_recent(public, Some(salt))?;
-        open(secret, item.value())
+    fn resolve_slot(&self, slot: &Slot) -> Option<(i64, Record)> {
+        let item = self
+            .dht
+            .get_mutable_most_recent(&slot.public, Some(&slot.salt))?;
+        Some((item.seq(), open(slot, item.value())?))
+    }
+
+    /// What a slot holds, unopened: what any DHT node can fetch (tests).
+    #[cfg(test)]
+    #[allow(deprecated)]
+    fn raw(&self, slot: &Slot) -> Option<Vec<u8>> {
+        self.dht
+            .get_mutable_most_recent(&slot.public, Some(&slot.salt))
+            .map(|item| item.value().to_vec())
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::Path;
 
     fn record(kind: Kind) -> Record {
         Record::new(
@@ -254,77 +300,184 @@ mod tests {
         )
     }
 
+    fn sequence() -> (tempfile::TempDir, Sequence) {
+        let dir = tempfile::tempdir().unwrap();
+        let write = |p: &Path, b: &[u8]| std::fs::write(p, b);
+        let seq = Sequence::open(dir.path().join("rendezvous.toml"), write);
+        (dir, seq)
+    }
+
+    fn testnet() -> mainline::Testnet {
+        mainline::Testnet::builder(8)
+            .bind_address(Ipv4Addr::LOCALHOST)
+            .build()
+            .unwrap()
+    }
+
+    /// Two devices on `net`, once both found its nodes: a publish before
+    /// that finds no one to store with. On a loaded machine (a CI runner,
+    /// where it failed so) that takes longer.
+    fn joined(net: &mainline::Testnet) -> (Rendezvous, Rendezvous) {
+        let a = Rendezvous::join_with(&net.bootstrap).unwrap();
+        let b = Rendezvous::join_with(&net.bootstrap).unwrap();
+        let deadline = std::time::Instant::now() + Duration::from_secs(10);
+        while !(a.is_ready() && b.is_ready()) && std::time::Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        (a, b)
+    }
+
+    /// Noon UTC on a day long past: a time no test runs across midnight
+    /// from.
+    const NOON: u64 = 20_000 * 86_400_000 + 43_200_000;
+
     #[test]
     fn records_seal_and_open() {
         let secret = random_32();
+        let slot = Slot::derive(&secret, Kind::Host, 20_000);
         let r = record(Kind::Host);
-        assert_eq!(open(&secret, &seal(&secret, &r)), Some(r.clone()));
+        assert_eq!(open(&slot, &seal(&slot, &r)), Some(r.clone()));
         assert_eq!(
-            open(&random_32(), &seal(&secret, &r)),
+            open(
+                &Slot::derive(&random_32(), Kind::Host, 20_000),
+                &seal(&slot, &r)
+            ),
             None,
-            "another host's secret opens nothing"
+            "another client's secret opens nothing"
         );
-        let mut tampered = seal(&secret, &r);
+        let mut tampered = seal(&slot, &r);
         tampered[20] ^= 1;
-        assert_eq!(open(&secret, &tampered), None);
+        assert_eq!(open(&slot, &tampered), None);
+    }
+
+    #[test]
+    fn a_record_opens_only_in_the_slot_it_was_sealed_for() {
+        let secret = random_32();
+        let sealed = seal(
+            &Slot::derive(&secret, Kind::Intent, 20_000),
+            &record(Kind::Intent),
+        );
+        // Same secret, so the same sealing key: only the associated data
+        // (the slot's key and salt) tells these apart.
+        for other in [
+            Slot::derive(&secret, Kind::Intent, 20_001),
+            Slot::derive(&secret, Kind::Presence, 20_000),
+            Slot::derive(&secret, Kind::Host, 20_000),
+        ] {
+            assert_eq!(open(&other, &sealed), None);
+        }
+    }
+
+    #[test]
+    fn a_removed_client_cannot_open_new_host_records() {
+        let net = testnet();
+        let (host, removed) = joined(&net);
+        let (_dir, seq) = sequence();
+        let (gone, kept) = (random_32(), random_32());
+        host.publish(&gone, &record(Kind::Host), &seq).unwrap();
+        host.publish(&kept, &record(Kind::Host), &seq).unwrap();
+
+        // `gone` is removed: the host forgets its secret, and moves.
+        let moved = Record::new(Kind::Host, vec!["198.51.100.9:47800".parse().unwrap()]);
+        host.publish(&kept, &moved, &seq).unwrap();
+        let seen = removed.resolve(&gone, Kind::Host);
+        assert_ne!(
+            seen.map(|r| r.endpoints),
+            Some(moved.endpoints.clone()),
+            "its own slot holds the old record at most"
+        );
+
+        // The new record, fetched as any DHT node can: no slot the removed
+        // client's secret gives opens it.
+        let today = utc_day(moved.at_ms);
+        let raw = removed
+            .raw(&Slot::derive(&kept, Kind::Host, today))
+            .unwrap();
+        for kind in [Kind::Host, Kind::Intent, Kind::Presence] {
+            for day in [today - 1, today, today + 1] {
+                assert_eq!(open(&Slot::derive(&gone, kind, day), &raw), None);
+            }
+        }
+        assert_eq!(
+            open(&Slot::derive(&kept, Kind::Host, today), &raw),
+            Some(moved),
+            "the client still paired opens it"
+        );
+    }
+
+    #[test]
+    fn a_clock_stepping_back_still_publishes() {
+        let net = testnet();
+        let (host, client) = joined(&net);
+        let (_dir, seq) = sequence();
+        let secret = random_32();
+        let first = Record {
+            at_ms: NOON,
+            ..record(Kind::Host)
+        };
+        host.publish(&secret, &first, &seq).unwrap();
+        // The clock steps back an hour: the next record is stamped earlier.
+        let later = Record {
+            at_ms: NOON - 3_600_000,
+            ..Record::new(Kind::Host, vec!["198.51.100.9:47800".parse().unwrap()])
+        };
+        host.publish(&secret, &later, &seq).unwrap();
+        assert_eq!(client.resolve_at(&secret, Kind::Host, NOON), Some(later));
     }
 
     #[test]
     fn a_record_crosses_a_dht() {
-        let net = mainline::Testnet::builder(8)
-            .bind_address(Ipv4Addr::LOCALHOST)
-            .build()
-            .unwrap();
-        let (seed, secret) = (random_32(), random_32());
-        let host = Rendezvous::join_with(&net.bootstrap).unwrap();
-        let client = Rendezvous::join_with(&net.bootstrap).unwrap();
-        // Both find the testnet's nodes in their first moments; a publish
-        // before that finds no one to store with. On a loaded machine (a CI
-        // runner, where it failed so) those moments are longer.
-        let deadline = std::time::Instant::now() + Duration::from_secs(10);
-        while !(host.is_ready() && client.is_ready()) && std::time::Instant::now() < deadline {
-            std::thread::sleep(Duration::from_millis(20));
-        }
+        let net = testnet();
+        let (host, client) = joined(&net);
+        let (_dir, seq) = sequence();
+        let secret = random_32();
 
         let first = record(Kind::Host);
-        host.publish(&seed, &secret, SALT, &first).unwrap();
-        assert_eq!(
-            client.resolve(&public_key(&seed), &secret, SALT),
-            Some(first.clone())
-        );
+        host.publish(&secret, &first, &seq).unwrap();
+        assert_eq!(client.resolve(&secret, Kind::Host), Some(first.clone()));
 
         // A newer record replaces it.
-        std::thread::sleep(Duration::from_millis(5));
-        let second = Record::new(Kind::Intent, vec!["10.0.0.1:1".parse().unwrap()]);
-        host.publish(&seed, &secret, SALT, &second).unwrap();
-        assert_eq!(
-            client.resolve(&public_key(&seed), &secret, SALT),
-            Some(second.clone())
-        );
+        let second = Record::new(Kind::Host, vec!["10.0.0.1:1".parse().unwrap()]);
+        host.publish(&secret, &second, &seq).unwrap();
+        assert_eq!(client.resolve(&secret, Kind::Host), Some(second.clone()));
 
-        // A client's records for two hosts live side by side.
-        let (h1, h2) = (random_32(), random_32());
-        let p1 = Record::new(Kind::Presence, vec!["10.0.0.2:2".parse().unwrap()]);
-        host.publish(&seed, &secret, &client_salt(&h1), &p1)
-            .unwrap();
+        // The client's records live beside it, each in its own slot.
+        let intent = Record::new(Kind::Intent, vec!["10.0.0.2:2".parse().unwrap()]);
+        client.publish(&secret, &intent, &seq).unwrap();
+        assert_eq!(host.resolve(&secret, Kind::Intent), Some(intent));
+        assert_eq!(host.resolve(&secret, Kind::Presence), None);
         assert_eq!(
-            client.resolve(&public_key(&seed), &secret, &client_salt(&h1)),
-            Some(p1)
-        );
-        assert_eq!(
-            client.resolve(&public_key(&seed), &secret, &client_salt(&h2)),
-            None
-        );
-        assert_eq!(
-            client.resolve(&public_key(&seed), &secret, SALT),
+            client.resolve(&secret, Kind::Host),
             Some(second),
             "the host record is untouched"
         );
-
         assert_eq!(
-            client.resolve(&public_key(&random_32()), &secret, SALT),
+            client.resolve(&random_32(), Kind::Host),
             None,
-            "nothing under an unknown key"
+            "nothing under another secret"
+        );
+    }
+
+    #[test]
+    fn yesterdays_record_is_found_and_older_ones_are_not() {
+        let net = testnet();
+        let (host, client) = joined(&net);
+        let (_dir, seq) = sequence();
+        let secret = random_32();
+        let before_midnight = Record {
+            at_ms: NOON + 43_200_000 - 1_000,
+            ..record(Kind::Host)
+        };
+        host.publish(&secret, &before_midnight, &seq).unwrap();
+        let after_midnight = NOON + 43_200_000 + 1_000;
+        assert_eq!(
+            client.resolve_at(&secret, Kind::Host, after_midnight),
+            Some(before_midnight)
+        );
+        assert_eq!(
+            client.resolve_at(&secret, Kind::Host, after_midnight + 86_400_000),
+            None,
+            "the day after, it is two days old"
         );
     }
 }

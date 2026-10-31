@@ -150,9 +150,11 @@ impl Pairing {
             return PinResult::NotFound;
         };
         let name = host.config.read().name.clone();
+        // This client's own: no other client can open what the host
+        // publishes for it, and removing it removes the secret.
+        let rendezvous_secret = helio_nat::rendezvous::random_32();
         let extras = helio_pairing::pair::Extras {
-            rendezvous: Some(host.rendezvous.public()),
-            rendezvous_secret: host.rendezvous.secret,
+            rendezvous_secret: Some(rendezvous_secret),
             agent: false,
         };
         match request.complete(pin, &name, host.endpoint.identity().public(), &extras) {
@@ -160,7 +162,7 @@ impl Pairing {
                 match host.add_client(
                     &client_name,
                     &public,
-                    theirs.rendezvous,
+                    Some(rendezvous_secret),
                     theirs.agent,
                     permissions,
                 ) {

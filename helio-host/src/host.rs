@@ -58,7 +58,9 @@ pub struct Host {
     pub clients: Arc<Mutex<Clients>>,
     /// STUN on the tunnel's socket: answers arrive in the receive loop.
     pub stun: Arc<helio_nat::stun::Stun>,
-    pub rendezvous: helio_nat::keys::RendezvousKeys,
+    /// The sequence numbers of the rendezvous records this host publishes,
+    /// one per paired client (`presence`).
+    pub rendezvous_seq: helio_nat::keys::Sequence,
     /// The router's port mapping, as the API reports it ("" before the
     /// first try).
     pub port_mapping: Mutex<String>,
@@ -84,12 +86,10 @@ impl Host {
             Endpoint::bind(Arc::new(identity), config.port)
                 .map_err(|e| format!("cannot bind UDP port {}: {e}", config.port))?,
         );
-        let rendezvous = helio_nat::keys::RendezvousKeys::load_or_create(
-            &data_dir.join("rendezvous.toml"),
-            true,
+        let rendezvous_seq = helio_nat::keys::Sequence::open(
+            data_dir.join("rendezvous.toml"),
             helio_transport::identity::write_private,
-        )
-        .map_err(|e| format!("rendezvous keys: {e}"))?;
+        );
         let stun = Arc::new(helio_nat::stun::Stun::new());
         let clients = Clients::load(&data_dir);
         for c in clients.list() {
@@ -146,7 +146,7 @@ impl Host {
             config,
             clients,
             stun,
-            rendezvous,
+            rendezvous_seq,
             port_mapping: Mutex::new(String::new()),
             shared,
             sessions: tx,
@@ -278,14 +278,14 @@ impl Host {
         &self,
         name: &str,
         public: &helio_transport::PublicIdentity,
-        rendezvous: Option<[u8; 32]>,
+        rendezvous_secret: Option<[u8; 32]>,
         agent: bool,
         permissions: Option<helio_proto::permission::Permissions>,
     ) -> std::io::Result<helio_proto::permission::Permissions> {
-        let client = self
-            .clients
-            .lock()
-            .pair(name, public, rendezvous, agent, permissions)?;
+        let client =
+            self.clients
+                .lock()
+                .pair(name, public, rendezvous_secret, agent, permissions)?;
         self.endpoint
             .add_peer(public.clone(), None)
             .map_err(|e| std::io::Error::other(e.to_string()))?;
@@ -396,33 +396,25 @@ impl Host {
         }
     }
 
+    /// Tell a client how to find us across the internet: its own
+    /// rendezvous secret, made now if it has none (one added by `helio
+    /// host add-client`). A key that is not paired gets nothing; no other
+    /// client's secret is ever sent.
+    fn offer_rendezvous(&self, peer: &Arc<Peer>) {
+        let (x, _) = peer.public().to_b64();
+        let fresh = helio_nat::rendezvous::random_32();
+        match self.clients.lock().rendezvous_secret_or(&x, fresh) {
+            Ok(Some(secret)) => self.reply(peer, Control::RendezvousOffer { secret }),
+            Ok(None) => {}
+            Err(e) => tracing::warn!(error = %e, "could not read the client's rendezvous secret"),
+        }
+    }
+
     fn on_control(&self, peer: &Arc<Peer>, msg: Control) {
         if matches!(msg, Control::SessionStart(_)) {
-            // Tell the client how to find us across the internet (pairings
-            // made before pairing carried it learn it here).
-            if let Some(secret) = self.rendezvous.secret {
-                self.reply(
-                    peer,
-                    Control::RendezvousOffer {
-                        key: self.rendezvous.public(),
-                        secret,
-                    },
-                );
-            }
+            self.offer_rendezvous(peer);
         }
         match msg {
-            Control::RendezvousKey { key } => {
-                let (x, _) = peer.public().to_b64();
-                match self.clients.lock().set_rendezvous(&x, key) {
-                    Ok(true) => {
-                        tracing::info!(client = %peer.public().short_id(), "client can now connect from the internet")
-                    }
-                    Ok(false) => {}
-                    Err(e) => {
-                        tracing::warn!(error = %e, "could not save the client's rendezvous key")
-                    }
-                }
-            }
             Control::Ping { id, sent_us } => self.reply(peer, Control::PingReply { id, sent_us }),
             Control::SessionStart(req) => {
                 let _ = self.sessions.send(crate::session::SessionCmd::Start {

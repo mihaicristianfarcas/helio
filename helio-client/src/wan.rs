@@ -5,6 +5,10 @@
 //! towards the client's (stable) tunnel port: a click then connects at once.
 //! When connecting, [`connect`] also looks the host up afresh and publishes an
 //! intent, so the host punches towards us even if the warm path went cold.
+//!
+//! Each host's records, and this client's for that host, are found and
+//! opened with the secret pairing gave this client for that host alone
+//! (`helio_nat::keys`): two hosts' records cannot be linked to one client.
 
 use std::net::{SocketAddr, UdpSocket};
 use std::path::{Path, PathBuf};
@@ -12,8 +16,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
-use helio_nat::keys::RendezvousKeys;
-use helio_nat::rendezvous::{client_salt, Kind, Record, Rendezvous, Secret, Seed, SALT};
+use helio_nat::keys::Sequence;
+use helio_nat::rendezvous::{Kind, Record, Rendezvous, Secret};
 use helio_nat::stun::Stun;
 use helio_transport::{Endpoint, Peer};
 
@@ -22,31 +26,27 @@ use crate::store::Hosts;
 /// What a client needs to find one host.
 #[derive(Clone)]
 pub struct Wan {
-    pub host_key: [u8; 32],
     pub secret: Secret,
-    pub own_seed: Seed,
     /// Where to remember what the host's record says (hosts.toml), and the
     /// host's tunnel key there.
     pub dir: PathBuf,
     pub host_x25519: String,
 }
 
+/// Leaves the secret out: what is printed may end up in a log.
 impl std::fmt::Debug for Wan {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Wan")
-            .field("host_key", &self.host_key)
+            .field("host_x25519", &self.host_x25519)
             .finish_non_exhaustive()
     }
 }
 
 impl Wan {
-    /// For `host`, if pairing gave it rendezvous keys.
+    /// For `host`, if it gave this client a rendezvous secret.
     pub fn for_host(dir: &Path, host: &crate::store::KnownHost) -> Option<Wan> {
-        let (host_key, secret) = host.rendezvous_keys()?;
         Some(Wan {
-            host_key,
-            secret,
-            own_seed: own_keys(dir)?.seed,
+            secret: host.rendezvous_secret()?,
             dir: dir.to_path_buf(),
             host_x25519: host.x25519.clone(),
         })
@@ -54,9 +54,7 @@ impl Wan {
 
     /// Look the host up and remember where it is. Blocking (DHT round trips).
     fn refresh_host(&self, rv: &Rendezvous) -> Option<Vec<SocketAddr>> {
-        let r = rv
-            .resolve(&self.host_key, &self.secret, SALT)
-            .filter(|r| r.kind == Kind::Host)?;
+        let r = rv.resolve(&self.secret, Kind::Host)?;
         if let Ok(true) = Hosts::load(&self.dir).set_wan_addresses(&self.host_x25519, &r.endpoints)
         {
             tracing::info!(endpoints = ?r.endpoints, "the host's internet address changed");
@@ -65,14 +63,12 @@ impl Wan {
     }
 }
 
-/// This client's rendezvous keys (made on first use).
-pub fn own_keys(dir: &Path) -> Option<RendezvousKeys> {
-    RendezvousKeys::load_or_create(
-        &dir.join("rendezvous.toml"),
-        false,
+/// The sequence numbers of this client's records, kept in its data folder.
+fn sequence(dir: &Path) -> Sequence {
+    Sequence::open(
+        dir.join("rendezvous.toml"),
         helio_transport::identity::write_private,
     )
-    .ok()
 }
 
 /// One DHT client per process: joining takes seconds, so it is started early
@@ -156,7 +152,7 @@ pub fn connect(
 
     // Our intent: re-published while the handshake has not landed.
     let port = endpoint.local_port();
-    let salt = client_salt(&wan.host_key);
+    let seq = sequence(&wan.dir);
     let mut last_publish: Option<Instant> = None;
     while !done() && started.elapsed() < Duration::from_secs(60) {
         if last_publish.is_none_or(|t| t.elapsed() >= Duration::from_secs(20)) {
@@ -171,12 +167,8 @@ pub fn connect(
             endpoints.extend(helio_nat::keys::global_ipv6(port));
             if !endpoints.is_empty() {
                 tracing::info!(endpoints = ?endpoints, "asking the host to punch through");
-                if let Err(e) = rv.publish(
-                    &wan.own_seed,
-                    &wan.secret,
-                    &salt,
-                    &Record::new(Kind::Intent, endpoints),
-                ) {
+                if let Err(e) = rv.publish(&wan.secret, &Record::new(Kind::Intent, endpoints), &seq)
+                {
                     tracing::debug!(error = %e, "intent publish failed");
                 }
                 last_publish = Some(Instant::now());
@@ -231,7 +223,9 @@ pub fn presence(dir: PathBuf) {
             if !wait_ready(&rv, &never, Duration::from_secs(30)) {
                 return;
             }
-            let mut published: std::collections::HashMap<[u8; 32], (Vec<SocketAddr>, Instant)> =
+            let seq = sequence(&dir);
+            // By host: what this client last said, and when.
+            let mut published: std::collections::HashMap<String, (Vec<SocketAddr>, Instant)> =
                 Default::default();
             loop {
                 let hosts: Vec<Wan> = Hosts::load(&dir)
@@ -247,20 +241,13 @@ pub fn presence(dir: PathBuf) {
                             continue;
                         };
                         let stale = published
-                            .get(&wan.host_key)
+                            .get(&wan.host_x25519)
                             .is_none_or(|(e, at)| *e != endpoints || at.elapsed() >= REPUBLISH);
                         if stale {
                             let record = Record::new(Kind::Presence, endpoints.clone());
-                            if rv
-                                .publish(
-                                    &wan.own_seed,
-                                    &wan.secret,
-                                    &client_salt(&wan.host_key),
-                                    &record,
-                                )
-                                .is_ok()
-                            {
-                                published.insert(wan.host_key, (endpoints, Instant::now()));
+                            if rv.publish(&wan.secret, &record, &seq).is_ok() {
+                                published
+                                    .insert(wan.host_x25519.clone(), (endpoints, Instant::now()));
                             }
                         }
                     }

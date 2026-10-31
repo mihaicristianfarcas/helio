@@ -137,11 +137,8 @@ struct Sealed {
     name: String,
     x25519: String,
     mlkem: String,
-    /// The sender's rendezvous key (Ed25519 public, base64): see
+    /// Host to client only: the client's rendezvous secret (base64): see
     /// [`Extras`].
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    rendezvous: Option<String>,
-    /// Host to client only: the secret its rendezvous records are sealed with.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     rendezvous_secret: Option<String>,
     /// Client to host only: this identity belongs to an AI agent.
@@ -150,18 +147,29 @@ struct Sealed {
 }
 
 /// What pairing exchanges besides the tunnel keys: how to find each other
-/// across the internet (see docs/networking.md). Hosts and clients that predate
-/// it send none, and pair all the same.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+/// across the internet (see docs/networking.md).
+#[derive(Clone, Copy, Default, PartialEq, Eq)]
 pub struct Extras {
-    /// Ed25519 public key the device signs its rendezvous records with.
-    pub rendezvous: Option<[u8; 32]>,
-    /// The host's rendezvous secret (host to client only).
+    /// Host to client only: the secret this host and this client alone
+    /// share, made by the host for this pairing. Every rendezvous record
+    /// between the two is found, signed and sealed with keys derived from
+    /// it (`helio_nat::keys`); no other client has it.
     pub rendezvous_secret: Option<[u8; 32]>,
     /// Client to host only: the identity pairing is an AI agent's, which the
     /// host holds to its agent rules (see docs/ai-agents.md). Sealed with
     /// the PIN's key, so only the device the user typed the PIN for says so.
     pub agent: bool,
+}
+
+/// Says whether there is a secret, never what it is: what is printed may
+/// end up in a log.
+impl std::fmt::Debug for Extras {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Extras")
+            .field("rendezvous_secret", &self.rendezvous_secret.map(|_| ".."))
+            .field("agent", &self.agent)
+            .finish()
+    }
 }
 
 impl Extras {
@@ -171,7 +179,6 @@ impl Extras {
             name: name.to_string(),
             x25519,
             mlkem,
-            rendezvous: self.rendezvous.map(|k| b64().encode(k)),
             rendezvous_secret: self.rendezvous_secret.map(|k| b64().encode(k)),
             agent: self.agent,
         }
@@ -184,7 +191,6 @@ impl Extras {
                 .and_then(|b| b.try_into().ok())
         };
         Extras {
-            rendezvous: key(&s.rendezvous),
             rendezvous_secret: key(&s.rendezvous_secret),
             agent: s.agent,
         }
@@ -611,9 +617,8 @@ impl PairRequest {
         );
     }
 
-    /// Finish with the PIN the user typed. Returns the client's name and keys.
-    /// Finish with the PIN the user typed, sending `extras` (the host's
-    /// rendezvous key and secret). Returns the client's name, keys and extras.
+    /// Finish with the PIN the user typed, sending `extras` (the client's
+    /// rendezvous secret). Returns the client's name, keys and extras.
     pub fn complete(
         mut self,
         pin: &str,
@@ -696,7 +701,6 @@ mod tests {
     type HostResult = Result<(String, PublicIdentity, Extras), PairError>;
 
     const HOST_EXTRAS: Extras = Extras {
-        rendezvous: Some([7; 32]),
         rendezvous_secret: Some([9; 32]),
         agent: false,
     };
@@ -737,7 +741,6 @@ mod tests {
         let client = Keys2::generate().public().clone();
         let mut waited = false;
         let mine = Extras {
-            rendezvous: Some([3; 32]),
             rendezvous_secret: None,
             agent: false,
         };
@@ -756,12 +759,12 @@ mod tests {
         assert_eq!(paired.public, host_public);
         assert_eq!(
             paired.extras, HOST_EXTRAS,
-            "the client learns how to find the host"
+            "the client learns its rendezvous secret"
         );
         let (name, got, extras) = host.join().unwrap().unwrap();
         assert_eq!(name, "mac");
         assert_eq!(got, client);
-        assert_eq!(extras, mine, "and the host how to find the client");
+        assert_eq!(extras, mine);
     }
 
     #[test]
@@ -769,7 +772,6 @@ mod tests {
         let (addr, host, _) = host_thread("1111");
         let client = Keys2::generate().public().clone();
         let mine = Extras {
-            rendezvous: None,
             rendezvous_secret: None,
             agent: true,
         };

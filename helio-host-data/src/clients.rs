@@ -14,6 +14,13 @@
 //! An agent a person stopped stays stopped here, across restarts of the
 //! host, until a person allows it again or pairs it again.
 //!
+//! Each client's rendezvous secret is kept here too: the one secret it and
+//! the host share, from which every record that finds the host across the
+//! internet is derived (`helio_nat::keys`). It is made when the client
+//! pairs, or at its first session if it was added without a PIN pairing,
+//! and is forgotten with the client: removing it removes the only copy the
+//! host has. The file is written readable by its owner alone.
+//!
 //! A file from before permissions has none written: a person's device then
 //! keeps everything it could do, and an agent what its `access` said. The
 //! next save writes permissions in their place.
@@ -32,9 +39,9 @@ pub struct Client {
     pub mlkem: String,
     /// Seconds since the Unix epoch.
     pub paired_at: u64,
-    /// The client's rendezvous key (Ed25519, hex), for connecting from the
-    /// internet. Absent for clients paired before it existed.
-    pub rendezvous: Option<String>,
+    /// The client's rendezvous secret (hex), for connecting from the
+    /// internet. Absent until it is made (`Clients::rendezvous_secret_or`).
+    pub rendezvous_secret: Option<String>,
     /// An AI agent's identity (paired as one).
     pub agent: bool,
     /// What it may do here; only what its kind can be allowed
@@ -54,7 +61,7 @@ struct Stored {
     mlkem: String,
     paired_at: u64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    rendezvous: Option<String>,
+    rendezvous_secret: Option<String>,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     agent: bool,
     /// Absent from files written before permissions.
@@ -80,7 +87,7 @@ impl From<Stored> for Client {
             x25519: s.x25519,
             mlkem: s.mlkem,
             paired_at: s.paired_at,
-            rendezvous: s.rendezvous,
+            rendezvous_secret: s.rendezvous_secret,
             agent: s.agent,
             permissions,
             stopped: s.stopped,
@@ -95,7 +102,7 @@ impl From<Client> for Stored {
             x25519: c.x25519,
             mlkem: c.mlkem,
             paired_at: c.paired_at,
-            rendezvous: c.rendezvous,
+            rendezvous_secret: c.rendezvous_secret,
             agent: c.agent,
             permissions: Some(c.permissions),
             access: None,
@@ -139,14 +146,18 @@ impl Client {
         PublicIdentity::from_b64(&self.x25519, &self.mlkem).ok()
     }
 
-    pub fn rendezvous_key(&self) -> Option<[u8; 32]> {
-        let h = self.rendezvous.as_deref()?;
+    pub fn rendezvous_secret(&self) -> Option<[u8; 32]> {
+        let h = self.rendezvous_secret.as_deref()?;
         let bytes: Vec<u8> = (0..h.len())
             .step_by(2)
             .filter_map(|i| u8::from_str_radix(h.get(i..i + 2)?, 16).ok())
             .collect();
         bytes.try_into().ok()
     }
+}
+
+fn hex(bytes: [u8; 32]) -> String {
+    bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
 
 #[derive(Debug, Default, Serialize, Deserialize)]
@@ -158,7 +169,7 @@ struct File {
 /// The paired clients, as `clients.toml` held them when last read.
 ///
 /// Two programs change the file: the running host (pairing, This
-/// computer, a client's rendezvous key) and `helio host` (add-client,
+/// computer, a client's rendezvous secret) and `helio host` (add-client,
 /// remove-client, permissions). Each change re-reads the file under a lock
 /// shared by both (`clients.lock`), so neither saves a stale copy over the
 /// other's: a device removed from the command line is not brought back by
@@ -236,11 +247,13 @@ impl Clients {
     /// Add (or rename, if the key is already known) a client. `agent`: the
     /// identity is an AI agent's. `permissions`: what it may do, or the
     /// default (`default_permissions`, counted before it is added).
+    /// `rendezvous_secret`: the one pairing gave it (None: made at its
+    /// first session).
     pub fn add(
         &mut self,
         name: &str,
         public: &PublicIdentity,
-        rendezvous: Option<[u8; 32]>,
+        rendezvous_secret: Option<[u8; 32]>,
         agent: bool,
         permissions: Option<Permissions>,
     ) -> std::io::Result<Client> {
@@ -249,7 +262,7 @@ impl Clients {
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_secs())
             .unwrap_or(0);
-        let rendezvous = rendezvous.map(|k| k.iter().map(|b| format!("{b:02x}")).collect());
+        let rendezvous_secret = rendezvous_secret.map(hex);
         self.modify(|list| {
             // Pairing again replaces the entry: it does not count as a
             // person already here when the default is worked out.
@@ -262,7 +275,7 @@ impl Clients {
                 x25519: x.clone(),
                 mlkem: m,
                 paired_at: now,
-                rendezvous,
+                rendezvous_secret,
                 agent,
                 permissions,
                 // Paired again, by a person who entered its PIN: a new start.
@@ -288,7 +301,7 @@ impl Clients {
         &mut self,
         name: &str,
         public: &PublicIdentity,
-        rendezvous: Option<[u8; 32]>,
+        rendezvous_secret: Option<[u8; 32]>,
         agent: bool,
         chosen: Option<Permissions>,
     ) -> std::io::Result<Client> {
@@ -296,35 +309,42 @@ impl Clients {
         self.add(
             name,
             public,
-            rendezvous,
+            rendezvous_secret,
             agent,
             Some(chosen.unwrap_or(shown)),
         )
     }
 
-    /// Record a client's rendezvous key (learned over the tunnel from a
-    /// client paired before pairing exchanged it). True if it changed.
-    pub fn set_rendezvous(&mut self, x25519_b64: &str, key: [u8; 32]) -> std::io::Result<bool> {
-        let hex: String = key.iter().map(|b| format!("{b:02x}")).collect();
-        let known = |list: &[Client]| {
-            list.iter()
-                .find(|c| c.x25519 == x25519_b64)
-                .map(|c| c.rendezvous.as_deref() == Some(hex.as_str()))
-        };
-        // Sent at every connection: nothing to read or write when it is
-        // the one already kept.
-        if known(&self.list) != Some(false) {
-            return Ok(false);
+    /// A paired client's rendezvous secret: the one it has, else `fresh`,
+    /// kept as its own from now on. None for a key that is not paired.
+    ///
+    /// Asked at every session's start, on the host's receive thread: a
+    /// secret already kept is answered from this copy, without touching the
+    /// file. One is made under the file's lock, from the file, so a client
+    /// removed beside the running host (`helio host remove-client`) is
+    /// given none.
+    pub fn rendezvous_secret_or(
+        &mut self,
+        x25519_b64: &str,
+        fresh: [u8; 32],
+    ) -> std::io::Result<Option<[u8; 32]>> {
+        match self.list.iter().find(|c| c.x25519 == x25519_b64) {
+            None => return Ok(None),
+            Some(c) => {
+                if let Some(secret) = c.rendezvous_secret() {
+                    return Ok(Some(secret));
+                }
+            }
         }
         self.modify(|list| {
             let Some(c) = list.iter_mut().find(|c| c.x25519 == x25519_b64) else {
-                return (false, false);
+                return (false, None);
             };
-            if c.rendezvous.as_deref() == Some(hex.as_str()) {
-                return (false, false);
+            if let Some(secret) = c.rendezvous_secret() {
+                return (false, Some(secret));
             }
-            c.rendezvous = Some(hex.clone());
-            (true, true)
+            c.rendezvous_secret = Some(hex(fresh));
+            (true, Some(fresh))
         })
     }
 
@@ -500,7 +520,7 @@ mod tests {
 
     /// The running host's list and `helio host`'s, on one folder: a change
     /// one makes is not undone by the other's next save, whoever triggers it
-    /// (here the removed device itself, sending a new rendezvous key).
+    /// (here the removed device itself, asking for its rendezvous secret).
     #[test]
     fn a_change_made_beside_the_running_host_is_not_saved_over() {
         let dir = tempfile::tempdir().unwrap();
@@ -521,10 +541,17 @@ mod tests {
         cli.set_permissions(&b64(&narrowed), Permissions::NONE)
             .unwrap();
 
-        // The host still has its own copy; the removed device and another
-        // change the host makes both save.
-        host.set_rendezvous(&b64(&gone), [7; 32]).unwrap();
-        host.set_rendezvous(&b64(&kept), [8; 32]).unwrap();
+        // The host still has its own copy; the removed device asks for its
+        // rendezvous secret, and a change the host makes saves.
+        assert_eq!(
+            host.rendezvous_secret_or(&b64(&gone), [7; 32]).unwrap(),
+            None,
+            "a removed device gets no secret"
+        );
+        assert_eq!(
+            host.rendezvous_secret_or(&b64(&kept), [8; 32]).unwrap(),
+            Some([8; 32])
+        );
         let file = Clients::load(dir.path());
         assert_eq!(
             file.role_of(&gone.public().x25519).1,
@@ -533,7 +560,49 @@ mod tests {
         );
         assert_eq!(file.role_of(&narrowed.public().x25519).1, Permissions::NONE);
         assert_eq!(file.list().len(), 2);
-        assert!(file.list().iter().any(|c| c.rendezvous.is_some()));
+        assert!(file.list().iter().any(|c| c.rendezvous_secret.is_some()));
+    }
+
+    #[test]
+    fn a_client_without_a_rendezvous_secret_is_given_one_once() {
+        let dir = tempfile::tempdir().unwrap();
+        let mac = Identity::generate();
+        let x = mac.public().to_b64().0;
+        let mut c = Clients::load(dir.path());
+        c.add("mac", mac.public(), None, false, None).unwrap();
+        assert_eq!(c.rendezvous_secret_or(&x, [1; 32]).unwrap(), Some([1; 32]));
+        assert_eq!(
+            c.rendezvous_secret_or(&x, [2; 32]).unwrap(),
+            Some([1; 32]),
+            "the one it has stays"
+        );
+        assert_eq!(
+            Clients::load(dir.path()).list()[0].rendezvous_secret(),
+            Some([1; 32])
+        );
+    }
+
+    #[test]
+    fn a_removed_clients_rendezvous_secret_is_forgotten() {
+        let dir = tempfile::tempdir().unwrap();
+        let mac = Identity::generate();
+        let x = mac.public().to_b64().0;
+        let file = dir.path().join("clients.toml");
+        let mut c = Clients::load(dir.path());
+        c.add("mac", mac.public(), Some([5; 32]), false, None)
+            .unwrap();
+        assert!(std::fs::read_to_string(&file)
+            .unwrap()
+            .contains(&"05".repeat(32)));
+        c.remove(&x).unwrap();
+        assert!(!std::fs::read_to_string(&file)
+            .unwrap()
+            .contains(&"05".repeat(32)));
+        assert_eq!(
+            c.rendezvous_secret_or(&x, [6; 32]).unwrap(),
+            None,
+            "and none is made for it again"
+        );
     }
 
     #[test]

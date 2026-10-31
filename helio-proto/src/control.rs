@@ -403,16 +403,12 @@ pub enum Control {
         low: u16,
         high: u16,
     },
-    /// Host -> client, over the authenticated tunnel: how to find the host
-    /// across the internet (its rendezvous key and record secret). Upgrades
-    /// pairings made before pairing exchanged them.
+    /// Host -> client, over the authenticated tunnel, to a paired client
+    /// only: its own rendezvous secret, which finds the host across the
+    /// internet (docs/networking.md). Reaches a client added without a PIN
+    /// pairing (`helio host add-client`), and one whose secret changed.
     RendezvousOffer {
-        key: [u8; 32],
         secret: [u8; 32],
-    },
-    /// Client -> host, in answer: the client's rendezvous key.
-    RendezvousKey {
-        key: [u8; 32],
     },
     /// Host -> client: something about the host the user should know
     /// (`host_warning::*`), shown while streaming. Clients that do not know
@@ -548,7 +544,6 @@ const OP_PING_REPLY: u8 = 10;
 const OP_GAMEPAD: u8 = 11;
 const OP_RUMBLE: u8 = 12;
 const OP_RENDEZVOUS_OFFER: u8 = 13;
-const OP_RENDEZVOUS_KEY: u8 = 14;
 const OP_HOST_WARNING: u8 = 15;
 const OP_PROGRESS: u8 = 16;
 const OP_AGENT_CONTROL: u8 = 17;
@@ -699,9 +694,8 @@ impl Control {
                 w.u16(low);
                 w.u16(high);
             }
-            Control::RendezvousOffer { key, secret } => {
+            Control::RendezvousOffer { secret } => {
                 w.u8(OP_RENDEZVOUS_OFFER);
-                w.bytes(&key);
                 w.bytes(&secret);
             }
             Control::HostWarning(code) => {
@@ -711,10 +705,6 @@ impl Control {
             Control::Progress(step) => {
                 w.u8(OP_PROGRESS);
                 w.u8(step);
-            }
-            Control::RendezvousKey { key } => {
-                w.u8(OP_RENDEZVOUS_KEY);
-                w.bytes(&key);
             }
             Control::AgentControl(op) => {
                 w.u8(OP_AGENT_CONTROL);
@@ -868,11 +858,7 @@ impl Control {
                 low: r.u16()?,
                 high: r.u16()?,
             },
-            OP_RENDEZVOUS_OFFER => Control::RendezvousOffer {
-                key: r.array()?,
-                secret: r.array()?,
-            },
-            OP_RENDEZVOUS_KEY => Control::RendezvousKey { key: r.array()? },
+            OP_RENDEZVOUS_OFFER => Control::RendezvousOffer { secret: r.array()? },
             OP_HOST_WARNING => Control::HostWarning(r.u8()?),
             OP_PROGRESS => Control::Progress(r.u8()?),
             OP_AGENT_CONTROL => Control::AgentControl(r.u8()?),
@@ -1005,11 +991,7 @@ mod tests {
             low: 65535,
             high: 12,
         });
-        round_trip(Control::RendezvousOffer {
-            key: [1; 32],
-            secret: [2; 32],
-        });
-        round_trip(Control::RendezvousKey { key: [3; 32] });
+        round_trip(Control::RendezvousOffer { secret: [2; 32] });
         round_trip(Control::HostWarning(host_warning::INPUT_BLOCKED));
         round_trip(Control::Progress(progress::DISPLAY));
         round_trip(Control::AgentControl(agent_control::TAKE_OVER));
