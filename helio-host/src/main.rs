@@ -9,9 +9,12 @@
 //!   helio-host enable | disable      hosting on (the host runs at every start,
 //!                                    from now) or off (see `hosting`)
 //!   helio-host status [--json]       off, starting, on or failed; for on,
-//!                                    whether the web API answers
+//!                                    whether its API answers
 //!   helio-host restart               the running host starts again: now, or
 //!                                    when its session ends (`restart`)
+//!   helio-host pair PIN [--device NAME] [--permissions LIST]
+//!                                    give the running host the PIN a device
+//!                                    asking to pair shows (`ask`)
 //!
 //! On a Mac, also:
 //!
@@ -35,6 +38,7 @@
 
 #[cfg(windows)]
 mod apps;
+mod ask;
 #[cfg(windows)]
 mod audio;
 #[cfg(any(target_os = "macos", target_os = "linux"))]
@@ -215,13 +219,15 @@ fn main() -> ExitCode {
         "enable" => hosting::switch(true),
         "disable" => hosting::switch(false),
         "status" => hosting::print_status(&dir, args.iter().any(|a| a == "--json")),
-        "restart" => hosting::ask_restart(&dir),
+        "restart" => ask::restart(&dir),
+        "pair" => ask::pair(&dir, &args[1..]),
         #[cfg(target_os = "macos")]
         "grants" => permissions::print_grants(),
         other => {
             eprintln!(
                 "helio-host: no command {other:?}. helio-host is what the system and Helio run \
-                    (host, enable, disable, status, restart); this computer's hosting is `helio host` \
+                    (host, enable, disable, status, restart, pair); this computer's hosting is \
+                    `helio host` \
                     (helio host --help)."
             );
             ExitCode::FAILURE

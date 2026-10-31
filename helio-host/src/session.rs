@@ -85,7 +85,7 @@ const INJECTION_MARGIN: Duration = Duration::from_millis(300);
 /// Input at the host in a session's first seconds is the session's own
 /// doing (waking the display, resetting the screensaver), not a person's.
 const START_GRACE: Duration = Duration::from_secs(3);
-/// Agent notes kept for the web UI.
+/// Agent notes kept for the API.
 const AGENT_LOG_LEN: usize = 200;
 
 pub enum SessionCmd {
@@ -101,13 +101,13 @@ pub enum SessionCmd {
         peer: PeerId,
         report: LossReport,
     },
-    /// A watcher (or the web UI: peer 0) takes over, hands back, pauses,
+    /// A watcher (or the API: peer 0) takes over, hands back, pauses,
     /// resumes or stops the agent (`agent_control::*`).
     AgentControl {
         peer: PeerId,
         op: u8,
     },
-    /// A client's permissions changed (web UI): its running session, or
+    /// A client's permissions changed (the API): its running session, or
     /// its watching, follows.
     Permissions {
         key: String,
@@ -218,7 +218,7 @@ fn key_repeat(sink: &platform::Sink, req: &SessionStart) -> Option<KeyRepeat> {
     Some(KeyRepeat::new(rate))
 }
 
-/// One line of an agent's activity, for the web UI.
+/// One line of an agent's activity, for the API.
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct AgentLogEntry {
     pub unix_ms: u64,
@@ -1029,7 +1029,7 @@ impl SessionManager {
         );
     }
 
-    /// A watcher (or the web UI, `peer` 0) acts on the agent.
+    /// A watcher (or the API, `peer` 0) acts on the agent.
     fn agent_control(&mut self, peer: PeerId, op: u8) {
         let Some(a) = self.active.as_mut() else {
             return;
@@ -1329,7 +1329,7 @@ impl SessionManager {
         }
     }
 
-    /// Once a second while streaming: the session's status for the web UI
+    /// Once a second while streaming: the session's status for the API
     /// and Helio Host's window, and the stream's line in the log.
     fn report_second(&mut self) {
         let Some(a) = self.active.as_mut() else {

@@ -86,7 +86,7 @@ loaded before it runs, from System32 alone (`helio-host/build.rs`), so a
 firewall rules and the copy.
 
 State lives in `C:\ProgramData\Helio Host\`: `config.toml`, the host's identity,
-paired clients, the web UI's certificate and accounts, and `logs\`. The host
+paired clients, the API's certificate, tokens and admin account, and `logs\`. The host
 makes that folder private when it starts (`helio-host/src/private.rs`): only
 SYSTEM and Administrators can read it, apart from the two files Helio Host's
 window needs (`config.toml`, `web-cert.pem`). It uses the folder only if
@@ -366,6 +366,7 @@ bindings): see [../install.md](../install.md#helio-on-windows).
 
 Not verified yet: keyboard, mouse and controllers streaming another machine
 (tests so far streamed the same PC, which feeds input back into itself),
-on-glass timing on a real monitor, and HelioHost starting the host again at
-once after a change that restarts it (type-checked; the restart itself ran
-on a Mac).
+on-glass timing on a real monitor, HelioHost starting the host again at
+once after a change that restarts it, and the host's API answering on
+localhost only with `helio host pair` in an administrator terminal
+(type-checked; the restart, the API and `helio host pair` ran on a Mac).

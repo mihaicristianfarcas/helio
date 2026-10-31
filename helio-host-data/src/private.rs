@@ -15,7 +15,7 @@
 //!
 //! And the folder must be the host's from the start. Any user may create
 //! `C:\ProgramData\Helio Host` before the host first runs, and fill it: with an
-//! admin account for the web UI, a paired device of their own, the host's
+//! admin account for the host's API, a paired device of their own, the host's
 //! keys. Its owner would also keep the right to change its permissions. So
 //! the host trusts the folder only when SYSTEM or Administrators own it; it
 //! creates it owned by Administrators, private from its first instant (not

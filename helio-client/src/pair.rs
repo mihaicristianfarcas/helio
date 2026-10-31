@@ -1,5 +1,6 @@
 //! Finding hosts on the network and pairing with one, the way Moonlight does:
-//! the client shows a PIN, the user types it into the host's web UI, and each
+//! the client shows a PIN, the user types it into Helio on the host (or
+//! `helio host pair` there), and each
 //! side learns the other's keys over a PIN-authenticated exchange.
 //!
 //! Also whether each paired host is up ([`probe`]): asked on its pairing
@@ -31,7 +32,6 @@ pub struct Discovered {
     /// "windows", "macos" or "linux".
     pub os: String,
     pub pairing_port: u16,
-    pub web_port: u16,
     /// Its network adapters, to wake it by.
     pub wake: Vec<helio_pairing::wake::Mac>,
     /// Already paired (its key is in `hosts.toml`).
@@ -66,7 +66,6 @@ pub fn discover(dir: &Path, timeout: Duration) -> Result<Vec<Discovered>, String
                 port: f.port,
                 os: f.os,
                 pairing_port: f.pairing_port,
-                web_port: f.web_port,
                 wake: f.wake,
             })
         })
@@ -98,7 +97,7 @@ pub fn resolve(spec: &str) -> Result<SocketAddr, String> {
         .ok_or_else(|| format!("{spec} has no address"))
 }
 
-/// The name this client pairs under, as the host's web UI will list it.
+/// The name this client pairs under, as the host will list it.
 pub fn client_name() -> String {
     #[cfg(target_os = "macos")]
     if let Ok(out) = std::process::Command::new("scutil")

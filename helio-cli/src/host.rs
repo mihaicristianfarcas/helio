@@ -14,7 +14,7 @@
 //! and exit with 740, before they touch the folder (only an administrator
 //! may create it: `private`). A running host reads its clients only when
 //! it starts, so a change to them restarts it (`helio-host restart`: now,
-//! or when its session ends), as `restart` does; the host's own web API
+//! or when its session ends), as `restart` does; the host's own API
 //! needs the token only an administrator may read there too.
 
 use std::io::Write;
@@ -53,6 +53,11 @@ pub fn run(command: HostCommand) -> ExitCode {
             with_data("remove-client", |dir| remove_client(dir, &x25519))
         }
         HostCommand::Restart => with_data("restart", |_| restart()),
+        HostCommand::Pair {
+            pin,
+            device,
+            permissions,
+        } => with_data("pair", |_| pair(&pin, device.as_deref(), permissions)),
     }
 }
 
@@ -103,10 +108,35 @@ fn changed(what: &str) {
 /// `helio host restart`: what the host's program says. It exits with
 /// [`NOT_RUNNING`] when no host runs, which is a failure here.
 fn restart() -> ExitCode {
+    ask_host(&["restart".to_string()])
+}
+
+/// `helio host pair PIN`: the host's program gives the PIN to the running
+/// host (helio-host's `ask`).
+fn pair(pin: &str, device: Option<&str>, permissions: Option<Permissions>) -> ExitCode {
+    let mut args = vec!["pair".to_string(), pin.to_string()];
+    if let Some(d) = device {
+        args.extend(["--device".to_string(), d.to_string()]);
+    }
+    if let Some(p) = permissions {
+        let names = p.names().join(",");
+        let list = if names.is_empty() {
+            "none".into()
+        } else {
+            names
+        };
+        args.extend(["--permissions".to_string(), list]);
+    }
+    ask_host(&args)
+}
+
+/// Run the host's program with `args`, which asks the running host, and
+/// pass on what it says; any exit but 0 is a failure here.
+fn ask_host(args: &[String]) -> ExitCode {
     let Some(program) = engine::host_program() else {
         return fail(engine::no_program());
     };
-    match engine::command(&program).arg("restart").output() {
+    match engine::command(&program).args(args).output() {
         Ok(out) => {
             let _ = std::io::stdout().write_all(&out.stdout);
             let _ = std::io::stderr().write_all(&out.stderr);
@@ -355,13 +385,13 @@ mod tests {
     fn the_hosts_state_is_coloured_by_what_it_says_and_the_rest_left_as_it_is() {
         let painted = |look: Look, state: &str| style::paint(true, look, state);
         assert_eq!(
-            state_in_colour("on; the web UI answers at https://localhost:47802\n"),
+            state_in_colour("on; its API answers at https://localhost:47802\n"),
             format!(
-                "{}; the web UI answers at https://localhost:47802\n",
+                "{}; its API answers at https://localhost:47802\n",
                 painted(Look::Good, "on")
             )
         );
-        assert!(state_in_colour("on, but the web UI does not answer")
+        assert!(state_in_colour("on, but its API does not answer")
             .starts_with(&painted(Look::Warn, "on")));
         assert!(state_in_colour("starting\n").starts_with(&painted(Look::Warn, "starting")));
         assert_eq!(

@@ -254,8 +254,7 @@ impl HelioApp {
                     None => self.demo.actions.push(action),
                 }
             } else if let Some(address) = action.strip_prefix("pair=") {
-                let web = crate::model::web_url_for(address);
-                self.pair_with(address.to_string(), address.to_string(), web, false, cx);
+                self.pair_with(address.to_string(), address.to_string(), false, cx);
             } else if action == "add" {
                 self.show_add_host(window, cx);
             } else if action == "alone" {

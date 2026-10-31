@@ -164,7 +164,7 @@ fn sample(s: &mut Snapshot) {
             "name": "gaming-pc",
             "port": 47800,
             "pairing_port": 47801,
-            "web_port": 47802,
+            "api_port": 47802,
             "nvenc_preset": 1,
             "nvenc_two_pass": true,
             "nvidia_max_power": true,

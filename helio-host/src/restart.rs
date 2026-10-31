@@ -41,7 +41,7 @@ pub enum When {
 }
 
 impl When {
-    /// As the web API says it.
+    /// As the API says it.
     pub fn word(self) -> &'static str {
         match self {
             When::Now => "now",
@@ -54,7 +54,7 @@ const NONE: u8 = 0;
 const DUE: u8 = 1;
 const NOW: u8 = 2;
 
-/// Whether a restart is due, shared by whoever asks (the web API, the
+/// Whether a restart is due, shared by whoever asks (the API, the
 /// session thread) and the receive loop, which acts on it.
 #[derive(Default)]
 pub struct Restart {

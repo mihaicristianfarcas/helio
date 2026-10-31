@@ -11,7 +11,7 @@
 //! held back and why.
 //!
 //! On the wire and in the host's files the set is a bitmask; in files and
-//! the web API it is written as names (`"view"`, `"keyboard"`), so a file
+//! the host's API it is written as names (`"view"`, `"keyboard"`), so a file
 //! reads plainly and a name a newer host wrote is skipped, not misread.
 //!
 //! Apollo has no AI agents. An agent's set uses the same bits for seeing
@@ -48,7 +48,7 @@ pub const WATCH: u16 = 1 << 8;
 /// input is held until a person watches.
 pub const UNWATCHED: u16 = 1 << 9;
 
-/// Every permission, with its name in files and the web API.
+/// Every permission, with its name in files and the host's API.
 pub const NAMES: [(u16, &str); 10] = [
     (VIEW, "view"),
     (KEYBOARD, "keyboard"),

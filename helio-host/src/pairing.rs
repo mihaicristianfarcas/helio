@@ -1,8 +1,8 @@
 //! The host's pairing listener and the queue of clients waiting for a PIN.
 //!
 //! A client connects and asks to pair; the request waits here until the user
-//! types the PIN the client is showing into the web UI (or declines, or five
-//! minutes pass). With the PIN, the user may choose what the client may do
+//! types the PIN the client is showing into Helio on the host, or gives it
+//! to `helio host pair` (or declines, or five minutes pass). With the PIN, the user may choose what the client may do
 //! here; each request says what it gets otherwise
 //! (`Permissions::on_pairing`), so the choice can start from that.
 

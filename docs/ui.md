@@ -28,7 +28,7 @@ action on a page. Light and dark follow the system
   panel and the Dock (`desktop`), and the update check's notice, sheet and
   settings (`updates`, over `helio-update`).
 - **`helio-app`**: the app. `host/` is This computer: the host's pages, a
-  client of its web API (`api.rs`, `worker.rs`, `link.rs`), the hosting
+  client of its API on localhost (`api.rs`, `worker.rs`, `link.rs`), the hosting
   switch (`switch.rs`) and the host's icon (`tray.rs`).
 
 ## The glass, on each system
@@ -78,8 +78,7 @@ the logs, reporting an issue).
 
 - **Hosts**: a card per host with its status, this computer's own host left
   out. Hovering says what a click does (Stream, Wake, Pair); the card's "…"
-  or a right click has the rest (Steam Big Picture, Wake, the web UI,
-  Unpair). Under the cards, what a click streams at, and how to change it.
+  or a right click has the rest (Steam Big Picture, Wake, Unpair). Under the cards, what a click streams at, and how to change it.
 - **This computer**: while hosting is off, one page (**Overview**) that says
   so, what hosting is, and leads to Settings → Hosting, where the switch
   is. While it is on, the host's pages:
@@ -177,7 +176,8 @@ looking, every three seconds, and not for its devices or the agent's log.
 
 ### How This computer reaches the host
 
-Over the host's web API, HTTPS on localhost, trusting only the certificate
+Over the host's API, HTTPS on localhost (the only place it answers),
+trusting only the certificate
 the host made for itself (`web-cert.pem` in its data folder), with a bearer
 token:
 
@@ -187,16 +187,21 @@ token:
   nothing.
 - **An app token, on Windows.** The host is a service there, and its token
   is readable by SYSTEM and Administrators only, so an app that is not
-  elevated **signs in once** with the web UI's admin account (creating it
+  elevated **signs in once** with the host's admin account (creating it
   if there is none yet). It gets an app token, which it keeps in the user's
   profile (`%APPDATA%\Helio Host\app-token`) and the host keeps hashed
   (`app-tokens.toml`). Signing out drops it on both sides.
 
 `POST /api/app-token` (user, password, optional `setup` to create the
-account, a name) and `DELETE /api/app-token` are the API's only
-app-specific endpoints; every other endpoint takes the bearer token as it
-takes the web UI's cookie. `/api/status` says, on a Mac, what macOS allows
-the host (`grants`: Screen Recording, Accessibility).
+account, a name) and `DELETE /api/app-token` give and take back an app
+token; every other endpoint but `/api/state` takes the bearer token.
+`/api/status` says, on a Mac, what macOS allows the host (`grants`: Screen
+Recording, Accessibility), and whether a restart is ahead (`restart`) and
+when the host started (`started_unix`): the settings pages say "restarting"
+until another host answers. `POST /api/grants/check` asks a Mac host to
+look whether Screen Recording was allowed since it started (the window
+does when it comes back to the front), and `POST /api/restart` restarts
+the host.
 
 ## Logs
 

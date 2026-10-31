@@ -26,7 +26,7 @@ cat >"$HELIO_HOST_DATA_DIR/config.toml" <<'TOML'
 name = "linux-loop"
 port = 47810
 pairing_port = 47811
-web_port = 47812
+api_port = 47812
 internet_access = false
 TOML
 

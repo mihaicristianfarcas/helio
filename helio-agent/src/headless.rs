@@ -98,7 +98,8 @@ fn find_host(data_dir: &Path, host: &str) -> Result<KnownHost, String> {
     if person.find(host).is_some() {
         return Err(format!(
             "This device's AI agent is not paired with {host} yet (only Helio is). Pair it once: `helio pair-agent {host}` \
-                or Helio > Agents > Pair, then type the PIN in Helio Host's web UI on {host}."
+                or Helio > Agents > Pair, then type the PIN in Helio on {host} (This computer > Devices), \
+                or run `helio host pair PIN` there."
         ));
     }
     Err(if names.is_empty() {

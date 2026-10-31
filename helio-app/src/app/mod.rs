@@ -320,8 +320,8 @@ impl HelioApp {
             this.follow_hosting(window, cx)
         })
         .detach();
-        // Back in front (from System Settings, a terminal, the host's own
-        // web UI): hosting and the host may have changed meanwhile.
+        // Back in front (from System Settings, a terminal): hosting and the
+        // host may have changed meanwhile.
         cx.observe_window_activation(window, |this, window, cx| {
             if window.is_window_active() {
                 this.hosting.update(cx, |h, cx| h.refresh(cx));
@@ -630,7 +630,7 @@ impl HelioApp {
     pub fn start_pairing(&mut self, item: &Item, cx: &mut Context<Self>) {
         self.menu = None;
         if let Some(address) = item.pairing_address() {
-            self.pair_with(item.name.clone(), address, item.web_url(), false, cx);
+            self.pair_with(item.name.clone(), address, false, cx);
         }
     }
 
@@ -638,7 +638,6 @@ impl HelioApp {
         &mut self,
         title: String,
         address: String,
-        web_url: Option<String>,
         agent: bool,
         cx: &mut Context<Self>,
     ) {
@@ -649,13 +648,9 @@ impl HelioApp {
         } else {
             title
         };
-        self.pairing = Some(Pairing::start_as(
-            title,
-            address,
-            web_url,
-            agent,
-            move || waker.wake(),
-        ));
+        self.pairing = Some(Pairing::start_as(title, address, agent, move || {
+            waker.wake()
+        }));
         cx.notify();
     }
 
@@ -666,8 +661,7 @@ impl HelioApp {
                 let address = field.read(cx).text().trim().to_string();
                 if !address.is_empty() {
                     this.add_host = None;
-                    let web = crate::model::web_url_for(&address);
-                    this.pair_with(address.clone(), address, web, false, cx);
+                    this.pair_with(address.clone(), address, false, cx);
                 }
             }
             FieldEvent::Cancel => {
@@ -686,12 +680,6 @@ impl HelioApp {
     pub fn confirm_unpair(&mut self, item: &Item, cx: &mut Context<Self>) {
         self.menu = None;
         self.confirm_unpair = Some(item.clone());
-        cx.notify();
-    }
-
-    pub fn open_url(&mut self, url: &str, cx: &mut Context<Self>) {
-        self.menu = None;
-        cx.open_url(url);
         cx.notify();
     }
 

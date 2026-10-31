@@ -2,10 +2,10 @@
 //! the one window (This computer in the sidebar): the host at a glance (the
 //! session, with its numbers; an agent's, with its controls), the devices
 //! (pairing requests first), its log; and the host's settings, in Settings
-//! → Hosting under the switch (each setting in one place). What the web UI
-//! does, native, for this computer.
+//! → Hosting under the switch (each setting in one place). What Sunshine's
+//! web UI does, native, for this computer.
 //!
-//! The pages are a client of the host's web API on localhost, with the
+//! The pages are a client of the host's API on localhost, with the
 //! certificate the host made pinned (`api`), through one worker thread
 //! (`worker`) whose word the app keeps (`link`) while hosting is on
 //! (`switch`); the tray icon reads the same (`tray`).
@@ -100,7 +100,7 @@ pub struct HostPages {
     pub page_scroll: ScrollHandle,
 }
 
-const PORT_KEYS: [&str; 3] = ["port", "pairing_port", "web_port"];
+const PORT_KEYS: [&str; 3] = ["port", "pairing_port", "api_port"];
 
 impl HostPages {
     pub fn new(
