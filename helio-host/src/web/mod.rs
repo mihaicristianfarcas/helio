@@ -489,7 +489,7 @@ async fn clients(State(web): State<Shared>, headers: HeaderMap) -> Response {
                 .is_some_and(|p| p.is_established());
             json!({
                 "name": c.name, "id": id, "key": c.x25519, "paired_at": c.paired_at, "online": online,
-                "agent": c.agent, "permissions": c.permissions,
+                "agent": c.agent, "permissions": c.permissions, "stopped": c.stopped,
                 "possible": Permissions::possible(c.agent),
             })
         })
@@ -560,6 +560,39 @@ async fn set_permissions(
         )
             .into_response(),
     }
+}
+
+/// An agent a person stopped may start sessions again.
+async fn allow_agent(
+    State(web): State<Shared>,
+    headers: HeaderMap,
+    Json(req): Json<Unpair>,
+) -> Response {
+    require_auth!(web, headers);
+    tracing::info!(
+        client = client_name(&web, &req.key),
+        "API: agent allowed again"
+    );
+    match web.host.allow_agent(&req.key) {
+        Ok(changed) => Json(json!({"ok": changed})).into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"error": e.to_string()})),
+        )
+            .into_response(),
+    }
+}
+
+/// The name of the paired client with this key ("" if none).
+fn client_name(web: &Web, key: &str) -> String {
+    web.host
+        .clients
+        .lock()
+        .list()
+        .iter()
+        .find(|c| c.x25519 == key)
+        .map(|c| c.name.clone())
+        .unwrap_or_default()
 }
 
 async fn agent_log(State(web): State<Shared>, headers: HeaderMap) -> Response {
@@ -768,6 +801,7 @@ pub fn serve(host: Arc<Host>) {
         .route("/api/clients", get(clients))
         .route("/api/clients/remove", post(unpair))
         .route("/api/clients/permissions", post(set_permissions))
+        .route("/api/clients/allow", post(allow_agent))
         .route("/api/agent/log", get(agent_log))
         .route("/api/agent/{op}", post(agent_op))
         .route("/api/config", get(get_config).put(put_config))

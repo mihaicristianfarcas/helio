@@ -11,6 +11,9 @@
 //! which way the clipboard goes, whether it may start apps, take over or
 //! watch agents. They can be changed without unpairing it.
 //!
+//! An agent a person stopped stays stopped here, across restarts of the
+//! host, until a person allows it again or pairs it again.
+//!
 //! A file from before permissions has none written: a person's device then
 //! keeps everything it could do, and an agent what its `access` said. The
 //! next save writes permissions in their place.
@@ -37,6 +40,10 @@ pub struct Client {
     /// What it may do here; only what its kind can be allowed
     /// (`Permissions::fit`).
     pub permissions: Permissions,
+    /// An agent a person stopped: its sessions are refused until a person
+    /// allows it again. Kept here, not in the host's memory, so that a
+    /// restart of the host does not let it back.
+    pub stopped: bool,
 }
 
 /// A client as `clients.toml` holds it.
@@ -57,6 +64,8 @@ struct Stored {
     /// written.
     #[serde(default, skip_serializing)]
     access: Option<Access>,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    stopped: bool,
 }
 
 impl From<Stored> for Client {
@@ -74,6 +83,7 @@ impl From<Stored> for Client {
             rendezvous: s.rendezvous,
             agent: s.agent,
             permissions,
+            stopped: s.stopped,
         }
     }
 }
@@ -89,6 +99,7 @@ impl From<Client> for Stored {
             agent: c.agent,
             permissions: Some(c.permissions),
             access: None,
+            stopped: c.stopped,
         }
     }
 }
@@ -232,6 +243,8 @@ impl Clients {
             rendezvous,
             agent,
             permissions,
+            // Paired again, by a person who entered its PIN: a new start.
+            stopped: false,
         };
         match self.list.iter_mut().find(|c| c.x25519 == x) {
             Some(existing) => *existing = client.clone(),
@@ -279,6 +292,26 @@ impl Clients {
         let now = c.permissions;
         self.save()?;
         Ok(Some(now))
+    }
+
+    /// Stop an agent (its sessions are refused), or allow it again. True if
+    /// that changed anything.
+    pub fn set_stopped(&mut self, x25519_b64: &str, stopped: bool) -> std::io::Result<bool> {
+        let Some(c) = self.list.iter_mut().find(|c| c.x25519 == x25519_b64) else {
+            return Ok(false);
+        };
+        if c.stopped == stopped || (stopped && !c.agent) {
+            return Ok(false);
+        }
+        c.stopped = stopped;
+        self.save()?;
+        Ok(true)
+    }
+
+    /// A person stopped the agent with this key, and has not allowed it
+    /// again.
+    pub fn is_stopped(&self, key: &[u8; 32]) -> bool {
+        self.by_key(key).is_some_and(|c| c.stopped)
     }
 
     fn by_key(&self, key: &[u8; 32]) -> Option<&Client> {
@@ -398,6 +431,29 @@ mod tests {
             Some(Permissions::AGENT_ALL)
         );
         assert_eq!(c.set_permissions("nobody", all).unwrap(), None);
+    }
+
+    #[test]
+    fn a_stopped_agent_stays_stopped_across_a_restart_until_allowed_again() {
+        let dir = tempfile::tempdir().unwrap();
+        let (agent, person) = (Identity::generate(), Identity::generate());
+        let mut c = Clients::load(dir.path());
+        c.add("bot", agent.public(), None, true, None).unwrap();
+        c.add("mac", person.public(), None, false, None).unwrap();
+        let (x, _) = agent.public().to_b64();
+        assert!(c.set_stopped(&x, true).unwrap());
+        // The host starts again: still stopped.
+        let mut c = Clients::load(dir.path());
+        assert!(c.is_stopped(&agent.public().x25519));
+        assert!(c.set_stopped(&x, false).unwrap());
+        assert!(!Clients::load(dir.path()).is_stopped(&agent.public().x25519));
+        // Only agents are stopped.
+        let (p, _) = person.public().to_b64();
+        assert!(!c.set_stopped(&p, true).unwrap());
+        // Paired again (a person entered its PIN): a new start.
+        c.set_stopped(&x, true).unwrap();
+        c.add("bot", agent.public(), None, true, None).unwrap();
+        assert!(!c.is_stopped(&agent.public().x25519));
     }
 
     #[test]

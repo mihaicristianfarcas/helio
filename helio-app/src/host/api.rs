@@ -432,6 +432,8 @@ pub struct Client {
     pub agent: bool,
     /// What it may do here.
     pub permissions: Permissions,
+    /// An agent a person stopped: refused until allowed again.
+    pub stopped: bool,
 }
 
 #[derive(Debug, Clone, Default, Deserialize, PartialEq)]

@@ -82,9 +82,10 @@ the logs, reporting an issue).
 - **This computer**: while hosting is off, one page (**Overview**) that says
   so, what hosting is, and leads to Settings → Hosting, where the switch
   is. While it is on, the host's pages:
-  - **Overview**: a pairing request as a banner when there is one; the
-    session (who, the mode, End Session; an agent's with Pause, Hand Back,
-    Stop) with its numbers (frames, bitrate, host latency, round trip,
+  - **Overview**: a pairing request as a banner when there is one; an
+    agent someone stopped, with **Allow Again**; the session (who, the
+    mode, End Session; an agent's with Pause, Hand Back, Stop) with its
+    numbers (frames, bitrate, host latency, round trip,
     loss, recoveries); this host (ID, tunnel port, internet address, the
     router's port mapping, devices, version); the agent's recent actions;
     Sign Out when the window signed in with an account (Windows).
@@ -268,7 +269,8 @@ settings are on the settings pages, `settings=hosting|video|input|agents`), `hos
 settings), `host-signin`, `host-setup`, `host-offline` (the real host made
 signed out, without an account yet, or not answering),
 `host-restart=now|after_session` (a restart the host has ahead, as its
-settings pages say it),
+settings pages say it), `host-stopped` (its paired agents stopped, as the
+overview says it),
 `signin-as=USER:PASSWORD`, `permissions=NAME` (the permissions sheet of the
 paired device called NAME). `HELIO_HOST_DATA_DIR` points the app at a test host's
 data folder; `HELIO_HOST_APP_URL`, `HELIO_HOST_APP_CERT` and `HELIO_HOST_APP_TOKEN` at another

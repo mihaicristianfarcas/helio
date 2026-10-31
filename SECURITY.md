@@ -120,7 +120,10 @@ second device paired may only see until the host's owner allows more.
 
 **AI agents** are clients of their own, held to rules the host enforces:
 never over a person, never on a secure screen, only with the permissions
-the host granted. [docs/ai-agents.md](docs/ai-agents.md#threat-model) has their
+the host granted, and held by a person's pause, take-over or stop until
+that person lets go, however often the agent reconnects (a stop is kept
+with the agent's pairing, in `clients.toml`; a pause and a take-over for as
+long as the host runs). [docs/ai-agents.md](docs/ai-agents.md#threat-model) has their
 threat model.
 
 ## Out of scope

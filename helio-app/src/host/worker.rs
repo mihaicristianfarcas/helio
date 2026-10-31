@@ -24,6 +24,8 @@ pub enum Cmd {
     /// What the device with this key may do.
     Permissions(String, Permissions),
     AgentOp(&'static str),
+    /// The stopped agent with this key may start sessions again.
+    AllowAgent(String),
     EndSession,
     PutConfig(Value),
     /// Whether macOS has allowed Screen Recording since the host asked;
@@ -303,6 +305,10 @@ fn execute_inner(api: &mut Api, snap: &mut Snapshot, cmd: Cmd) -> Done {
             .unwrap_or_else(fail),
         Cmd::AgentOp(op) => api
             .post(&format!("/api/agent/{op}"), &json!({}))
+            .map(|_| Done::Saved { restart: false })
+            .unwrap_or_else(fail),
+        Cmd::AllowAgent(key) => api
+            .post("/api/clients/allow", &json!({"key": key}))
             .map(|_| Done::Saved { restart: false })
             .unwrap_or_else(fail),
         Cmd::EndSession => api

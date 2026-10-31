@@ -15,13 +15,15 @@ use super::{now_ms, HostPages};
 /// The host a check pretends to have, whoever looks at it (the window and
 /// the tray icon alike): the made-up one (`host-sample`), or the real one
 /// signed out (`host-signin`), before its account is made (`host-setup`),
-/// or not answering (`host-offline`); and a restart it has ahead
-/// (`host-restart=now|after_session`).
+/// or not answering (`host-offline`); a restart it has ahead
+/// (`host-restart=now|after_session`); and its paired agents stopped
+/// (`host-stopped`).
 #[derive(Default)]
 struct Pretence {
     sample: bool,
     conn: Option<Conn>,
     restart: Option<String>,
+    stopped: bool,
 }
 
 fn pretence() -> &'static Pretence {
@@ -35,6 +37,7 @@ fn pretence() -> &'static Pretence {
                     "host-signin" => p.conn = Some(Conn::SignIn { setup: false }),
                     "host-setup" => p.conn = Some(Conn::SignIn { setup: true }),
                     "host-offline" => p.conn = Some(Conn::NotRunning),
+                    "host-stopped" => p.stopped = true,
                     _ => {
                         if let Some(when) = part.strip_prefix("host-restart=") {
                             p.restart = Some(when.to_string());
@@ -58,6 +61,11 @@ pub fn pretend(s: &mut Snapshot) {
     }
     if let (Some(when), Some(status)) = (&p.restart, s.status.as_mut()) {
         status.restart = Some(when.clone());
+    }
+    if p.stopped {
+        for c in s.clients.iter_mut().filter(|c| c.agent) {
+            c.stopped = true;
+        }
     }
 }
 
@@ -137,6 +145,7 @@ fn sample(s: &mut Snapshot) {
             online: true,
             agent: false,
             permissions: Permissions::PERSON_ALL,
+            stopped: false,
         },
         Client {
             name: "macbook agent".into(),
@@ -146,6 +155,7 @@ fn sample(s: &mut Snapshot) {
             online: false,
             agent: true,
             permissions: Permissions::AGENT_WATCHED,
+            stopped: false,
         },
         Client {
             name: "living-room".into(),
@@ -155,6 +165,7 @@ fn sample(s: &mut Snapshot) {
             online: false,
             agent: false,
             permissions: Permissions::PERSON_CONTROL.with(permission::CLIPBOARD_READ, true),
+            stopped: false,
         },
     ];
     // The made-up host's settings (the host's own defaults), so the

@@ -107,7 +107,8 @@ pub(super) fn refusal(status: AckStatus, watch: bool, host: &str) -> String {
             nothing to watch."
             .into(),
         AckStatus::AgentNotAllowed => format!(
-            "{host} turned the agent away: a person is using it, agents are off there, or \
+            "{host} turned the agent away: a person is using it or stopped this agent (Allow \
+                Again, in Helio on the host, under This computer), agents are off there, or \
                 this agent may not see its screen (its permissions, {WHERE_TO_ALLOW})."
         ),
         AckStatus::Busy => "The host is streaming to another device.".into(),

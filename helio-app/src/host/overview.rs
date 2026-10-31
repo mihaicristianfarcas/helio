@@ -1,4 +1,5 @@
-//! The overview: a pairing request, the session with its numbers, this host.
+//! The overview: a pairing request, an agent stopped here, the session with
+//! its numbers, this host.
 
 use gpui::{div, prelude::*, px, AnyElement, Context, FontWeight};
 use helio_ui::{
@@ -71,6 +72,38 @@ impl HostPages {
                             cx.listener(|this, _, _, cx| this.set_page(Page::Devices, cx)),
                         )),
                 );
+        }
+        // An agent stopped here is refused until someone allows it again:
+        // said where they will look, with the way back.
+        if let Some(c) = self.snap.clients.iter().find(|c| c.agent && c.stopped) {
+            let key = c.key.clone();
+            content = content.child(
+                div()
+                    .id("stopped-agent")
+                    .flex()
+                    .items_center()
+                    .gap(px(12.0))
+                    .px(px(14.0))
+                    .py(px(12.0))
+                    .rounded(px(Radius::CARD))
+                    .bg(t.primary.alpha(0.04))
+                    .border_1()
+                    .border_color(t.hairline)
+                    .child(icon(IconName::Pause, 16.0, t.secondary))
+                    .child(label_stack(
+                        format!("{} is stopped", c.name),
+                        Some("It cannot start a session here until you allow it again.".into()),
+                        t,
+                    ))
+                    .child(
+                        button("allow-agent", "Allow Again", t).on_click(cx.listener(
+                            move |this, _, _, cx| {
+                                this.send(Cmd::AllowAgent(key.clone()));
+                                cx.notify();
+                            },
+                        )),
+                    ),
+            );
         }
         content = content.child(self.session_card(&s, t, cx));
         let mut about = vec![
