@@ -410,7 +410,7 @@ pub fn update_engine(args: &[String]) -> i32 {
             return 1;
         }
     }
-    let started = pinned_engine(&engine).and_then(|pin| {
+    let started = pinned_engine(&engine).and_then(|(pin, engine)| {
         // Said first: what `enable` says comes after it, in the same file.
         say(&format!(
             "{} enable: the host moves onto it",
@@ -517,8 +517,13 @@ fn wait_for_installer(pid: u32) -> Result<u32, String> {
 /// `engine` opened so that nothing can change, rename or delete it while
 /// the handle lives (others may only read it, as starting it does), once it
 /// is known to be an engine: `helio-host.exe`, and in a build that requires
-/// it, signed by the publisher (`signature`).
-fn pinned_engine(engine: &Path) -> Result<std::fs::File, String> {
+/// it, signed by the publisher (`signature`). With the path to check and
+/// start it by: the open file's own, every junction or link on the way
+/// resolved. Looks removable, is not: the handle holds the file, not the
+/// path, so a junction in `engine` could be pointed elsewhere between the
+/// check and the start; the folders on the resolved path cannot be renamed
+/// while a file in them is open.
+fn pinned_engine(engine: &Path) -> Result<(std::fs::File, PathBuf), String> {
     use std::os::windows::fs::OpenOptionsExt;
     /// `FILE_SHARE_READ`, and no other sharing.
     const SHARE_READ: u32 = 0x1;
@@ -533,11 +538,43 @@ fn pinned_engine(engine: &Path) -> Result<std::fs::File, String> {
         .share_mode(SHARE_READ)
         .open(engine)
         .map_err(|e| format!("{}: {e}", engine.display()))?;
-    if let Err(problem) = signature::check(engine) {
+    let engine = final_path(&pin).map_err(|e| format!("{}: {e}", engine.display()))?;
+    if let Err(problem) = signature::check(&engine) {
         if signature::REQUIRED {
             return Err(format!("{} is refused: {problem}", engine.display()));
         }
         eprintln!("warning: {problem} (this build does not require a signature)");
     }
-    Ok(pin)
+    Ok((pin, engine))
+}
+
+/// The path of the file `file` has open, as Windows resolves it
+/// (`GetFinalPathNameByHandleW`: no junction or link left in it), written
+/// `C:\…` rather than `\\?\C:\…` where it is on a drive.
+fn final_path(file: &std::fs::File) -> Result<PathBuf, String> {
+    use std::os::windows::io::AsRawHandle;
+    use windows::Win32::Foundation::HANDLE;
+    use windows::Win32::Storage::FileSystem::{
+        GetFinalPathNameByHandleW, FILE_NAME_NORMALIZED, GETFINALPATHNAMEBYHANDLE_FLAGS,
+        VOLUME_NAME_DOS,
+    };
+    let mut buf = [0u16; 1024];
+    // SAFETY: the handle is `file`'s, open for the whole call; the buffer
+    // is a local of the length given.
+    let n = unsafe {
+        GetFinalPathNameByHandleW(
+            HANDLE(file.as_raw_handle()),
+            &mut buf,
+            GETFINALPATHNAMEBYHANDLE_FLAGS(FILE_NAME_NORMALIZED.0 | VOLUME_NAME_DOS.0),
+        )
+    } as usize;
+    // 0: failed; at least the buffer's length: it would not fit.
+    if n == 0 || n >= buf.len() {
+        return Err("cannot read where it is".into());
+    }
+    let path = String::from_utf16(&buf[..n]).map_err(|e| e.to_string())?;
+    let on_drive = path
+        .strip_prefix(r"\\?\")
+        .filter(|rest| rest.as_bytes().get(1) == Some(&b':'));
+    Ok(PathBuf::from(on_drive.unwrap_or(&path)))
 }
