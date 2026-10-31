@@ -2,7 +2,10 @@
 //! checkout's commit (`HELIO_COMMIT`; empty when the source is an archive,
 //! as a package manager's is) and whether it is a packaged release
 //! (`HELIO_RELEASE`, set by `tools/package-macos` and the release
-//! workflow).
+//! workflow). Also the public key an update's package must be signed with
+//! (`src/signature.rs`): `release-signing.pub`, or `HELIO_RELEASE_KEY` (a
+//! minisign public key) for a build that installs test releases signed
+//! with a key of its own (docs/development.md, Checking an update).
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -23,8 +26,24 @@ fn git(repo: &Path, args: &[&str]) -> Option<String> {
 fn main() {
     println!("cargo:rerun-if-env-changed=HELIO_RELEASE");
     println!("cargo:rerun-if-env-changed=HELIO_COMMIT");
-    let repo =
-        PathBuf::from(std::env::var_os("CARGO_MANIFEST_DIR").expect("set by cargo")).join("..");
+    println!("cargo:rerun-if-env-changed=HELIO_RELEASE_KEY");
+    println!("cargo:rerun-if-changed=release-signing.pub");
+    let manifest = PathBuf::from(std::env::var_os("CARGO_MANIFEST_DIR").expect("set by cargo"));
+    let key = match std::env::var("HELIO_RELEASE_KEY") {
+        Ok(key) if !key.trim().is_empty() => key,
+        _ => std::fs::read_to_string(manifest.join("release-signing.pub"))
+            .expect("helio-update/release-signing.pub is part of the source"),
+    };
+    // The key's line, without the file's comment; the library checks its
+    // form when an update is installed.
+    let key = key
+        .lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty() && !l.starts_with("untrusted comment:"))
+        .collect::<Vec<_>>()
+        .join(" ");
+    println!("cargo:rustc-env=HELIO_BUILD_RELEASE_KEY={key}");
+    let repo = manifest.join("..");
     // A packager that builds outside a checkout can still say the commit.
     let commit = std::env::var("HELIO_COMMIT")
         .ok()

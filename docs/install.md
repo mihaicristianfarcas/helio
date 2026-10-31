@@ -34,7 +34,19 @@ for scripts, under `https://download.helio.mihaicristian.dev/latest/`:
 | `Helio-macos-arm64.zip` | `Helio-macos-x86_64.zip` | `Helio-windows-x86_64-setup.exe` | `Helio-linux-x86_64.tar.gz` |
 
 `latest/SHA256SUMS` has their checksums, and `latest.json` says which
-version and commit they are. On Windows, `Helio-windows-x86_64.zip` holds
+version and commit they are. On each GitHub release, every package has
+its signature beside it (`.minisig`), made with Helio's release key; Helio
+installs an update only with it ([SECURITY.md](../SECURITY.md)). To check
+a download yourself with [minisign](https://jedisct1.github.io/minisign/),
+save the package and its `.minisig` from the release page, and the public
+key, [`helio-update/release-signing.pub`](../helio-update/release-signing.pub):
+
+```sh
+minisign -Vm Helio-VERSION-linux-x86_64.tar.gz -p release-signing.pub
+```
+
+VERSION is the release's. minisign prints the trusted comment, which names
+the file the signature was made for. On Windows, `Helio-windows-x86_64.zip` holds
 the same programs as the installer, unpacked; a copy run from it does not
 update itself (Helio's own update runs the installer).
 

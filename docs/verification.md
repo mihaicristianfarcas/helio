@@ -30,7 +30,8 @@ The rest of what protects a release:
 | Actions | Only GitHub's own and `Swatinem/rust-cache` may run, each pinned to a commit |
 | Inputs of the Windows release | FFmpeg's build is one fixed BtbN build, copied into a pre-release of this repository so it outlives BtbN's pruning, and checked against a SHA-256 before it is unpacked (`tools/windows/ffmpeg-ci.ps1`), as ViGEmBus's installer is |
 | Version tags | Once made, a `v*` tag cannot be moved or deleted |
-| The `release` environment, with the Windows signing secrets | Deploys from `main` only |
+| The `release` environment, with the Windows signing secrets and the release key | Deploys from `main` only |
+| Packages | Each signed with the release key in a job that runs no build (`sign`); Helio's own update installs none without that signature ([development.md](development.md#release-signing)) |
 | Secrets in a push | Secret scanning and push protection are on |
 | Vulnerable dependencies | Dependabot alerts are on |
 

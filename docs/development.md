@@ -174,6 +174,7 @@ normal use.
 | `HELIO_UI_DEMO_SCREEN=PATH` | The picture the sample agent sessions show |
 | `HELIO_HOST_APP_URL`, `HELIO_HOST_APP_CERT`, `HELIO_HOST_APP_TOKEN` | Point This computer at another host's API |
 | `HELIO_UPDATE_API=URL` | The update check, and **Install and Restart**, ask this instead of `https://api.github.com`, and take a release's files only from it (the paths are GitHub's: `/repos/OWNER/NAME/releases/latest`, `/OWNER/NAME/releases/download/vVERSION/FILE`); see [Checking an update](#checking-an-update) |
+| `HELIO_RELEASE_KEY=KEY` | At build time: the minisign public key (the key line of a `.pub` file) whose signature an update's package must carry, instead of `helio-update/release-signing.pub`'s; for installing test releases, see [Checking an update](#checking-an-update) |
 | `HELIO_COMMIT=SHA`, `HELIO_RELEASE=1` | At build time: the commit the update check compares with `main` (else the checkout's), and a release build (follows releases only, and installs them). `cargo run -p helio-update --example check [releases\|main]` asks GitHub as the apps would; `--example install -- FOLDER` installs the latest release into FOLDER as an update would (on a Mac, over an older release's app there; on Windows, the installer checked and copied there, not run), leaving the installed app and its host alone |
 | `HELIO_HOST_NO_PROMPTS=1` | A bundled Mac host does not ask for permissions at start |
 | `HELIO_HOST_TEST_TAP_ONLY=PID[,PID]` | A Mac host's surround capture hears only these processes (a test signal's player): a client streaming the Mac to itself would otherwise send its own playback round again |
@@ -339,16 +340,48 @@ The same variable makes Helio's own update require it
 (`helio-update/src/install/authenticode.rs`): a build given
 `HELIO_HOST_WINDOWS_PUBLISHER` runs a newer release's installer only if it
 carries a valid signature by that subject, so the first signed release
-is the one from which every Windows update is checked for its publisher;
-the releases before it check the SHA-256 alone.
+is the one from which every Windows update is checked for its publisher.
+
+### Release signing
+
+Every package of a release is signed with the release key, in minisign's
+format, and Helio's own update installs nothing without that signature
+(`helio-update/src/signature.rs`, on every system). The key's public half
+is `helio-update/release-signing.pub`, built into Helio. The signature's
+trusted comment names the package's file
+(`file:Helio-1.0.1-linux-x86_64.tar.gz`), and the update requires that
+name, so an older package, or another system's, cannot pass for the one
+offered. GitHub's SHA-256 says only that a file is the one uploaded; on
+Linux the release key's signature is the only check of who made it.
+
+The release workflow's `sign` job signs every package after the builds and
+before anything is published, on `main` only, in the environment
+`release`. It runs no build, and the job that writes the release never
+holds the key. It needs two secrets of the environment, once:
+
+1. `MINISIGN_SECRET_KEY`: the secret key file as `minisign -G` wrote it
+   (`gh secret set MINISIGN_SECRET_KEY --env release < KEYFILE`).
+2. `MINISIGN_PASSWORD`: that file's password (`gh secret set
+   MINISIGN_PASSWORD --env release`, which asks for it).
+
+Without them a push to `main` publishes nothing. The job checks each
+signature against `release-signing.pub`, so a secret that is not that
+key's pair fails there rather than in every update. A copy of Helio
+trusts only the key it was built with, so after a new pair (`minisign -G
+-p helio-update/release-signing.pub -s KEYFILE`, and the secrets set
+again) the copies built before it no longer update themselves: their
+users download the next release by hand. Keep a copy of the secret key
+and its password outside GitHub, and replace the pair only if it leaks.
 
 ### Checking an update
 
 `cargo test -p helio-update --test fake_release` serves a fake latest
 release from this computer through `HELIO_UPDATE_API`, with this system's
-package, and has a 1.0.0 build download, check and put it in place in a
-folder of the test's (`install::rehearse`); a changed package, one served
-from another server and the release the build already is, are refused.
+package signed with a key made for the test, and has a 1.0.0 build given
+that key download, check and put it in place in a folder of the test's
+(`install::rehearse`). A changed package, one without a signature or
+signed with another key, one served from another server, and the release
+the build already is, are refused.
 On a Mac, with a Developer ID identity in the keychain,
 `HELIO_TEST_DEVELOPER_ID="Developer ID Application: …" cargo test -p
 helio-update --test fake_release -- --ignored` also installs one signed by
@@ -357,22 +390,27 @@ the same team and refuses one signed ad hoc.
 By hand, on each system, an installed release updates to a fake newer
 one:
 
-1. Build twice with `HELIO_RELEASE=1`, the workspace's version set to,
-   say, 1.0.0 and then 1.0.1 (put it back after): `tools/build-helio-app`
-   with `HELIO_SIGN_IDENTITY` a Developer ID (macOS; zip the second with
-   `ditto -c -k --keepParent`), `tools/package-windows.ps1`,
-   `tools/linux/package` (`HELIO_PROFILE=dev` is quicker).
-2. Install the first as the downloads install it, turn hosting on, pair
+1. Make a test key without a password: `minisign -G -W -p test.pub -s
+   test.key`.
+2. Build twice with `HELIO_RELEASE=1` and `HELIO_RELEASE_KEY` set to
+   test.pub's key line (its second), the workspace's version set to, say,
+   1.0.0 and then 1.0.1 (put it back after): `tools/build-helio-app` with
+   `HELIO_SIGN_IDENTITY` a Developer ID (macOS; zip the second with `ditto
+   -c -k --keepParent`), `tools/package-windows.ps1`, `tools/linux/package`
+   (`HELIO_PROFILE=dev` is quicker).
+3. Install the first as the downloads install it, turn hosting on, pair
    something.
-3. Lay out the second as a release, and serve it:
-   `tools/fake-release http://ADDRESS:8080 DIR 1.0.1 PACKAGE`, then
-   `python3 -m http.server 8080 --bind ADDRESS --directory DIR`.
-4. Start the installed Helio with `HELIO_UPDATE_API=http://ADDRESS:8080`
+4. Sign the second's package as the release does, `minisign -S -s test.key
+   -m PACKAGE -t file:NAME` (NAME is PACKAGE's file name), lay both out as
+   a release, and serve it: `tools/fake-release http://ADDRESS:8080 DIR
+   1.0.1 PACKAGE PACKAGE.minisig`, then `python3 -m http.server 8080 --bind
+   ADDRESS --directory DIR`.
+5. Start the installed Helio with `HELIO_UPDATE_API=http://ADDRESS:8080`
    and `HELIO_UI_DEMO=install` (as **Install and Restart**). It opens
    again as 1.0.1; the host, while hosting is on, restarts on the new
    engine; pairings and settings stay. To see a refusal, change the
-   package in DIR after `fake-release` listed it, or serve one signed by
-   someone else.
+   package in DIR after `fake-release` listed it, leave out its
+   `.minisig`, or serve one signed by someone else.
 
 On Windows, the installer's signature is checked without Certum the way
 the engine's is above: build with `HELIO_HOST_WINDOWS_PUBLISHER='CN=Helio

@@ -5,8 +5,13 @@
 //! and puts it in place as an update would (`install::rehearse`: into a
 //! folder of the test's; nothing quits, opens or restarts).
 //!
-//! How a package is checked and put in place is each system's own. Here
-//! the Linux archive is unpacked into place; the Windows installer is
+//! Every package must carry the release's own signature
+//! (`src/signature.rs`): the fake release signs with a key made for the
+//! test, which the test's build is given as its release key. One without a
+//! signature, or signed with another key, is refused before it is opened.
+//!
+//! How a package is checked and put in place beyond that is each system's
+//! own. Here the Linux archive is unpacked into place; the Windows installer is
 //! copied (its signature is required only by a build given a publisher,
 //! which a test's build is not; running it is a manual check, in
 //! docs/development.md); and a Mac bundle signed ad hoc, as a test can sign
@@ -21,8 +26,11 @@ use std::io::{BufRead, BufReader, Write};
 use std::net::TcpListener;
 use std::path::Path;
 use std::process::Command;
-use std::sync::{Arc, Mutex, MutexGuard};
+use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
 
+use base64::Engine;
+use blake2::Blake2b512;
+use ed25519_dalek::{Signer, SigningKey};
 use helio_update::install::{package, rehearse};
 use helio_update::{Build, REPOSITORY};
 use sha2::{Digest, Sha256};
@@ -30,12 +38,47 @@ use sha2::{Digest, Sha256};
 /// `HELIO_UPDATE_API` is the process's: one test at a time sets it.
 static API: Mutex<()> = Mutex::new(());
 
-/// The build that updates.
-const MINE: Build = Build {
-    version: "1.0.0",
-    commit: "",
-    release: true,
-};
+/// The key the fake release signs with, and another.
+const RELEASE_KEY: [u8; 32] = [7; 32];
+const OTHER_KEY: [u8; 32] = [8; 32];
+/// minisign's key id for [`RELEASE_KEY`]; any eight bytes.
+const KEY_ID: [u8; 8] = *b"helio-t1";
+
+/// The build that updates, given the fake release's key.
+fn mine() -> Build {
+    static KEY: OnceLock<String> = OnceLock::new();
+    let key = KEY.get_or_init(|| {
+        let public = SigningKey::from_bytes(&RELEASE_KEY).verifying_key();
+        let bytes = [&b"Ed"[..], &KEY_ID, public.as_bytes()].concat();
+        base64::engine::general_purpose::STANDARD.encode(bytes)
+    });
+    Build {
+        version: "1.0.0",
+        commit: "",
+        release: true,
+        release_key: key,
+    }
+}
+
+/// minisign's signature of `data` by `key` for a file named `name`, as the
+/// release workflow makes it (`minisign -S -t file:NAME`).
+fn sign(key: &[u8; 32], data: &[u8], name: &str) -> String {
+    let key = SigningKey::from_bytes(key);
+    let signed = key.sign(&Blake2b512::digest(data)).to_bytes();
+    let comment = format!("file:{name}");
+    let global = key.sign(&[&signed[..], comment.as_bytes()].concat());
+    let b64 = |bytes: &[u8]| base64::engine::general_purpose::STANDARD.encode(bytes);
+    format!(
+        "untrusted comment: signature from minisign secret key\n{}\ntrusted comment: {comment}\n{}\n",
+        b64(&[&b"ED"[..], &KEY_ID, &signed].concat()),
+        b64(&global.to_bytes())
+    )
+}
+
+/// The name of a package's signature in a release.
+fn signature_name(name: &str) -> String {
+    format!("{name}.minisig")
+}
 
 /// The fake release.
 const NEWER: &str = "1.0.1";
@@ -118,18 +161,24 @@ fn download_path(name: &str) -> String {
     format!("/{}/releases/download/v{NEWER}/{name}", slug())
 }
 
-/// GitHub's latest release, as its API writes it: this system's package,
-/// at `url`, listed with `listed`'s size and SHA-256.
-fn release(url: &str, listed: &[u8]) -> Vec<u8> {
+/// GitHub's latest release, as its API writes it: each of `files` (a name,
+/// where it is, its bytes) listed with its size and SHA-256.
+fn release(files: &[(String, String, &[u8])]) -> Vec<u8> {
+    let assets: Vec<_> = files
+        .iter()
+        .map(|(name, url, listed)| {
+            serde_json::json!({
+                "name": name,
+                "size": listed.len(),
+                "browser_download_url": url,
+                "digest": format!("sha256:{}", sha256(listed)),
+            })
+        })
+        .collect();
     serde_json::json!({
         "tag_name": format!("v{NEWER}"),
         "html_url": format!("https://github.com/{}/releases/tag/v{NEWER}", slug()),
-        "assets": [{
-            "name": package(NEWER),
-            "size": listed.len(),
-            "browser_download_url": url,
-            "digest": format!("sha256:{}", sha256(listed)),
-        }],
+        "assets": assets,
     })
     .to_string()
     .into_bytes()
@@ -137,17 +186,37 @@ fn release(url: &str, listed: &[u8]) -> Vec<u8> {
 
 /// The fake release, served with its package by one server that the
 /// updater is pointed at: the package `served` where the release says it
-/// is, listed as `listed`. The guard keeps other tests from pointing the
-/// updater elsewhere meanwhile.
+/// is, listed as `listed`, and signed with the release key. The guard keeps
+/// other tests from pointing the updater elsewhere meanwhile.
 fn fake_release(listed: &[u8], served: &[u8]) -> (Server, MutexGuard<'static, ()>) {
+    let signature = sign(&RELEASE_KEY, listed, &package(NEWER));
+    fake_release_signed(listed, served, Some(signature))
+}
+
+/// [`fake_release`] with the given signature, or none.
+fn fake_release_signed(
+    listed: &[u8],
+    served: &[u8],
+    signature: Option<String>,
+) -> (Server, MutexGuard<'static, ()>) {
     let guard = API.lock().unwrap_or_else(|e| e.into_inner());
     let mut server = Server::bind();
-    let download = download_path(&package(NEWER));
-    let url = format!("{}{download}", server.base);
-    server.serve(vec![
-        (latest_path(), release(&url, listed)),
-        (download, served.to_vec()),
-    ]);
+    let name = package(NEWER);
+    let download = download_path(&name);
+    let mut listed_files = vec![(name, format!("{}{download}", server.base), listed)];
+    let mut served_files = vec![(download, served.to_vec())];
+    if let Some(signature) = &signature {
+        let name = signature_name(&package(NEWER));
+        let download = download_path(&name);
+        listed_files.push((
+            name,
+            format!("{}{download}", server.base),
+            signature.as_bytes(),
+        ));
+        served_files.push((download, signature.as_bytes().to_vec()));
+    }
+    served_files.push((latest_path(), release(&listed_files)));
+    server.serve(served_files);
     std::env::set_var("HELIO_UPDATE_API", &server.base);
     (server, guard)
 }
@@ -252,18 +321,43 @@ fn a_build_takes_the_newer_release_from_the_server_it_is_pointed_at() {
         // Developer ID's, and nothing is put in place.
         std::fs::create_dir_all(&folder).unwrap();
         mac_bundle(&folder, "release 1.0.0", None);
-        let err = rehearse(&MINE, &folder, &|_, _| {}).unwrap_err();
+        let err = rehearse(&mine(), &folder, &|_, _| {}).unwrap_err();
         assert!(err.contains("not signed with a Developer ID"), "{err}");
         assert!(installed(&folder).unwrap().contains("release 1.0.0"));
     } else {
-        assert_eq!(rehearse(&MINE, &folder, &|_, _| {}), Ok(NEWER.into()));
+        assert_eq!(rehearse(&mine(), &folder, &|_, _| {}), Ok(NEWER.into()));
         assert!(installed(&folder).unwrap().contains("release 1.0.1"));
     }
-    // Asked of the fake, not of GitHub: the release, then its package.
+    // Asked of the fake, not of GitHub: the release, then the package's
+    // signature, then the package.
     assert_eq!(
         server.asked(),
-        [latest_path(), download_path(&package(NEWER))]
+        [
+            latest_path(),
+            download_path(&signature_name(&package(NEWER))),
+            download_path(&package(NEWER))
+        ]
     );
+}
+
+#[test]
+fn a_package_without_the_releases_signature_is_not_installed() {
+    let dir = tempfile::tempdir().unwrap();
+    let data = make_package(dir.path(), "release 1.0.1");
+    let folder = dir.path().join("installed");
+    {
+        // No signature: nothing is even downloaded.
+        let (server, _guard) = fake_release_signed(&data, &data, None);
+        let err = rehearse(&mine(), &folder, &|_, _| {}).unwrap_err();
+        assert!(err.contains("has no signature"), "{err}");
+        assert_eq!(server.asked(), [latest_path()]);
+    }
+    // Signed, but with another key than the build's.
+    let other = sign(&OTHER_KEY, &data, &package(NEWER));
+    let (_server, _guard) = fake_release_signed(&data, &data, Some(other));
+    let err = rehearse(&mine(), &folder, &|_, _| {}).unwrap_err();
+    assert!(err.contains("is not signed with"), "{err}");
+    assert_eq!(installed(&folder), None);
 }
 
 #[test]
@@ -276,7 +370,7 @@ fn a_package_that_is_not_the_file_the_release_lists_is_refused() {
     tampered[last] ^= 0xff;
     let (_server, _guard) = fake_release(&data, &tampered);
     let folder = dir.path().join("installed");
-    let err = rehearse(&MINE, &folder, &|_, _| {}).unwrap_err();
+    let err = rehearse(&mine(), &folder, &|_, _| {}).unwrap_err();
     assert!(err.contains("SHA-256 differs"), "{err}");
     assert_eq!(installed(&folder), None);
 }
@@ -288,7 +382,7 @@ fn a_build_of_the_latest_release_has_nothing_to_install() {
     let (server, _guard) = fake_release(&data, &data);
     let same = Build {
         version: NEWER,
-        ..MINE
+        ..mine()
     };
     let err = rehearse(&same, &dir.path().join("installed"), &|_, _| {}).unwrap_err();
     assert!(err.contains("is the newest release"), "{err}");
@@ -308,9 +402,12 @@ fn a_package_served_from_another_server_is_not_taken() {
     let url = format!("{}{download}", elsewhere.base);
     elsewhere.serve(vec![(download, data.clone())]);
     let mut api = Server::bind();
-    api.serve(vec![(latest_path(), release(&url, &data))]);
+    api.serve(vec![(
+        latest_path(),
+        release(&[(package(NEWER), url, data.as_slice())]),
+    )]);
     std::env::set_var("HELIO_UPDATE_API", &api.base);
-    let err = rehearse(&MINE, &dir.path().join("installed"), &|_, _| {}).unwrap_err();
+    let err = rehearse(&mine(), &dir.path().join("installed"), &|_, _| {}).unwrap_err();
     assert!(err.contains("with a checksum"), "{err}");
     assert!(elsewhere.asked().is_empty());
 }
@@ -338,7 +435,7 @@ fn a_mac_takes_a_release_signed_by_its_own_team() {
     mac_bundle(&folder, "release 1.0.0", Some(&identity));
     {
         let (_server, _guard) = fake_release(&data, &data);
-        assert_eq!(rehearse(&MINE, &folder, &|_, _| {}), Ok(NEWER.into()));
+        assert_eq!(rehearse(&mine(), &folder, &|_, _| {}), Ok(NEWER.into()));
         assert!(installed(&folder).unwrap().contains("release 1.0.1"));
     }
     // And one signed by another team, or by none, is not.
@@ -350,7 +447,7 @@ fn a_mac_takes_a_release_signed_by_its_own_team() {
         .arg(&archive));
     let ad_hoc = std::fs::read(&archive).unwrap();
     let (_server, _guard) = fake_release(&ad_hoc, &ad_hoc);
-    let err = rehearse(&MINE, &folder, &|_, _| {}).unwrap_err();
+    let err = rehearse(&mine(), &folder, &|_, _| {}).unwrap_err();
     assert!(err.contains("is not signed by this app's maker"), "{err}");
     assert!(installed(&folder).unwrap().contains("release 1.0.1"));
 }
