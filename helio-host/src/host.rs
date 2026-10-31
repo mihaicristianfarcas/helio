@@ -297,6 +297,11 @@ impl Host {
         Ok(client.permissions)
     }
 
+    /// Agents were turned off: a running agent's session ends too.
+    pub fn agents_off(&self) {
+        let _ = self.sessions.send(crate::session::SessionCmd::AgentsOff);
+    }
+
     /// Allow an agent a person stopped to start sessions again. False if
     /// it was not stopped.
     pub fn allow_agent(&self, x25519_b64: &str) -> std::io::Result<bool> {

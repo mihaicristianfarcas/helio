@@ -114,6 +114,9 @@ pub enum SessionCmd {
         key: String,
         permissions: Permissions,
     },
+    /// Agents were turned off here (the API): a running agent's session
+    /// ends, as its next request would be refused.
+    AgentsOff,
     Shutdown,
 }
 
@@ -509,6 +512,12 @@ impl SessionManager {
                 Ok(SessionCmd::AgentControl { peer, op }) => self.agent_control(peer, op),
                 Ok(SessionCmd::Permissions { key, permissions }) => {
                     self.permissions_changed(&key, permissions)
+                }
+                Ok(SessionCmd::AgentsOff) => {
+                    if self.active.as_ref().is_some_and(|a| a.agent.is_some()) {
+                        tracing::info!("agents were turned off; ending the agent's session");
+                        self.teardown(Some(EndReason::Quit));
+                    }
                 }
                 Ok(SessionCmd::Loss { peer, report }) => self.on_loss(peer, report),
                 Ok(SessionCmd::Shutdown)

@@ -637,7 +637,7 @@ async fn put_config(
     Json(new): Json<HostConfig>,
 ) -> Response {
     require_auth!(web, headers);
-    let restart = {
+    let (restart, agents_off) = {
         let old = web.host.config.read();
         // What changed, key by key (nothing in config.toml is secret).
         if let (Ok(serde_json::Value::Object(a)), Ok(serde_json::Value::Object(b))) =
@@ -649,7 +649,7 @@ async fn put_config(
                 }
             }
         }
-        taken_at_start(&old, &new)
+        (taken_at_start(&old, &new), old.agents && !new.agents)
     };
     if let Err(e) = new.save(&web.host.data_dir) {
         return (
@@ -659,6 +659,11 @@ async fn put_config(
             .into_response();
     }
     *web.host.config.write() = new;
+    // Agents off holds for the one already working too, as a permission
+    // taken away does.
+    if agents_off {
+        web.host.agents_off();
+    }
     // Saved first: the host that starts again reads it.
     let when = restart.map(|why| web.host.request_restart(why));
     Json(json!({"ok": true, "restart": when.map(|w| w.word())})).into_response()
