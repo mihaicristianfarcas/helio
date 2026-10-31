@@ -288,6 +288,14 @@ at the median, 69 ms p95. Motion at a full 30 fps was not measured.
   asks once, the first time Helio listens. The host's rules are added by
   `helio-host enable`, which runs as an administrator.
 
+Not verified yet (built and type-checked, not run on Windows): a data
+folder that is a junction, or that cannot be moved aside, refused as
+[above](#how-it-runs); the service asking its host to stop through the
+event it names for each run (`--stop-event`); `update-engine` checking
+and starting the new engine by the path its open file resolves to; the
+firewall rules set with `netsh` from System32; the clipboard helper
+inheriting only its two pipes.
+
 ## Helio, the client
 
 As Moonlight does it on Windows:
