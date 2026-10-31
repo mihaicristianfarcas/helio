@@ -163,8 +163,9 @@ pub fn is_public(ip: IpAddr) -> bool {
 // --- UPnP IGD ---------------------------------------------------------------
 
 fn map_upnp(port: u16, lease: Duration) -> Result<Mapping, String> {
-    let location = discover()?;
-    let (control, service) = igd_service(&location)?;
+    let gateway = default_gateway();
+    let location = discover(gateway)?;
+    let (control, service) = igd_service(&location, gateway)?;
     let router = url_host(&control).ok_or("a control URL without a host")?;
     let local = local_ip_towards(router)?;
     let external_ip: IpAddr = soap(&control, &service, "GetExternalIPAddress", &[])
@@ -247,12 +248,13 @@ fn add_upnp(
 }
 
 /// The first Internet Gateway Device that answers an SSDP search: its
-/// description's URL.
-fn discover() -> Result<String, String> {
+/// description's URL. With the default gateway known, only its answers
+/// count: SSDP is multicast, so any device on the network can reply, and the
+/// first reply decides where the host sends its HTTP requests.
+fn discover(gateway: Option<Ipv4Addr>) -> Result<String, String> {
     // From the address that reaches the router, and to the router itself
     // as well as the group: a host with several networks (a VPN, virtual
     // adapters) may send the group's search out of another.
-    let gateway = default_gateway();
     let local = gateway
         .and_then(|g| local_ip_towards(g).ok())
         .unwrap_or(Ipv4Addr::UNSPECIFIED);
@@ -286,12 +288,18 @@ fn discover() -> Result<String, String> {
             }
             sent += 1;
         }
-        let Ok((n, _)) = sock.recv_from(&mut buf) else {
+        let Ok((n, from)) = sock.recv_from(&mut buf) else {
             continue;
         };
+        if gateway.is_some_and(|g| from.ip() != IpAddr::V4(g)) {
+            continue;
+        }
         let text = String::from_utf8_lossy(&buf[..n]);
         if let Some(loc) = header(&text, "location") {
-            return Ok(loc.to_string());
+            // An answer that points elsewhere is not the router's.
+            if checked_url(loc, gateway).is_ok() {
+                return Ok(loc.to_string());
+            }
         }
     }
     Err("no router answered a UPnP search".into())
@@ -306,7 +314,8 @@ fn header<'a>(text: &'a str, name: &str) -> Option<&'a str> {
 
 /// The WAN IP (or PPP) connection service in the device's description:
 /// its control URL (absolute) and type.
-fn igd_service(location: &str) -> Result<(String, String), String> {
+fn igd_service(location: &str, gateway: Option<Ipv4Addr>) -> Result<(String, String), String> {
+    checked_url(location, gateway)?;
     let (status, body) = http(location, "GET", &[], "")?;
     if status != 200 {
         return Err(format!("the router's description: HTTP {status}"));
@@ -322,6 +331,10 @@ fn igd_service(location: &str) -> Result<(String, String), String> {
         if !(ty.contains("WANIPConnection") || ty.contains("WANPPPConnection")) {
             continue;
         }
+        let ty = ty.trim();
+        if !is_wan_service(ty) {
+            continue;
+        }
         let Some(url) = xml_value(block, "controlURL") else {
             continue;
         };
@@ -331,9 +344,59 @@ fn igd_service(location: &str) -> Result<(String, String), String> {
         } else {
             format!("{base}/{}", url.trim_start_matches('/'))
         };
-        return Ok((control, ty.trim().to_string()));
+        // The description is the router's word, not a trusted one: where
+        // the control URL leads is checked as the location was.
+        checked_url(&control, gateway)?;
+        return Ok((control, ty.to_string()));
     }
     Err("the router offers no WAN connection service".into())
+}
+
+/// Whether `ty` is `urn:schemas-upnp-org:service:WANIPConnection:N` or
+/// `WANPPPConnection:N`. The type goes into a SOAP header and the XML
+/// namespace of a request, so nothing else is let through.
+fn is_wan_service(ty: &str) -> bool {
+    let Some(rest) = ty.strip_prefix("urn:schemas-upnp-org:service:") else {
+        return false;
+    };
+    let Some((name, version)) = rest.split_once(':') else {
+        return false;
+    };
+    matches!(name, "WANIPConnection" | "WANPPPConnection")
+        && !version.is_empty()
+        && version.bytes().all(|b| b.is_ascii_digit())
+}
+
+/// The address a router's `http://` URL names, if the URL is one the host
+/// may talk to: an IPv4 literal (with or without a port) that is the default
+/// gateway, or, with none known, a private or link-local address that is not
+/// this machine; and a path with no spaces or control characters, which
+/// would otherwise break the request line.
+fn checked_url(url: &str, gateway: Option<Ipv4Addr>) -> Result<Ipv4Addr, String> {
+    let bad = |why: &str| format!("the router's URL is not one to use ({why}): {url:.80}");
+    let rest = url.strip_prefix("http://").ok_or_else(|| bad("not http"))?;
+    let (authority, path) = match rest.find('/') {
+        Some(i) => rest.split_at(i),
+        None => (rest, ""),
+    };
+    if path.bytes().any(|b| b <= b' ' || b >= 0x7f) {
+        return Err(bad("odd characters in the path"));
+    }
+    let ip = match authority.parse::<SocketAddrV4>() {
+        Ok(a) => *a.ip(),
+        Err(_) => authority
+            .parse::<Ipv4Addr>()
+            .map_err(|_| bad("not an IPv4 address"))?,
+    };
+    let fine = match gateway {
+        Some(g) => ip == g,
+        None => (ip.is_private() || ip.is_link_local()) && !ip.is_loopback(),
+    };
+    if fine {
+        Ok(ip)
+    } else {
+        Err(bad("not the router"))
+    }
 }
 
 /// Call `action` on the service; the response body, or its error code.
@@ -476,11 +539,16 @@ fn unchunk(mut s: &str) -> String {
         let Ok(n) = usize::from_str_radix(size.split(';').next().unwrap_or("").trim(), 16) else {
             break;
         };
-        if n == 0 || rest.len() < n {
+        // `get`: the answer is decoded lossily and a size may end inside a
+        // character; slicing there would panic.
+        let (Some(chunk), Some(after)) = (rest.get(..n), rest.get(n..)) else {
+            break;
+        };
+        if n == 0 {
             break;
         }
-        out.push_str(&rest[..n]);
-        s = rest[n..].trim_start_matches("\r\n");
+        out.push_str(chunk);
+        s = after.trim_start_matches("\r\n");
     }
     out
 }
@@ -693,6 +761,74 @@ mod tests {
         assert_eq!(
             header("HTTP/1.1 200 OK\r\nLOCATION: http://x/y\r\n", "location"),
             Some("http://x/y")
+        );
+    }
+
+    #[test]
+    fn a_chunk_size_inside_a_character_is_not_a_panic() {
+        // U+FFFD is three bytes: sizes 1 and 2 end inside it.
+        for size in ["1", "2", "4"] {
+            let body = format!("{size}\r\n{}\r\n0\r\n\r\n", '\u{fffd}');
+            let _ = unchunk(&body);
+        }
+        assert_eq!(unchunk("3\r\n\u{fffd}\r\n0\r\n\r\n"), "\u{fffd}");
+    }
+
+    #[test]
+    fn only_the_router_is_a_router() {
+        let gw = Some(Ipv4Addr::new(192, 168, 0, 1));
+        let ok = |u: &str, g| checked_url(u, g).is_ok();
+        assert!(ok("http://192.168.0.1:1900/rootDesc.xml", gw));
+        assert!(ok("http://192.168.0.1/ctl/IPConn", gw));
+        assert!(!ok("http://192.168.0.77:1900/x", gw), "another device");
+        assert!(!ok("http://127.0.0.1:8080/x", gw), "this machine");
+        assert!(
+            !ok("http://127.0.0.1:8080/x", None),
+            "this machine, no gateway"
+        );
+        assert!(!ok("http://203.0.113.7/x", None), "a public address");
+        assert!(
+            ok("http://192.168.0.77/x", None),
+            "a LAN address, no gateway"
+        );
+        assert!(!ok("https://192.168.0.1/x", gw));
+        assert!(!ok("http://192.168.0.1@127.0.0.1/x", gw));
+        assert!(!ok("http://router.local/x", gw), "a name");
+        assert!(!ok("http://192.168.0.1/x y", gw), "a space");
+        assert!(!ok("http://192.168.0.1/x\r\nHost: a", gw), "a header");
+    }
+
+    #[test]
+    fn only_wan_connection_services_are_used() {
+        assert!(is_wan_service(
+            "urn:schemas-upnp-org:service:WANIPConnection:1"
+        ));
+        assert!(is_wan_service(
+            "urn:schemas-upnp-org:service:WANPPPConnection:2"
+        ));
+        for bad in [
+            "urn:schemas-upnp-org:service:WANIPConnection:1\r\nX: y",
+            "urn:schemas-upnp-org:service:WANIPConnection:",
+            "urn:evil:service:WANIPConnection:1",
+            "WANIPConnection",
+            "urn:schemas-upnp-org:service:WANIPConnection:1\"><x/>",
+        ] {
+            assert!(!is_wan_service(bad), "{bad:?}");
+        }
+    }
+
+    #[test]
+    fn a_lan_device_cannot_steer_the_hosts_requests() {
+        use std::net::TcpListener;
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        listener.set_nonblocking(true).unwrap();
+        let url = format!("http://{}/rootDesc.xml", listener.local_addr().unwrap());
+        for gateway in [None, Some(Ipv4Addr::new(192, 168, 0, 1))] {
+            assert!(igd_service(&url, gateway).is_err());
+        }
+        assert!(
+            listener.accept().is_err(),
+            "the host connected to a device that is not the router"
         );
     }
 
