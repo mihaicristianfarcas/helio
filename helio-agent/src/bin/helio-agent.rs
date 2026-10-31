@@ -347,6 +347,7 @@ fn run(args: &[String]) -> ExitCode {
         let _ = tx.send(e);
     });
     let confirm: helio_agent::providers::Confirm = std::sync::Arc::new(move |msg: &str| {
+        let msg = shown(msg);
         if yes {
             eprintln!("{msg} -- yes (--yes)");
             return true;
@@ -367,8 +368,8 @@ fn run(args: &[String]) -> ExitCode {
             run.stop();
         }
         match e {
-            RunEvent::Status(s) => eprintln!("… {s}"),
-            RunEvent::Thought(t) => println!("💬 {t}"),
+            RunEvent::Status(s) => eprintln!("… {}", shown(&s)),
+            RunEvent::Thought(t) => println!("💬 {}", shown(&t)),
             RunEvent::Action {
                 text, ok, detail, ..
             } => {
@@ -378,9 +379,10 @@ fn run(args: &[String]) -> ExitCode {
                     format!(" — {detail}")
                 };
                 println!(
-                    "{} {text}{}",
+                    "{} {}{}",
                     if ok { "▶" } else { "✗" },
-                    detail.chars().take(200).collect::<String>()
+                    shown(&text),
+                    shown(&detail.chars().take(200).collect::<String>())
                 );
             }
             RunEvent::Usage {
@@ -392,15 +394,15 @@ fn run(args: &[String]) -> ExitCode {
                 "… tokens: {input} in ({cached} cached), {output} out{}",
                 cost_usd.map(|c| format!(", ${c:.4}")).unwrap_or_default()
             ),
-            RunEvent::Confirm(m) => eprintln!("? {}", m.question()),
-            RunEvent::Plan(steps) => eprintln!("☰ plan: {}", plan_line(&steps)),
+            RunEvent::Confirm(m) => eprintln!("? {}", shown(&m.question())),
+            RunEvent::Plan(steps) => eprintln!("☰ plan: {}", shown(&plan_line(&steps))),
             RunEvent::Finished(s) => {
-                println!("✓ {s}");
+                println!("✓ {}", shown(&s));
                 ok = true;
                 break;
             }
             RunEvent::Failed(e) => {
-                eprintln!("✗ {e}");
+                eprintln!("✗ {}", shown(&e));
                 break;
             }
         }
@@ -518,20 +520,24 @@ fn converse(args: &[String]) -> ExitCode {
         }
         for e in rx.iter() {
             match e {
-                RunEvent::Status(s) => eprintln!("… {s}"),
-                RunEvent::Thought(t) => println!("💬 {t}"),
+                RunEvent::Status(s) => eprintln!("… {}", shown(&s)),
+                RunEvent::Thought(t) => println!("💬 {}", shown(&t)),
                 RunEvent::Action {
                     text,
                     ok,
                     detail,
                     thumbnail,
                 } => println!(
-                    "{} {text}{} {}",
+                    "{} {}{} {}",
                     if ok { "▶" } else { "✗" },
+                    shown(&text),
                     if detail == "OK" || detail.is_empty() {
                         String::new()
                     } else {
-                        format!(" — {}", detail.chars().take(160).collect::<String>())
+                        format!(
+                            " — {}",
+                            shown(&detail.chars().take(160).collect::<String>())
+                        )
                     },
                     thumbnail
                         .map(|t| format!("[screen {} KB]", t.len() / 1024))
@@ -541,15 +547,19 @@ fn converse(args: &[String]) -> ExitCode {
                     eprintln!("… tokens: {input} in, {output} out")
                 }
                 RunEvent::Confirm(m) => {
-                    eprintln!("? {} ({})", m.question(), if answer { "yes" } else { "no" })
+                    eprintln!(
+                        "? {} ({})",
+                        shown(&m.question()),
+                        if answer { "yes" } else { "no" }
+                    )
                 }
-                RunEvent::Plan(steps) => println!("☰ plan: {}", plan_line(&steps)),
+                RunEvent::Plan(steps) => println!("☰ plan: {}", shown(&plan_line(&steps))),
                 RunEvent::Finished(s) => {
-                    println!("✓ {s}");
+                    println!("✓ {}", shown(&s));
                     break;
                 }
                 RunEvent::Failed(e) => {
-                    eprintln!("✗ {e}");
+                    eprintln!("✗ {}", shown(&e));
                     ok = false;
                     break;
                 }
@@ -566,5 +576,43 @@ fn converse(args: &[String]) -> ExitCode {
         ExitCode::SUCCESS
     } else {
         ExitCode::FAILURE
+    }
+}
+
+/// `text` from the model (or the screen it read) as the terminal shows it:
+/// control characters (an escape sequence's ESC, C1 controls, BEL) and the
+/// bidirectional overrides written out as escapes, so the model cannot hide
+/// text, the y/N question among it, rewrite the terminal's title or set its
+/// clipboard. Lines and tabs are the text's own.
+fn shown(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    for c in text.chars() {
+        let hidden = (c.is_control() && c != '\n' && c != '\t')
+            || matches!(c, '\u{202a}'..='\u{202e}' | '\u{2066}'..='\u{2069}');
+        if hidden {
+            out.extend(c.escape_unicode());
+        } else {
+            out.push(c);
+        }
+    }
+    out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_models_words_reach_the_terminal_without_escape_sequences() {
+        // Hides what follows, then writes the terminal's clipboard (OSC 52).
+        let reply = "Done.\x1b[8m hidden \x1b]52;c;ZXZpbA==\x07\u{9b}31m\u{202e}txt.exe";
+        let out = shown(reply);
+        assert!(
+            !out.contains(['\x1b', '\x07', '\u{9b}', '\u{202e}']),
+            "{out:?}"
+        );
+        assert!(out.starts_with("Done.\\u{1b}[8m hidden"), "{out:?}");
+        // Lines and tabs are the text's own.
+        assert_eq!(shown("one\n\ttwo"), "one\n\ttwo");
     }
 }
