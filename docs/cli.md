@@ -177,14 +177,16 @@ agent may use), `--provider codex|claude-code|anthropic|openai|openrouter|custom
 `--yes` (run: answer yes to the API's safety checks), `--answer yes|no`
 (converse: what every question is answered).
 
-`mcp` flags: `--host NAME` (the default host), `--size WxH`,
+`mcp` flags: `--host NAME` (the default host), `--host-only` (that host
+and no other: `connect` and `wake_host` refuse the rest), `--size WxH`,
 `--max-actions N`, `--image-dir DIR` (screenshots also saved as files),
 `--events FILE` (a JSON line per action), `--no-auto-screenshot`,
 `--approvals off|risky|every` with `--control-dir DIR` (where questions and
 answers are exchanged; see [ai-agents.md](ai-agents.md#design-decisions-and-why)),
 `--hold-wait SECS` (how long an action waits while a person has the
 keyboard and mouse), `--data-dir DIR`. `--until` and `--owner-pid` bound a
-run started by Helio.
+run started by Helio (after them `connect` is refused too), and
+`--host-only` keeps it to its host.
 
 ## The apps
 

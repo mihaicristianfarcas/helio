@@ -344,7 +344,10 @@ variable wins over a saved key.
 **A run is bounded twice.** The runner stops a run after its minutes and
 kills the agent's program; the MCP server enforces the action budget and
 the run's end itself, and stops acting once the process that started it is
-gone. A Helio that crashes mid-run leaves no agent acting.
+gone. A Helio that crashes mid-run leaves no agent acting. A run or session
+is also kept to the host you picked: its model's `connect` and `wake_host`
+refuse every other host the agent is paired with, and `connect` is refused
+after the run's end or between a session's turns.
 
 **Approvals and pausing go through a folder.** Whatever does the actions —
 Helio itself, or the MCP server Codex or Claude Code started — checks the

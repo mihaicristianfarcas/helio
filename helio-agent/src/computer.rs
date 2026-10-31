@@ -371,6 +371,10 @@ pub struct Config {
     pub data_dir: PathBuf,
     /// The host to use when none is named.
     pub default_host: Option<String>,
+    /// Use the default host and no other: `connect` and `wake_host` refuse
+    /// any other host the agent is paired with. A run or a session Helio
+    /// starts is for the one host the person picked.
+    pub host_only: bool,
     pub session: HeadlessOptions,
     /// Answer every action with the settled screen (else "OK": the agent
     /// asks for screenshots itself).
@@ -405,6 +409,7 @@ impl Config {
         Config {
             data_dir,
             default_host: None,
+            host_only: false,
             session: HeadlessOptions::default(),
             screenshot_after_actions: true,
             max_actions: None,
@@ -609,12 +614,58 @@ impl Computer {
         }
     }
 
+    /// Whether the agent may use `host` (see `Config::host_only`).
+    pub fn may_use(&self, host: &str) -> Result<(), String> {
+        match &self.config.default_host {
+            Some(own) if self.config.host_only && !host.eq_ignore_ascii_case(own) => Err(format!(
+                "This run is for {own}: the agent may not use {host}. Stop here and tell the \
+                    person if the task needs another host."
+            )),
+            _ => Ok(()),
+        }
+    }
+
+    /// Why nothing may be done now, if so: the run's time is up, or Helio,
+    /// which started it, is gone.
+    fn run_over(&self) -> Option<String> {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+        if self.config.until.is_some_and(|u| now >= u) {
+            return Some(
+                "This run's time is up. Stop here and report what you did and what is left.".into(),
+            );
+        }
+        if self.config.owner_pid.is_some_and(|pid| !alive(pid)) {
+            return Some("Helio, which started this run, is gone. Stop here.".into());
+        }
+        None
+    }
+
+    /// `connect`, as the model asks for it (the MCP tool): only during its
+    /// run or turn. A person opening the session (`conversation::connect`)
+    /// connects between turns too.
+    pub fn connect_for_model(
+        &mut self,
+        host: Option<&str>,
+        size: Option<(u16, u16)>,
+    ) -> Result<Outcome, String> {
+        if let Some(why) = self.run_over() {
+            return Err(why);
+        }
+        self.connect(host, size)
+    }
+
     /// Start using `host` (or the default one), ending any other session.
     pub fn connect(
         &mut self,
         host: Option<&str>,
         size: Option<(u16, u16)>,
     ) -> Result<Outcome, String> {
+        if let Some(h) = host {
+            self.may_use(h)?;
+        }
         let host = host
             .map(str::to_string)
             .or_else(|| self.config.default_host.clone())
@@ -779,18 +830,8 @@ impl Computer {
             ));
         }
         if action.is_input() {
-            let now = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map(|d| d.as_secs())
-                .unwrap_or(0);
-            if self.config.until.is_some_and(|u| now >= u) {
-                return Err(
-                    "This run's time is up. Stop here and report what you did and what is left."
-                        .into(),
-                );
-            }
-            if self.config.owner_pid.is_some_and(|pid| !alive(pid)) {
-                return Err("Helio, which started this run, is gone. Stop here.".into());
+            if let Some(why) = self.run_over() {
+                return Err(why);
             }
             if let Some(max) = self.config.max_actions {
                 if self.actions >= max {
