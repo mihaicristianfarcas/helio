@@ -133,7 +133,15 @@ pub struct Platform {
 
 impl Platform {
     pub fn new(data_dir: &Path) -> Platform {
+        // Known before an agent's first session asks.
+        crate::screen_lock::follow();
         let wayland = crate::portal::wayland_session();
+        if wayland {
+            tracing::info!(
+                "under Wayland this host cannot tell when its own keyboard and mouse are \
+                    used: someone at it does not hold an AI agent (docs/platforms/linux.md)"
+            );
+        }
         let codecs = FfmpegEncoder::probe();
         let yuv444: Vec<Codec> = codecs
             .iter()
@@ -420,7 +428,8 @@ impl Platform {
 
 /// How long since the X server last had input of any kind (XTest's
 /// included): the session tells someone at the host from its agent by when
-/// it last injected. None under Wayland, where no client may know.
+/// it last injected. None under Wayland, where no client may know: there
+/// someone at the host does not hold an agent (docs/platforms/linux.md).
 pub fn host_input_idle() -> Option<Duration> {
     use x11rb::protocol::screensaver::ConnectionExt as _;
     if crate::portal::wayland_session() {
@@ -457,10 +466,11 @@ pub fn isolates_host_displays(_req: &SessionStart, _cfg: &HostConfig) -> bool {
     false
 }
 
-/// Linux cannot tell a locked screen generically (each desktop locks its
-/// own way); the lock screen is streamed like anything else.
+/// The screen is locked, as logind's `LockedHint` says (`screen_lock`):
+/// the lock screens that tell logind, GNOME's and KDE Plasma's among them.
+/// The lock screen is streamed like anything else.
 pub fn secure_screen() -> bool {
-    false
+    crate::screen_lock::locked()
 }
 
 /// The screen, as the video loop reads it.

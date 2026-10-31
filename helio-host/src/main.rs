@@ -99,6 +99,9 @@ mod priority;
 #[path = "linux/remote_input.rs"]
 mod remote_input;
 mod restart;
+#[cfg(target_os = "linux")]
+#[path = "linux/screen_lock.rs"]
+mod screen_lock;
 mod sender;
 #[cfg(windows)]
 mod service;
