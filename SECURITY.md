@@ -104,6 +104,14 @@ Unix socket in its own data folder, so a second start can ask the running
 copy to show its window; it takes that one word and nothing else. On
 Windows the same is a named event in the signed-in session.
 
+**An agent session's local endpoint.** While an agent session is open,
+Helio serves the session's tools over HTTP on 127.0.0.1, on a port the
+system picks, for Codex and Claude Code. Every request needs a token made
+when the session opens, which is never on a command line. Until a request
+shows it, Helio reads at most 16 KiB of it and none of its body, and it
+serves 16 connections at once: another program on your computer can keep
+the endpoint busy, but cannot use it.
+
 **What a device may do** is the host's to say, per device: whether it may
 see the screen, which input it may send, which way the clipboard goes,
 whether it may start apps, take over or watch agents. The host enforces it

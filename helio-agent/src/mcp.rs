@@ -13,7 +13,10 @@
 //! protocol goes to stdout. Or over HTTP on localhost ([`serve_http`], MCP's
 //! streamable HTTP transport without a server stream): how Helio lends one
 //! agent session to Codex or Claude Code turn after turn, the session staying
-//! connected between them.
+//! connected between them. Any local process can reach that port, another
+//! user's too, so a request without the session's token costs a bounded
+//! read of its head and none of its body, and the connections served at
+//! once are few (`HTTP_CONNECTIONS`).
 
 use std::io::{BufRead, Read, Write};
 use std::path::PathBuf;
@@ -637,6 +640,32 @@ fn new_token() -> String {
     b.iter().map(|x| format!("{x:02x}")).collect()
 }
 
+/// The most a request's line and headers may take, together: Node's own
+/// HTTP server's default (`--max-http-header-size`). An MCP client sends a
+/// request line, its token and a few headers, far less; reading stops here,
+/// so a peer without the token costs no more than this.
+const HTTP_HEAD_LIMIT: u64 = 16 << 10;
+
+/// The largest request body taken, read only once the token is checked: a
+/// JSON-RPC message or batch is a few kilobytes, and a larger one is
+/// refused whole (413) rather than cut short and misread.
+const HTTP_BODY_LIMIT: usize = 8 << 20;
+
+/// Connections served at once, a thread each. One client (Codex or Claude
+/// Code) uses the endpoint at a time and keeps a few connections alive;
+/// more are refused (503), so any local process, another user's included,
+/// costs at most this many threads.
+const HTTP_CONNECTIONS: usize = 16;
+
+/// How long a connection may stay silent until it has shown the token. A
+/// client sends its request as soon as it connects; this frees a place held
+/// by a peer that sends nothing.
+const HTTP_HEAD_WAIT: Duration = Duration::from_secs(10);
+
+/// How long a connection that has shown the token may stay idle between
+/// requests (the model thinks between tool calls).
+const HTTP_IDLE: Duration = Duration::from_secs(600);
+
 /// Serve `computer`'s tools over HTTP on 127.0.0.1 (a port of the system's
 /// choosing), each request checked against a fresh token.
 pub fn serve_http(computer: SharedComputer, opts: Options) -> std::io::Result<HttpServer> {
@@ -653,6 +682,7 @@ pub fn serve_http(computer: SharedComputer, opts: Options) -> std::io::Result<Ht
     tracing::info!(url, "MCP over HTTP");
     {
         let (stop, token) = (stop.clone(), token.clone());
+        let live = Arc::new(std::sync::atomic::AtomicUsize::new(0));
         std::thread::Builder::new()
             .name("mcp-http".into())
             .spawn(move || {
@@ -660,11 +690,24 @@ pub fn serve_http(computer: SharedComputer, opts: Options) -> std::io::Result<Ht
                     if stop.load(std::sync::atomic::Ordering::Relaxed) {
                         break;
                     }
-                    let Ok(conn) = conn else { continue };
+                    let Ok(mut conn) = conn else { continue };
+                    if live.load(std::sync::atomic::Ordering::Relaxed) >= HTTP_CONNECTIONS {
+                        // A fresh socket's buffer takes these bytes at once;
+                        // the timeout only bounds the accept loop's wait.
+                        let _ = conn.set_write_timeout(Some(Duration::from_secs(1)));
+                        let _ = conn.write_all(
+                            b"HTTP/1.1 503 Service Unavailable\r\n\
+                              Content-Length: 0\r\nConnection: close\r\n\r\n",
+                        );
+                        tracing::debug!(HTTP_CONNECTIONS, "MCP HTTP connection refused");
+                        continue;
+                    }
+                    let place = Place::take(&live);
                     let (server, token, stop) = (server.clone(), token.clone(), stop.clone());
                     let _ = std::thread::Builder::new()
                         .name("mcp-http-conn".into())
                         .spawn(move || {
+                            let _place = place;
                             if let Err(e) = http_connection(conn, &server, &token, &stop) {
                                 tracing::debug!(error = %e, "MCP HTTP connection");
                             }
@@ -680,51 +723,110 @@ pub fn serve_http(computer: SharedComputer, opts: Options) -> std::io::Result<Ht
     })
 }
 
-/// One keep-alive connection: requests in turn until it closes.
+/// One of [`HTTP_CONNECTIONS`] places, given back when its connection's
+/// thread ends (or is never started).
+struct Place(Arc<std::sync::atomic::AtomicUsize>);
+
+impl Place {
+    fn take(live: &Arc<std::sync::atomic::AtomicUsize>) -> Place {
+        live.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        Place(live.clone())
+    }
+}
+
+impl Drop for Place {
+    fn drop(&mut self) {
+        self.0.fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
+    }
+}
+
+/// A request's line and the headers this server reads.
+#[derive(Debug, Default, PartialEq)]
+struct Head {
+    method: String,
+    path: String,
+    length: usize,
+    auth: String,
+    close: bool,
+}
+
+#[derive(Debug, PartialEq)]
+enum HeadRead {
+    Head(Head),
+    /// The peer closed the connection.
+    Closed,
+    /// Past [`HTTP_HEAD_LIMIT`] without the blank line that ends it.
+    TooLarge,
+}
+
+/// Read a request's head, at most [`HTTP_HEAD_LIMIT`] bytes of it.
+fn read_head(reader: &mut impl BufRead) -> std::io::Result<HeadRead> {
+    let mut head = reader.by_ref().take(HTTP_HEAD_LIMIT);
+    let mut request = Head::default();
+    let mut first = true;
+    loop {
+        let mut line = String::new();
+        head.read_line(&mut line)?;
+        if !line.ends_with('\n') {
+            return Ok(if head.limit() == 0 {
+                HeadRead::TooLarge
+            } else {
+                HeadRead::Closed
+            });
+        }
+        let line = line.trim_end();
+        if first {
+            let mut parts = line.split_whitespace();
+            request.method = parts.next().unwrap_or_default().to_string();
+            request.path = parts.next().unwrap_or_default().to_string();
+            first = false;
+            continue;
+        }
+        if line.is_empty() {
+            return Ok(HeadRead::Head(request));
+        }
+        if let Some((k, v)) = line.split_once(':') {
+            match k.trim().to_ascii_lowercase().as_str() {
+                "content-length" => request.length = v.trim().parse().unwrap_or(0),
+                "authorization" => request.auth = v.trim().to_string(),
+                "connection" => request.close = v.trim().eq_ignore_ascii_case("close"),
+                _ => {}
+            }
+        }
+    }
+}
+
+/// One keep-alive connection: requests in turn until it closes. Nothing
+/// past a request's head is read until it has shown the token; one that
+/// has not, or that would send too much, is answered and closed.
 fn http_connection(
     conn: std::net::TcpStream,
     server: &parking_lot::Mutex<Server>,
     token: &str,
     stop: &std::sync::atomic::AtomicBool,
 ) -> std::io::Result<()> {
-    conn.set_read_timeout(Some(Duration::from_secs(600)))?;
     let mut reader = std::io::BufReader::new(conn.try_clone()?);
     let mut out = conn;
+    // The socket's timeout, which `reader`'s clone of it shares.
+    out.set_read_timeout(Some(HTTP_HEAD_WAIT))?;
     loop {
-        let mut request_line = String::new();
-        if reader.read_line(&mut request_line)? == 0
-            || stop.load(std::sync::atomic::Ordering::Relaxed)
-        {
+        let head = match read_head(&mut reader)? {
+            HeadRead::Head(head) => head,
+            HeadRead::Closed => return Ok(()),
+            HeadRead::TooLarge => {
+                return respond(&mut out, "431 Request Header Fields Too Large", None, true)
+            }
+        };
+        if stop.load(std::sync::atomic::Ordering::Relaxed) {
             return Ok(());
         }
-        let mut parts = request_line.split_whitespace();
-        let (method, path) = (
-            parts.next().unwrap_or_default().to_string(),
-            parts.next().unwrap_or_default().to_string(),
-        );
-        let mut length = 0usize;
-        let mut auth = String::new();
-        let mut close = false;
-        loop {
-            let mut line = String::new();
-            if reader.read_line(&mut line)? == 0 {
-                return Ok(());
-            }
-            let line = line.trim_end();
-            if line.is_empty() {
-                break;
-            }
-            if let Some((k, v)) = line.split_once(':') {
-                match k.trim().to_ascii_lowercase().as_str() {
-                    "content-length" => length = v.trim().parse().unwrap_or(0),
-                    "authorization" => auth = v.trim().to_string(),
-                    "connection" => close = v.trim().eq_ignore_ascii_case("close"),
-                    _ => {}
-                }
-            }
-        }
-        let mut body = vec![0u8; length.min(8 << 20)];
-        reader.read_exact(&mut body)?;
+        let Head {
+            method,
+            path,
+            length,
+            auth,
+            close,
+        } = head;
         let expected = format!("Bearer {token}");
         let authorized = auth.len() == expected.len()
             && auth
@@ -732,10 +834,19 @@ fn http_connection(
                 .zip(expected.bytes())
                 .fold(0u8, |a, (x, y)| a | (x ^ y))
                 == 0;
-        let (status, reply): (&str, Option<Value>) = if !authorized {
+        if !authorized {
             tracing::warn!(method, path, "MCP HTTP request without the right token");
-            ("401 Unauthorized", Some(json!({"error": "unauthorized"})))
-        } else if method == "POST" && path.starts_with("/mcp") {
+            let reply = json!({"error": "unauthorized"});
+            return respond(&mut out, "401 Unauthorized", Some(reply), true);
+        }
+        if length > HTTP_BODY_LIMIT {
+            return respond(&mut out, "413 Content Too Large", None, true);
+        }
+        out.set_read_timeout(Some(HTTP_IDLE))?;
+        let mut body = vec![0u8; length];
+        reader.read_exact(&mut body)?;
+        let (status, reply): (&str, Option<Value>) = if method == "POST" && path.starts_with("/mcp")
+        {
             match serde_json::from_slice::<Value>(&body) {
                 Ok(Value::Array(msgs)) => {
                     let replies: Vec<Value> = msgs
@@ -765,25 +876,35 @@ fn http_connection(
             // No server-to-client stream (GET): the spec's 405.
             ("405 Method Not Allowed", None)
         };
-        let body = reply.map(|r| r.to_string()).unwrap_or_default();
-        let mut head = format!("HTTP/1.1 {status}\r\nContent-Length: {}\r\n", body.len());
-        if !body.is_empty() {
-            head.push_str("Content-Type: application/json\r\n");
-        }
-        if status.starts_with("405") {
-            head.push_str("Allow: POST, DELETE\r\n");
-        }
-        if close {
-            head.push_str("Connection: close\r\n");
-        }
-        head.push_str("\r\n");
-        out.write_all(head.as_bytes())?;
-        out.write_all(body.as_bytes())?;
-        out.flush()?;
+        respond(&mut out, status, reply, close)?;
         if close {
             return Ok(());
         }
     }
+}
+
+/// Write one response; `close` says the connection ends after it.
+fn respond(
+    out: &mut impl Write,
+    status: &str,
+    reply: Option<Value>,
+    close: bool,
+) -> std::io::Result<()> {
+    let body = reply.map(|r| r.to_string()).unwrap_or_default();
+    let mut head = format!("HTTP/1.1 {status}\r\nContent-Length: {}\r\n", body.len());
+    if !body.is_empty() {
+        head.push_str("Content-Type: application/json\r\n");
+    }
+    if status.starts_with("405") {
+        head.push_str("Allow: POST, DELETE\r\n");
+    }
+    if close {
+        head.push_str("Connection: close\r\n");
+    }
+    head.push_str("\r\n");
+    out.write_all(head.as_bytes())?;
+    out.write_all(body.as_bytes())?;
+    out.flush()
 }
 
 fn write_msg(out: &mut impl Write, v: &Value) -> std::io::Result<()> {
@@ -1154,6 +1275,117 @@ mod tests {
             r#"{"jsonrpc":"2.0","method":"notifications/initialized"}"#,
         );
         assert!(status.contains("202") && body.is_empty(), "{status} {body}");
+    }
+
+    #[test]
+    fn a_request_head_is_read_up_to_its_limit_and_no_further() {
+        let head = |s: &str| read_head(&mut std::io::Cursor::new(s.as_bytes())).unwrap();
+        assert_eq!(
+            head("POST /mcp HTTP/1.1\r\nAuthorization: Bearer t\r\nContent-Length: 2\r\n\r\n{}"),
+            HeadRead::Head(Head {
+                method: "POST".into(),
+                path: "/mcp".into(),
+                length: 2,
+                auth: "Bearer t".into(),
+                close: false,
+            })
+        );
+        let fill = |n: usize| format!("GET / HTTP/1.1\r\nX: {}\r\n\r\n", "a".repeat(n));
+        let n = HTTP_HEAD_LIMIT as usize - fill(0).len();
+        assert!(matches!(head(&fill(n)), HeadRead::Head(_)));
+        assert_eq!(head(&fill(n + 1)), HeadRead::TooLarge);
+        assert_eq!(head(&"a".repeat(1 << 20)), HeadRead::TooLarge);
+        assert_eq!(head("GET / HTTP/1.1\r\nX: y"), HeadRead::Closed);
+        // The limit is each request's, on a connection kept alive.
+        let mut two = std::io::Cursor::new(format!("{}{}", fill(n), fill(n)).into_bytes());
+        assert!(matches!(read_head(&mut two).unwrap(), HeadRead::Head(_)));
+        assert!(matches!(read_head(&mut two).unwrap(), HeadRead::Head(_)));
+    }
+
+    #[test]
+    fn a_peer_without_the_token_costs_a_bounded_read_and_one_of_few_connections() {
+        use std::io::{Read, Write};
+        let dir = tempfile::tempdir().unwrap();
+        let computer = Arc::new(parking_lot::Mutex::new(Computer::new(
+            crate::computer::Config::new(dir.path().to_path_buf()),
+        )));
+        let http = serve_http(
+            computer,
+            Options {
+                image_dir: None,
+                events: None,
+            },
+        )
+        .unwrap();
+        let port: u16 = http
+            .url
+            .trim_start_matches("http://127.0.0.1:")
+            .trim_end_matches("/mcp")
+            .parse()
+            .unwrap();
+        let connect = |wait: Duration| {
+            let s = std::net::TcpStream::connect(("127.0.0.1", port)).unwrap();
+            s.set_read_timeout(Some(wait)).unwrap();
+            s
+        };
+        // What the server did with the connection: answered (its status
+        // line), closed or reset it, or nothing yet ("waiting").
+        let answer = |s: &mut std::net::TcpStream| -> String {
+            let mut got = Vec::new();
+            match s.read_to_end(&mut got) {
+                Err(e)
+                    if got.is_empty()
+                        && matches!(
+                            e.kind(),
+                            std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut
+                        ) =>
+                {
+                    "waiting".into()
+                }
+                Err(e) if got.is_empty() => format!("closed: {e}"),
+                _ => String::from_utf8_lossy(&got)
+                    .lines()
+                    .next()
+                    .unwrap_or("closed")
+                    .to_string(),
+            }
+        };
+        let wait = Duration::from_secs(5);
+
+        // A line without end is read only so far.
+        let mut s = connect(wait);
+        let _ = s.write_all(&[b'A'; 64 << 10]);
+        let got = answer(&mut s);
+        assert!(got.contains("431") || got.starts_with("closed"), "{got}");
+
+        // A body is not read before the token is.
+        let mut s = connect(wait);
+        s.write_all(b"POST /mcp HTTP/1.1\r\nContent-Length: 8000000\r\n\r\n")
+            .unwrap();
+        let got = answer(&mut s);
+        assert!(got.contains("401"), "{got}");
+
+        // Nor one over the limit after it.
+        let mut s = connect(wait);
+        write!(
+            s,
+            "POST /mcp HTTP/1.1\r\nAuthorization: Bearer {}\r\nContent-Length: 9000000\r\n\r\n",
+            http.token
+        )
+        .unwrap();
+        let got = answer(&mut s);
+        assert!(got.contains("413"), "{got}");
+
+        // Idle connections take a place each, of a few.
+        let mut idle = Vec::new();
+        let refused = (0..64).find_map(|n| {
+            let mut s = connect(Duration::from_millis(100));
+            let got = answer(&mut s);
+            idle.push(s);
+            (got != "waiting").then_some((n, got))
+        });
+        let (n, got) = refused.expect("a connection refused");
+        assert!(got.contains("503") && n <= HTTP_CONNECTIONS, "{n}: {got}");
     }
 
     #[test]
