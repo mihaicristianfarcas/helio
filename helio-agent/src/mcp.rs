@@ -990,6 +990,26 @@ pub fn main(args: &[String]) -> std::process::ExitCode {
                 .unwrap_or_else(|_| "warn,mainline=error,helio_agent=info".into()),
         )
         .try_init();
+    let (mut config, opts) = parse(args);
+    // The checks the person turned on in Helio apply to every agent that
+    // uses the hosts, this server's included. With no control folder
+    // nobody can be asked, so what they or the rules hold is refused,
+    // unless the person turned approvals off.
+    let settings = crate::providers::AgentSettings::load(&config.data_dir);
+    config.refuse_held = settings.approvals != Approvals::Off;
+    config.judge =
+        crate::judge::Judge::new(&config.data_dir, &settings.checks).map(std::sync::Arc::new);
+    match serve(Computer::new(config), opts) {
+        Ok(()) => std::process::ExitCode::SUCCESS,
+        Err(e) => {
+            eprintln!("{e}");
+            std::process::ExitCode::FAILURE
+        }
+    }
+}
+
+/// The server's settings from its command line.
+fn parse(args: &[String]) -> (crate::computer::Config, Options) {
     let mut config = crate::computer::Config::new(helio_client::store::data_dir());
     let mut opts = Options {
         image_dir: None,
@@ -1054,21 +1074,7 @@ pub fn main(args: &[String]) -> std::process::ExitCode {
             other => eprintln!("ignoring unknown flag {other}"),
         }
     }
-    // The checks the person turned on in Helio apply to every agent that
-    // uses the hosts, this server's included. With no control folder
-    // nobody can be asked, so what they or the rules hold is refused,
-    // unless the person turned approvals off.
-    let settings = crate::providers::AgentSettings::load(&config.data_dir);
-    config.refuse_held = settings.approvals != Approvals::Off;
-    config.judge =
-        crate::judge::Judge::new(&config.data_dir, &settings.checks).map(std::sync::Arc::new);
-    match serve(Computer::new(config), opts) {
-        Ok(()) => std::process::ExitCode::SUCCESS,
-        Err(e) => {
-            eprintln!("{e}");
-            std::process::ExitCode::FAILURE
-        }
-    }
+    (config, opts)
 }
 
 #[cfg(test)]
