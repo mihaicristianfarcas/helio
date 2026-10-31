@@ -20,7 +20,7 @@ it is, and what was measured on the way, is in the
  Helio (client)                                  Helio Host (host)
  ──────────────                                  ─────────────────
  helio-app  (GPUI window: hosts,                 helio-host  (service / app / user unit)
-            pairing, settings, agents;             ├─ web UI + API (HTTPS, 47802)
+            pairing, settings, agents;             ├─ API (HTTPS, localhost:47802)
             This computer: the host's      ──API──▶├─ pairing (TCP, 47801) + mDNS
             pages, the hosting switch,             ├─ presence (DHT, STUN, UPnP)
             the host's icon)                       │
@@ -60,9 +60,9 @@ it is, and what was measured on the way, is in the
 | `helio-update` | Whether a newer release, or newer commits on `main`, exist (GitHub's public API, once a day), and installing a release from the app: the package checked against GitHub's SHA-256 and for who signed it, then each system's way of putting it in place (on Windows, the installer), the host's engine with it while hosting is on |
 | `helio-client` | The client: session, stream, input, statistics, the host store; per-platform window, decoder and renderer |
 | `helio-cli` | `helio`, the command line: streaming and pairing from a terminal, with the client's own code, and this computer as a host (`helio host`: the host's switch run as the app runs it, `engine`; its identity and clients changed in helio-host-data) |
-| `helio-app` | The app's window (GPUI): hosts, agents, settings, setup, and This computer (the host's pages, a client of its web API on localhost; the hosting switch, which runs `helio-host enable`, `disable` and `status` through `helio_cli::engine`; the host's tray icon); `Helio mcp`; and `helio`: started under that name, or as `Helio cli`, the app's program runs helio-cli's command line, so the command comes with Helio (on Windows through `bin\helio.exe`, the `helio-console` bin), and Settings > General puts it on the PATH (`command`) |
+| `helio-app` | The app's window (GPUI): hosts, agents, settings, setup, and This computer (the host's pages, a client of its API on localhost; the hosting switch, which runs `helio-host enable`, `disable` and `status` through `helio_cli::engine`; the host's tray icon); `Helio mcp`; and `helio`: started under that name, or as `Helio cli`, the app's program runs helio-cli's command line, so the command comes with Helio (on Windows through `bin\helio.exe`, the `helio-console` bin), and Settings > General puts it on the PATH (`command`) |
 | `helio-agent` | Computer use: a headless session, the actions, the MCP server, the agent runners; the `helio-agent` CLI |
-| `helio-host` | The host: sessions, the video and audio pipelines, pairing, presence, the web UI, the Windows service |
+| `helio-host` | The host: sessions, the video and audio pipelines, pairing, presence, its API (for This computer and `helio host`, on localhost only), the Windows service |
 | `helio-host-data` | What the host keeps on disk, for it and for whatever manages it: its data folder (private to the host on Windows), its identity, its paired clients and what each may do |
 
 `vendor/` holds two tiny no-op crates GPUI names but does not use (see the
@@ -121,7 +121,7 @@ process runs:
 | `video-encode` | Capture → colour conversion → encode, at the negotiated rate (`helio-host/src/video.rs`, `helio-host/src/unix/video.rs`) |
 | `video-send` | Packetize with FEC and pace onto the tunnel (`helio-host/src/sender.rs`) |
 | `audio` | Capture → Opus → send, with parity |
-| `pairing`, `web`, `presence` | PIN pairing, the web UI and API, the internet path |
+| `pairing`, `api`, `presence` | PIN pairing, the API on localhost, the internet path |
 
 **Helio.** The app and the CLI start the same stream (`helio_client::session`):
 
@@ -231,7 +231,8 @@ No keys are copied by hand:
 
 1. Helio finds Helio Host by mDNS (`_helio._udp`), or is given an address.
 2. Helio shows a PIN; you type it into the host's Helio (This computer →
-   Devices) or its web UI.
+   Devices), or give it to `helio host pair PIN` on the host (over SSH,
+   for a host you cannot sit at).
 3. SPAKE2 over the PIN, with an ML-KEM-768 exchange beside it, gives both
    sides a key that only they have — the pairing is hybrid, like the tunnel,
    so a recording of it stays closed to a future quantum computer. Each side

@@ -16,7 +16,7 @@ use parking_lot::{Mutex, RwLock};
 use crate::clients::Clients;
 use crate::config::HostConfig;
 
-/// What a session looks like from outside (web UI).
+/// What a session looks like from outside (the API).
 #[derive(Debug, Clone, Default, serde::Serialize)]
 pub struct SessionStatus {
     pub client: String,
@@ -59,7 +59,7 @@ pub struct Host {
     /// STUN on the tunnel's socket: answers arrive in the receive loop.
     pub stun: Arc<helio_nat::stun::Stun>,
     pub rendezvous: helio_nat::keys::RendezvousKeys,
-    /// The router's port mapping, as the web UI shows it ("" before the
+    /// The router's port mapping, as the API reports it ("" before the
     /// first try).
     pub port_mapping: Mutex<String>,
     shared: Arc<crate::session::Shared>,
@@ -160,9 +160,9 @@ impl Host {
 
     /// Pairing listener and LAN advertisement.
     pub fn start_services(self: &Arc<Self>) {
-        let (name, port, pairing_port, web_port) = {
+        let (name, port, pairing_port) = {
             let c = self.config.read();
-            (c.name.clone(), c.port, c.pairing_port, c.web_port)
+            (c.name.clone(), c.port, c.pairing_port)
         };
         let h = self.clone();
         std::thread::Builder::new()
@@ -171,9 +171,9 @@ impl Host {
             .expect("spawning the pairing listener");
         let h = self.clone();
         std::thread::Builder::new()
-            .name("web".into())
+            .name("api".into())
             .spawn(move || crate::web::serve(h))
-            .expect("spawning the web UI");
+            .expect("spawning the API");
         let h = self.clone();
         std::thread::Builder::new()
             .name("presence".into())
@@ -186,7 +186,6 @@ impl Host {
             &self.endpoint.identity().public().short_id(),
             port,
             pairing_port,
-            web_port,
             &wake,
         ) {
             Ok(a) => *self.advertisement.lock() = Some(a),
@@ -197,7 +196,7 @@ impl Host {
         }
     }
 
-    /// Act on the running agent session from the web UI
+    /// Act on the running agent session through the API
     /// (`agent_control::*`, except taking over: that needs a stream).
     pub fn agent_control(&self, op: u8) {
         let _ = self
@@ -231,7 +230,7 @@ impl Host {
         self.shared.agent_log.lock().iter().cloned().collect()
     }
 
-    /// End whatever session is running (web UI).
+    /// End whatever session is running (the API).
     pub fn end_session(&self) {
         let peer = self.shared.active_peer.load(Ordering::Acquire);
         if peer != 0 {

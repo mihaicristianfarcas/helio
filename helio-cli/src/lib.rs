@@ -179,12 +179,11 @@ fn discover(dir: &Path) -> ExitCode {
                         f.os.clone(),
                         f.pairing_addr().to_string(),
                         state.into(),
-                        format!("https://{}:{}", f.address, f.web_port),
                     ]
                 })
                 .collect();
             list(
-                &["NAME", "SYSTEM", "PAIR AT", "STATE", "WEB UI"],
+                &["NAME", "SYSTEM", "PAIR AT", "STATE"],
                 &rows,
                 |c, cell| match (c, cell) {
                     (0, _) => Some(Look::Strong),
@@ -202,7 +201,8 @@ fn discover(dir: &Path) -> ExitCode {
 /// Where to type the PIN, while pairing waits for it.
 fn show_pin(pin: &str) {
     eprintln!(
-        "\nOn the host, open its web UI (Pair a device) and enter this PIN:\n\n    {}\n",
+        "\nOn the host, open Helio (This computer → Devices) and enter this PIN:\n\n    {}\n\n\
+            or, in a terminal on the host: helio host pair {pin}\n",
         style::to(To::Err, Look::Strong, pin)
     );
 }

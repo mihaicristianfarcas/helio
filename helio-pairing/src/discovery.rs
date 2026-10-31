@@ -1,8 +1,8 @@
 //! LAN discovery over mDNS/DNS-SD, the way Moonlight finds Sunshine hosts.
 //!
 //! Helio Host advertises `_helio._udp.local.` with its tunnel port, and TXT
-//! records for its id, its pairing and web ports, its system, and the
-//! hardware addresses to wake it by. Helio browses for it.
+//! records for its id, its pairing port, its system, and the hardware
+//! addresses to wake it by. Helio browses for it.
 
 use std::collections::HashMap;
 use std::net::IpAddr;
@@ -32,7 +32,6 @@ pub fn advertise(
     id: &str,
     port: u16,
     pairing_port: u16,
-    web_port: u16,
     wake: &[crate::wake::Mac],
 ) -> Result<Advertisement, String> {
     let daemon = ServiceDaemon::new().map_err(|e| e.to_string())?;
@@ -40,7 +39,6 @@ pub fn advertise(
     let mut props = vec![
         ("id", id.to_string()),
         ("pair", pairing_port.to_string()),
-        ("web", web_port.to_string()),
         ("v", "3".to_string()),
         // "windows" or "macos": the client shows the right kind of machine.
         ("os", std::env::consts::OS.to_string()),
@@ -72,7 +70,6 @@ pub struct Found {
     /// announced are Windows.
     pub os: String,
     pub pairing_port: u16,
-    pub web_port: u16,
     /// Its network adapters, to wake it by (none from hosts before it was
     /// announced).
     pub wake: Vec<crate::wake::Mac>,
@@ -138,7 +135,6 @@ pub fn browse(timeout: Duration) -> Result<Vec<Found>, String> {
                         port: info.get_port(),
                         os: prop("os").unwrap_or_else(|| "windows".into()),
                         pairing_port: prop("pair").and_then(|p| p.parse().ok()).unwrap_or(47801),
-                        web_port: prop("web").and_then(|p| p.parse().ok()).unwrap_or(47802),
                         wake: prop("mac")
                             .map(|m| crate::wake::parse_list(&m))
                             .unwrap_or_default(),

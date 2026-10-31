@@ -12,14 +12,14 @@ needs to be run, forwarded or paid for.
 |---|---|---|---|
 | 47800 | UDP | The tunnel: every stream, all paired clients | wherever clients are |
 | 47801 | TCP | Pairing (PIN) and host information | the local network |
-| 47802 | TCP (HTTPS) | Helio Host's web UI and API | the local network |
+| 47802 | TCP (HTTPS) | Helio Host's API, for Helio and `helio host` on the host | the host itself (localhost) |
 
-All three are settings on the host (**Settings > Network**, or `port`,
-`pairing_port` and `web_port` in its `config.toml`). Pairing is deliberately
-local: a device is paired once, at home, and then connects from anywhere.
-A VPN that puts both on one network (Tailscale, say) counts as local:
-Helio pairs, and links Helio Host's web UI, at whichever of the host's addresses
-last answered on its pairing port, so away from home that is the VPN's.
+All three are settings on the host (**Settings → Hosting**, under Ports, or
+`port`, `pairing_port` and `api_port` in its `config.toml`). Pairing is
+deliberately local: a device is paired once, at home, and then connects from
+anywhere. A VPN that puts both on one network (Tailscale, say) counts as
+local: Helio pairs at whichever of the host's addresses last answered on its
+pairing port, so away from home that is the VPN's.
 The client's own tunnel port is chosen once and kept (`port` in its data
 folder), so its NAT keeps giving it the same public port.
 
@@ -99,9 +99,8 @@ port: UPnP IGD first (an SSDP search, the WAN IP or PPP connection service,
 published candidates, and is released when Helio Host stops or the setting is
 turned off. A router whose own "public" address is private (behind another
 NAT) is left alone: a mapping there would open nothing. The host's Helio
-(This computer) and web UI show what happened under **Router**; **Ask the
-router to forward the port** (in Helio, Settings → Hosting, under Network;
-in the web UI, Settings > Network) turns it off.
+(This computer) shows what happened under **Router**; **Ask the router to
+forward the port** (Settings → Hosting, under Network) turns it off.
 
 ## Limits
 

@@ -1,5 +1,6 @@
-//! The host's web API from this computer: whether it answers, for
-//! `helio-host status`, and asking it to restart, for `helio-host restart`.
+//! The host's API from this computer: whether it answers, for
+//! `helio-host status`, and what `helio-host restart` and `pair` ask of it
+//! (`ask`).
 //!
 //! HTTPS on localhost, trusting only the certificate the host made for
 //! itself (`web-cert.pem`, the one Helio Host's window pins,
@@ -7,7 +8,7 @@
 //!
 //! Both only read the host's folder: `helio-host status` runs without an
 //! administrator, often before the host has ever run, and must create
-//! nothing there; `helio-host restart` reads the local token the host wrote
+//! nothing there; `restart` and `pair` read the local token the host wrote
 //! for its own computer.
 
 use std::io::{Read, Write};
@@ -22,7 +23,7 @@ use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, ServerName, UnixTime};
 use rustls::{ClientConfig, ClientConnection, DigitallySignedStruct, SignatureScheme, StreamOwned};
 
-use crate::config::{HostConfig, DEFAULT_WEB_PORT};
+use crate::config::{HostConfig, DEFAULT_API_PORT};
 
 /// How long the host has to answer. It answers on localhost within
 /// milliseconds; one that takes longer is reported as not answering rather
@@ -31,14 +32,14 @@ const TIMEOUT: Duration = Duration::from_secs(2);
 
 /// The web port in the host's settings, without writing them (the default
 /// when there are none yet).
-pub fn web_port(dir: &Path) -> u16 {
+pub fn api_port(dir: &Path) -> u16 {
     std::fs::read_to_string(HostConfig::path(dir))
         .ok()
         .and_then(|t| toml::from_str::<HostConfig>(&t).ok())
-        .map_or(DEFAULT_WEB_PORT, |c| c.web_port)
+        .map_or(DEFAULT_API_PORT, |c| c.api_port)
 }
 
-/// Whether the host on this computer answers its web API on `port`.
+/// Whether the host on this computer answers its API on `port`.
 pub fn answers(dir: &Path, port: u16) -> bool {
     let request = b"GET /api/state HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n";
     let Some(mut tls) = connect(dir, port) else {
@@ -50,12 +51,22 @@ pub fn answers(dir: &Path, port: u16) -> bool {
         && &status == b"HTTP/1.1 200"
 }
 
-/// `POST path` with an empty JSON body, signed in with `token`: the status
-/// code and the body, or None when no host answered.
-pub fn post(dir: &Path, port: u16, path: &str, token: &str) -> Option<(u16, String)> {
+/// `METHOD path` signed in with `token`, with a JSON `body` (POST, PUT):
+/// the status code and the body, or None when no host answered.
+pub fn call(
+    dir: &Path,
+    port: u16,
+    method: &str,
+    path: &str,
+    token: &str,
+    body: Option<&str>,
+) -> Option<(u16, String)> {
+    let body = body.unwrap_or("");
     let request = format!(
-        "POST {path} HTTP/1.1\r\nHost: localhost\r\nAuthorization: Bearer {token}\r\n\
-            Content-Type: application/json\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{{}}"
+        "{method} {path} HTTP/1.1\r\nHost: localhost\r\nAuthorization: Bearer {token}\r\n\
+            Content-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n\
+            {body}",
+        body.len()
     );
     let mut tls = connect(dir, port)?;
     tls.write_all(request.as_bytes()).ok()?;

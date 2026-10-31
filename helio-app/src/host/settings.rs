@@ -127,7 +127,7 @@ impl HostPages {
                     [
                         ("Tunnel (UDP)", 0usize),
                         ("Pairing (TCP)", 1),
-                        ("Web UI (TCP)", 2),
+                        ("API, this computer only (TCP)", 2),
                     ]
                     .into_iter()
                     .map(|(label, i)| {

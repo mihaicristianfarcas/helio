@@ -162,8 +162,8 @@ const HOST: Page = Page {
             ),
             (
                 "status [--json]",
-                "off, starting, on or failed (with why); for on, whether\nthe host's web \
-                 UI answers on this computer. --json:\none line, for programs",
+                "off, starting, on or failed (with why); for on, whether\nits API answers \
+                 on this computer. --json: one line,\nfor programs",
             ),
             (
                 "restart",
@@ -191,16 +191,22 @@ const HOST: Page = Page {
                  pairing gives",
             ),
             ("remove-client X25519", "unpair a device or an agent"),
+            (
+                "pair PIN [--device NAME] [--permissions LIST]",
+                "give the running host the PIN a device asking to pair\nshows (`helio pair \
+                 HOST` on it): pairing from a terminal,\nover SSH. --device: which, when \
+                 several ask",
+            ),
         ],
     }],
     notes: &[
         "On Windows, enable and disable need an administrator: Windows asks. identity,\n\
-         clients, permissions, add-client, remove-client and restart read the host's\n\
-         data, which only administrators may read there: run them in an administrator\n\
-         terminal.",
+         clients, permissions, add-client, remove-client, restart and pair read the\n\
+         host's data, which only administrators may read there: run them in an\n\
+         administrator terminal.",
         "A running host reads its clients when it starts, so permissions, add-client\n\
          and remove-client restart it: now, or when the session that runs ends.\n\
-         Helio's window and the host's web UI change them without a restart.",
+         Helio's This computer pages change them without a restart.",
     ],
 };
 

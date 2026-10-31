@@ -719,7 +719,6 @@ impl HelioApp {
                     i.name.clone(),
                     p.key.clone(),
                     i.pairing_address(),
-                    i.web_url(),
                     i.is_mac(),
                 ))
             })
@@ -739,7 +738,7 @@ impl HelioApp {
             .into_any_element();
         }
         rows(
-            persons.into_iter().map(|(name, key, address, web, mac)| {
+            persons.into_iter().map(|(name, key, address, mac)| {
                 let allowed = agent.iter().any(|(_, k)| *k == key);
                 let control: AnyElement = if allowed {
                     chip("Allowed", t.ink(Ink::FRESH), t).into_any_element()
@@ -754,7 +753,7 @@ impl HelioApp {
                         })
                         .on_click(cx.listener(move |this, _, _, cx| {
                             if let Some(a) = &address {
-                                this.pair_with(n.clone(), a.clone(), web.clone(), true, cx);
+                                this.pair_with(n.clone(), a.clone(), true, cx);
                             }
                         }))
                         .into_any_element()

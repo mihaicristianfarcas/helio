@@ -322,11 +322,13 @@ Details: [platforms/linux.md](platforms/linux.md).
 1. Open Helio. Hosts on your local network appear on the **Hosts** page;
    others can be added by address (**Add Host**, or ⌘N / Ctrl+N).
 2. Click the host: Helio shows a four-digit PIN.
-3. On the host, open Helio (**This computer → Devices**) or its web UI
-   (`https://HOST:47802`, whose certificate is self-signed) and type the
-   PIN.
+3. On the host, open Helio (**This computer → Devices**) and type the PIN.
+   On a host you cannot sit at, give it to the host from a terminal there,
+   over SSH: `helio host pair PIN` ([cli.md](cli.md#helio-host--this-computer-as-a-host)).
 
-The first time you open the web UI it asks you to create its admin account.
+On Windows, the first time, Helio on the host asks you to create the host's
+admin account: Helio is not an administrator there, and signs in to the host
+with it once.
 Pairing is done once, on the local network; afterwards Helio connects from
 anywhere ([networking.md](networking.md)). Next: [usage.md](usage.md).
 

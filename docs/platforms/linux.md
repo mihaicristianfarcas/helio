@@ -48,7 +48,7 @@ line of its standard output. That process is `helio_client::linux`:
 
 ## Hosting: Helio Host
 
-The same host — sessions, pairing, the web UI, the bitrate controller, the
+The same host — sessions, pairing, the API, the bitrate controller, the
 internet path — with `helio-host/src/linux/` where Windows and macOS have theirs.
 On GNOME and KDE under Wayland, each session gets a virtual display at the
 client's mode, made by the desktop's compositor (below). Elsewhere it
@@ -177,8 +177,8 @@ Data and logs are in `~/.config/helio-host`.
 ## Not verified yet
 
 - The host starting again in its own process after a change that restarts
-  it (`helio-host/src/restart.rs`: the code a Mac host runs, which was run
-  there).
+  it (`helio-host/src/restart.rs`), its API on localhost only, and `helio
+  host pair`: the code a Mac host runs, which was run there.
 - Sharing the clipboard from a KDE host: in the virtual machine above, once
   a Konsole was open, each read of the clipboard through XWayland timed out
   (`Time-out hit while reading the clipboard`, about a minute a look). A

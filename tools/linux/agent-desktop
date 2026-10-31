@@ -36,7 +36,7 @@ start)
 name = \"linux-desk\"
 port = 47820
 pairing_port = 47821
-web_port = 47822
+api_port = 47822
 internet_access = false
 TOML
         printf 'Groceries\n- milk\n- eggs\n' >$OUT/home/Documents/list.txt

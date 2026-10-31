@@ -44,7 +44,6 @@ while hosting is on:
 
 - In Helio on the host: **This computer → Logs**, then **Copy**. That is the
   last 400 lines of the newest file.
-- In the web UI (`https://HOST:47802`): **Logs**, the same 400 lines.
 
 For a whole file, or while the host is not running:
 

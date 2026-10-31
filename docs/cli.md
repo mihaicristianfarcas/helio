@@ -88,7 +88,7 @@ reason other than you quitting.
 | Command | Does |
 |---|---|
 | `helio discover` | List hosts on the local network, paired or not |
-| `helio pair HOST[:PORT]` | Pair with a host: shows a PIN to type on the host |
+| `helio pair HOST[:PORT]` | Pair with a host: shows a PIN to type on the host, in Helio (**This computer → Devices**) or with `helio host pair PIN` there |
 | `helio pair-agent HOST[:PORT]` | Pair this device's AI agent (a key of its own) |
 | `helio hosts` | List paired hosts |
 | `helio add-host NAME ADDR X25519 MLKEM` | Pair by hand, with the host's keys from `helio host identity` on it |
@@ -101,13 +101,14 @@ reason other than you quitting.
 |---|---|
 | `helio host enable` | Turn hosting on: the host starts now and at every start after (see [usage.md](usage.md#hosting-on-and-off)). Windows asks for an administrator |
 | `helio host disable` | Turn hosting off: the host stops and no longer starts. Windows asks for an administrator |
-| `helio host status [--json]` | `off`, `starting`, `on` or `failed` (with why); for `on`, whether the host's web UI answers on this computer |
+| `helio host status [--json]` | `off`, `starting`, `on` or `failed` (with why); for `on`, whether the host's API answers on this computer |
 | `helio host restart` | Restart the running host: at once, or when the stream that runs ends. Exits with 1 when no host runs |
 | `helio host identity` | Print the host's public keys |
 | `helio host clients` | List paired devices and agents: name, X25519 key, `person` or `agent`, and what each may do |
 | `helio host permissions X25519 [LIST]` | Show what a paired device or agent may do, or set it. `LIST`: `all`, `none`, `see-only`, or names joined by commas (`view,keyboard,mouse`; the names are in [usage.md](usage.md#what-each-device-may-do)). What a client of its kind cannot have is left out |
 | `helio host add-client NAME X25519 MLKEM [--agent] [--permissions LIST]` | Pair a device by hand (headless setups), with the keys from `helio identity` on it, or an agent's from `helio-agent identity` with `--agent`. Without `--permissions` it gets what pairing gives: everything for the first person's device, see only after it; an agent sees and acts |
 | `helio host remove-client X25519` | Unpair a device or an agent |
+| `helio host pair PIN [--device NAME] [--permissions LIST]` | Give the running host the PIN a device asking to pair shows (`helio pair HOST` on it): how a host you cannot sit at pairs, over SSH. `--device` says which device, when more than one asks; `--permissions` what it may do (else what pairing gives). A wrong PIN ends that attempt: start pairing again on the device |
 
 `helio host enable` and `disable` run the host's own program, as the
 hosting switch in Helio does, and the program comes with Helio (where, on
@@ -126,11 +127,13 @@ Declined, nothing changes, and `helio` exits with 1.
 ```
 
 `api` says whether the host answered `GET /api/state` on
-`https://localhost:WEB_PORT` with the certificate it made for itself. A host
-that has just started takes a moment to answer.
+`https://localhost:API_PORT` (47802 unless `api_port` says otherwise) with
+the certificate it made for itself. A host that has just started takes a
+moment to answer. The API answers this computer only: Helio's This computer
+pages and `helio host` use it.
 
-`identity`, `clients`, `permissions`, `add-client`, `remove-client` and
-`restart` read and change the host's data folder. On Windows only
+`identity`, `clients`, `permissions`, `add-client`, `remove-client`,
+`restart` and `pair` read and change the host's data folder. On Windows only
 administrators may read it (`C:\ProgramData\Helio Host`,
 [platforms/windows.md](platforms/windows.md)), so run them in an
 administrator terminal there: from another, they change nothing and exit
@@ -138,8 +141,8 @@ with 740 (Windows's `ERROR_ELEVATION_REQUIRED`).
 
 A running host reads its clients only when it starts, so `add-client`,
 `remove-client` and `permissions` restart it, as `helio host restart` does:
-at once, or when the stream that runs ends. Helio's This computer pages and
-the web UI change them without a restart.
+at once, or when the stream that runs ends. Helio's This computer pages
+change them without a restart.
 
 ### Exit status
 

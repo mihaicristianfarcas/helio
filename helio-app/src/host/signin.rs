@@ -108,15 +108,16 @@ impl HostPages {
             (
                 "Create Helio Host's admin account".to_string(),
                 format!(
-                    "It guards pairing and settings on {host}, here and in Helio Host's web \
-                        UI. The password needs 8 characters or more."
+                    "Helio is not an administrator here, so it signs in to the host on {host} \
+                        once, with this account. The password needs 8 characters or more."
                 ),
                 "Create Account",
             )
         } else {
             (
                 format!("Sign in to Helio Host on {host}"),
-                "Use the account you made for Helio Host's web UI. This window stays signed in."
+                "Use the account you made for Helio Host on this computer. This window stays \
+                 signed in."
                     .to_string(),
                 "Sign In",
             )

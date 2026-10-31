@@ -105,37 +105,6 @@ impl Item {
     pub fn pairing_address(&self) -> Option<String> {
         self.address_at(|f| f.pairing_port, 1)
     }
-
-    /// Helio Host's web UI (where the PIN is typed).
-    pub fn web_url(&self) -> Option<String> {
-        self.address_at(|f| f.web_port, 2)
-            .map(|a| format!("https://{a}"))
-    }
-}
-
-/// Helio Host's web UI for a host added by address (`HOST[:PAIRING_PORT]`, as
-/// `pair::resolve` reads it): on the port after the pairing port, where
-/// Helio Host's defaults put it (47801, 47802). Pairing there needs it as much as
-/// on the local network, through a VPN such as Tailscale above all.
-pub fn web_url_for(address: &str) -> Option<String> {
-    let address = address.trim();
-    let bare = address.trim_matches(|c| c == '[' || c == ']');
-    let (host, pairing_port) = if let Ok(a) = address.parse::<SocketAddr>() {
-        (a.ip().to_string(), a.port())
-    } else if let Ok(ip) = bare.parse::<IpAddr>() {
-        (ip.to_string(), pair::DEFAULT_PAIRING_PORT)
-    } else if let Some((host, port)) = address.rsplit_once(':') {
-        (host.to_string(), port.parse().ok()?)
-    } else {
-        (address.to_string(), pair::DEFAULT_PAIRING_PORT)
-    };
-    if host.is_empty() {
-        return None;
-    }
-    Some(format!(
-        "https://{}",
-        join_str(&host, pairing_port.wrapping_add(1))
-    ))
 }
 
 /// Whether a host is up after a poll: `was` is what its card said, and
@@ -195,7 +164,6 @@ fn sample_hosts() -> Vec<Item> {
                     port: pair::DEFAULT_PAIRING_PORT - 1,
                     os: os.into(),
                     pairing_port: pair::DEFAULT_PAIRING_PORT,
-                    web_port: pair::DEFAULT_PAIRING_PORT + 1,
                     wake: Vec::new(),
                     paired,
                 }),
@@ -511,10 +479,10 @@ pub enum PairState {
 }
 
 /// One pairing attempt: this computer shows `pin`; the user types it into
-/// Helio Host's web UI.
+/// Helio on the host (This computer → Devices), or gives it to `helio host
+/// pair` there.
 pub struct Pairing {
     pub title: String,
-    pub web_url: Option<String>,
     pub pin: String,
     pub state: PairState,
     cancel: Cancel,
@@ -526,7 +494,6 @@ impl Pairing {
     pub fn start_as(
         title: String,
         address: String,
-        web_url: Option<String>,
         agent: bool,
         wake_ui: impl Fn() + Send + 'static,
     ) -> Pairing {
@@ -578,7 +545,6 @@ impl Pairing {
         }
         Pairing {
             title,
-            web_url,
             pin,
             state: PairState::Connecting,
             cancel,
@@ -662,10 +628,6 @@ mod tests {
             item.pairing_address().as_deref(),
             Some("192.168.1.30:47801")
         );
-        assert_eq!(
-            item.web_url().as_deref(),
-            Some("https://192.168.1.30:47802")
-        );
         let v6 = paired("[fe80::1]:47800", Some("[fe80::2]:47800"));
         assert_eq!(v6.pairing_address().as_deref(), Some("[fe80::2]:47801"));
         assert!(item.offline_but_wakeable());
@@ -681,38 +643,6 @@ mod tests {
         );
         item.pairing_at = Some("100.64.0.7:47801".parse().unwrap());
         assert_eq!(item.pairing_address().as_deref(), Some("100.64.0.7:47801"));
-        assert_eq!(item.web_url().as_deref(), Some("https://100.64.0.7:47802"));
-    }
-
-    #[test]
-    fn a_host_added_by_address_has_its_web_ui_beside_its_pairing_port() {
-        let web = |a: &str| web_url_for(a);
-        assert_eq!(
-            web("100.64.0.7").as_deref(),
-            Some("https://100.64.0.7:47802")
-        );
-        assert_eq!(
-            web(" gaming-pc ").as_deref(),
-            Some("https://gaming-pc:47802")
-        );
-        assert_eq!(
-            web("gaming-pc.example.ts.net:47901").as_deref(),
-            Some("https://gaming-pc.example.ts.net:47902")
-        );
-        assert_eq!(
-            web("192.168.1.20:47801").as_deref(),
-            Some("https://192.168.1.20:47802")
-        );
-        assert_eq!(
-            web("2001:db8::7").as_deref(),
-            Some("https://[2001:db8::7]:47802")
-        );
-        assert_eq!(
-            web("[2001:db8::7]:47901").as_deref(),
-            Some("https://[2001:db8::7]:47902")
-        );
-        assert_eq!(web("gaming-pc:port"), None);
-        assert_eq!(web(""), None);
     }
 
     #[test]

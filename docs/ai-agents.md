@@ -17,8 +17,8 @@ the host lists it as an **AI agent**.
 
 - Helio: **Allow…** beside the host, on the Agents page (under **Your
   hosts**) or in **Agent setup** (under **Hosts the agent may use**). Type
-  the PIN into the host's Helio (This computer → Devices) or its web UI, as
-  for Helio.
+  the PIN into the host's Helio (This computer → Devices), or give it to
+  `helio host pair PIN` on the host, as for Helio.
 - CLI: `helio pair-agent HOST`.
 - By hand (headless hosts): `helio-agent identity` prints the agent's keys;
   `helio host add-client NAME X25519 MLKEM --agent` on the host, and
@@ -234,7 +234,7 @@ connects again.
   (in Helio or Helio Host), use the host's own keyboard or mouse, a secure screen
   is up, or nobody watches an agent that may act only while watched.
   **Stop** or **End Session** end the wait at once.
-- **The host's Helio (This computer) and web UI** show an agent's session — who watches, what
+- **The host's Helio (This computer)** shows an agent's session — who watches, what
   holds the agent, and each action as the agent described it — with
   **Pause**, **Resume**, **Hand back** and **Stop**. Under **Devices**, each
   agent's permissions: **See the screen**, **Keyboard**, **Mouse** and **Act
@@ -445,5 +445,5 @@ Unit tests: `cargo test -p helio-agent -p helio-host -p helio-proto -p
 helio-pairing`. `tools/linux/agent-desktop` starts a desktop in the Linux
 container for agents to work on, and `tools/linux/agent-tests/` has the
 helpers used above (a scripted MCP client, a watcher, a person streaming, the
-web API, the mock model APIs); see its
+host's API, the mock model APIs); see its
 [README](../tools/linux/agent-tests/README.md).

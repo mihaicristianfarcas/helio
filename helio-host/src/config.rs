@@ -11,8 +11,8 @@ pub use helio_host_data::data_dir;
 pub const DEFAULT_PORT: u16 = 47800;
 /// Pairing and host info (TCP).
 pub const DEFAULT_PAIRING_PORT: u16 = 47801;
-/// Web UI (HTTPS).
-pub const DEFAULT_WEB_PORT: u16 = 47802;
+/// The API Helio's This computer pages use (HTTPS, localhost only).
+pub const DEFAULT_API_PORT: u16 = 47802;
 
 fn default_name() -> String {
     std::env::var("COMPUTERNAME")
@@ -33,7 +33,8 @@ pub struct HostConfig {
     pub name: String,
     pub port: u16,
     pub pairing_port: u16,
-    pub web_port: u16,
+    /// The API's port, on localhost only (`web`).
+    pub api_port: u16,
     /// NVENC preset 1 (fastest) .. 7 (best quality).
     pub nvenc_preset: u8,
     /// Two-pass rate control at quarter resolution.
@@ -94,7 +95,7 @@ impl Default for HostConfig {
             name: default_name(),
             port: DEFAULT_PORT,
             pairing_port: DEFAULT_PAIRING_PORT,
-            web_port: DEFAULT_WEB_PORT,
+            api_port: DEFAULT_API_PORT,
             nvenc_preset: 1,
             nvenc_two_pass: true,
             nvidia_max_power: true,

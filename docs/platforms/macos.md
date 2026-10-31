@@ -102,7 +102,7 @@ says which system the host runs (so Helio forwards Command as Command).
 
 Everything after the encoder is shared with the other hosts: the paced
 sender, FEC, adaptive bitrate, the tunnel, pairing, discovery, reconnection
-and the web UI. The Mac-specific modules are in `helio-host/src/mac/`.
+and the API. The Mac-specific modules are in `helio-host/src/mac/`.
 
 ### Hosting from Helio, and its menu bar icon
 

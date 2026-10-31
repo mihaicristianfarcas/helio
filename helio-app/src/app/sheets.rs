@@ -92,7 +92,6 @@ impl HelioApp {
                     .into_any_element(),
                 PairState::Connecting | PairState::Waiting => {
                     let waiting = p.state == PairState::Waiting;
-                    let web = p.web_url.clone();
                     div()
                         .flex()
                         .flex_col()
@@ -118,29 +117,19 @@ impl HelioApp {
                                 }),
                         )
                         .child(sheet_text(
-                            "On the host, open Helio Host: the request is at the top of \
-                                Devices. Helio Host's web UI works too, under Pair a device.",
+                            "On the host, open Helio: the request is at the top of This \
+                                computer → Devices. Over SSH: helio host pair PIN.",
                             t,
                         ))
                         .child(
-                            sheet_buttons()
-                                .when_some(web, |d, url| {
-                                    d.child(
-                                        button("pair-web", "Open Helio Host's Web UI", t)
-                                            .icon(IconName::ExternalLink)
-                                            .on_click(cx.listener(move |this, _, _, cx| {
-                                                this.open_url(&url, cx)
-                                            })),
-                                    )
-                                })
-                                .child(button("pair-cancel", "Cancel", t).on_click(cx.listener(
-                                    |this, _, _, cx| {
-                                        if let Some(p) = this.pairing.take() {
-                                            p.cancel();
-                                        }
-                                        cx.notify();
-                                    },
-                                ))),
+                            sheet_buttons().child(button("pair-cancel", "Cancel", t).on_click(
+                                cx.listener(|this, _, _, cx| {
+                                    if let Some(p) = this.pairing.take() {
+                                        p.cancel();
+                                    }
+                                    cx.notify();
+                                }),
+                            )),
                         )
                         .into_any_element()
                 }
@@ -176,8 +165,7 @@ impl HelioApp {
                                 .on_click(cx.listener(move |this, _, _, cx| {
                                     let address = submit.read(cx).text().trim().to_string();
                                     this.add_host = None;
-                                    let web = crate::model::web_url_for(&address);
-                                    this.pair_with(address.clone(), address, web, false, cx);
+                                    this.pair_with(address.clone(), address, false, cx);
                                 })),
                         ),
                 );
@@ -295,16 +283,6 @@ impl HelioApp {
                     it(cx, |a, i, _, cx| a.start_pairing(i, cx), &item),
                 )
                 .icon(IconName::Link),
-            );
-        }
-        if let Some(url) = item.web_url() {
-            let open = cx.listener(move |this: &mut HelioApp, _: &ClickEvent, _, cx| {
-                this.open_url(&url, cx)
-            });
-            items.push(
-                helio_ui::MenuItem::new("Open Helio Host's Web UI", open)
-                    .icon(IconName::ExternalLink)
-                    .separated(),
             );
         }
         if item.is_paired() {
