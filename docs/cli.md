@@ -213,7 +213,7 @@ system and Helio run, not a command for you. Its hosting commands are
 
 | Command | Run by |
 |---|---|
-| `helio-host host` (or no command) | Hosting: the LaunchAgent on a Mac (with `--app PATH`, the app the host came with: the host follows it when it is replaced and turns hosting off when it is gone, [platforms/macos.md](platforms/macos.md#hosting-from-helio-and-its-menu-bar-icon)), the systemd user unit on Linux, the service on Windows |
+| `helio-host host` (or no command) | Hosting: the LaunchAgent on a Mac (with `--app PATH`, the app the host came with: the host follows it when it is replaced and turns hosting off when it is gone, [platforms/macos.md](platforms/macos.md#hosting-from-helio-and-its-menu-bar-icon)), the systemd user unit on Linux, the service on Windows (with `--stop-event NAME`, the event the service sets to stop the host cleanly, named afresh each time the service starts and openable only by SYSTEM) |
 | `helio-host enable`, `disable` | Helio's hosting switch and `helio host enable`, `disable`, which on Windows run them again through UAC when they exit with 740 (`ERROR_ELEVATION_REQUIRED`): nothing was changed |
 | `helio-host status [--json]` | The switch (`--json`) and `helio host status` |
 | `helio-host service` | Windows: the service itself (`HelioHost`, started by Windows) |

@@ -20,13 +20,18 @@ use std::ffi::OsString;
 use std::path::Path;
 use std::time::Duration;
 
-use windows::core::{PCWSTR, PWSTR};
+use windows::core::{w, PCWSTR, PWSTR};
 use windows::Win32::Foundation::{
-    CloseHandle, ERROR_SERVICE_DOES_NOT_EXIST, HANDLE, WAIT_OBJECT_0,
+    CloseHandle, GetLastError, LocalFree, SetLastError, ERROR_ALREADY_EXISTS,
+    ERROR_SERVICE_DOES_NOT_EXIST, HANDLE, HLOCAL, WAIT_OBJECT_0, WIN32_ERROR,
+};
+use windows::Win32::Security::Authorization::{
+    ConvertStringSecurityDescriptorToSecurityDescriptorW, SDDL_REVISION_1,
 };
 use windows::Win32::Security::{
     DuplicateTokenEx, SecurityImpersonation, SetTokenInformation, TokenPrimary, TokenSessionId,
-    TOKEN_ACCESS_MASK, TOKEN_ALL_ACCESS, TOKEN_DUPLICATE, TOKEN_QUERY,
+    PSECURITY_DESCRIPTOR, SECURITY_ATTRIBUTES, TOKEN_ACCESS_MASK, TOKEN_ALL_ACCESS,
+    TOKEN_DUPLICATE, TOKEN_QUERY,
 };
 use windows::Win32::System::Diagnostics::ToolHelp::{
     CreateToolhelp32Snapshot, Process32FirstW, Process32NextW, PROCESSENTRY32W, TH32CS_SNAPPROCESS,
@@ -50,9 +55,18 @@ use crate::hosting::State;
 
 pub const SERVICE_NAME: &str = "HelioHost";
 const DISPLAY_NAME: &str = "Helio Host";
-/// Set by the service to ask the host to shut down cleanly (restore the
-/// displays, tell the client). The host watches it.
-pub const STOP_EVENT: &str = "Global\\HelioHostStop";
+/// The event the service sets to ask the host to shut down cleanly
+/// (restore the displays, tell the client) is named afresh by each run of
+/// the service, this and 32 random hex digits, and handed to the host as
+/// `host --stop-event NAME`. Not one fixed name: any user may create an
+/// event in `Global\`, and one made first under a known name would be the
+/// one the service and the host then share, its maker able to set it and
+/// stop the host at will. A random name cannot be made in advance; the
+/// event only SYSTEM may open, and a name that exists already is refused.
+const STOP_EVENT_PREFIX: &str = "Global\\HelioHostStop-";
+const STOP_EVENT_ARG: &str = "--stop-event";
+/// Only SYSTEM (the service and the host it launches) may open it.
+const STOP_EVENT_SDDL: PCWSTR = w!("D:P(A;;GA;;;SY)");
 
 fn wide(s: &str) -> Vec<u16> {
     s.encode_utf16().chain(std::iter::once(0)).collect()
@@ -120,8 +134,7 @@ fn service_body() -> Result<(), String> {
     );
     tracing::info!("HelioHost running");
 
-    let host_stop = unsafe { CreateEventW(None, true, false, PCWSTR(wide(STOP_EVENT).as_ptr())) }
-        .map_err(|e| e.to_string())?;
+    let (host_stop, stop_name) = create_stop_event()?;
     let exe = crate::hosting::trusted_engine()?;
     let exe_w = wide(&exe.to_string_lossy());
 
@@ -138,7 +151,7 @@ fn service_body() -> Result<(), String> {
             continue;
         }
         unsafe { ResetEvent(host_stop).ok() };
-        let child = match launch(&exe_w, session) {
+        let child = match launch(&exe_w, session, &stop_name) {
             Ok(c) => c,
             Err(e) => {
                 tracing::warn!(session, "could not launch the host: {e}");
@@ -194,8 +207,60 @@ fn service_body() -> Result<(), String> {
     Ok(())
 }
 
-/// Start `helio-host host` in `session` with a copy of this process's SYSTEM token.
-fn launch(exe: &[u16], session: u32) -> Result<PROCESS_INFORMATION, String> {
+/// The host's stop event, made new: its handle and its name (see
+/// [`STOP_EVENT_PREFIX`]).
+fn create_stop_event() -> Result<(HANDLE, String), String> {
+    let mut rng = rand_core::OsRng;
+    let name = format!(
+        "{STOP_EVENT_PREFIX}{:016x}{:016x}",
+        rand_core::RngCore::next_u64(&mut rng),
+        rand_core::RngCore::next_u64(&mut rng)
+    );
+    let name_w = wide(&name);
+    let mut sd = PSECURITY_DESCRIPTOR::default();
+    // SAFETY: `STOP_EVENT_SDDL` is a NUL-terminated constant; `sd` is the
+    // descriptor the system allocates for it, read by CreateEventW through
+    // `attributes` and freed once after it; `name_w` is NUL-terminated and
+    // outlives the call. The last error is cleared before CreateEventW and
+    // read straight after it, which is how it tells an event that existed.
+    unsafe {
+        ConvertStringSecurityDescriptorToSecurityDescriptorW(
+            STOP_EVENT_SDDL,
+            SDDL_REVISION_1,
+            &mut sd,
+            None,
+        )
+        .map_err(|e| format!("the stop event's permissions: {}", e.message()))?;
+        let attributes = SECURITY_ATTRIBUTES {
+            nLength: std::mem::size_of::<SECURITY_ATTRIBUTES>() as u32,
+            lpSecurityDescriptor: sd.0,
+            bInheritHandle: false.into(),
+        };
+        SetLastError(WIN32_ERROR(0));
+        let event = CreateEventW(Some(&attributes), true, false, PCWSTR(name_w.as_ptr()));
+        let existed = GetLastError() == ERROR_ALREADY_EXISTS;
+        let _ = LocalFree(Some(HLOCAL(sd.0)));
+        let event = event.map_err(|e| format!("the stop event: {}", e.message()))?;
+        if existed {
+            let _ = CloseHandle(event);
+            return Err(format!(
+                "the stop event {name} exists already, made by another"
+            ));
+        }
+        Ok((event, name))
+    }
+}
+
+/// In the host: the stop event's name the service gave it, if it did.
+fn stop_event_name(args: &[String]) -> Option<&str> {
+    args.windows(2)
+        .find(|pair| pair[0] == STOP_EVENT_ARG)
+        .map(|pair| pair[1].as_str())
+}
+
+/// Start `helio-host host` in `session` with a copy of this process's SYSTEM
+/// token, told the name of its stop event.
+fn launch(exe: &[u16], session: u32, stop_event: &str) -> Result<PROCESS_INFORMATION, String> {
     unsafe {
         let mut own = HANDLE::default();
         OpenProcessToken(
@@ -225,7 +290,7 @@ fn launch(exe: &[u16], session: u32) -> Result<PROCESS_INFORMATION, String> {
             ..Default::default()
         };
         let exe_str = String::from_utf16_lossy(&exe[..exe.len() - 1]);
-        let mut cmd = wide(&format!("\"{exe_str}\" host"));
+        let mut cmd = wide(&format!("\"{exe_str}\" host {STOP_EVENT_ARG} {stop_event}"));
         let mut pi = PROCESS_INFORMATION::default();
         let result = CreateProcessAsUserW(
             Some(token),
@@ -486,18 +551,22 @@ fn firewall(program: Option<&Path>) {
     }
 }
 
-/// In the host: return when the service asks us to stop.
-pub fn wait_for_stop_request() {
-    unsafe {
-        let name = wide(STOP_EVENT);
-        use windows::Win32::System::Threading::{OpenEventW, SYNCHRONIZATION_SYNCHRONIZE};
-        let Ok(event) = OpenEventW(SYNCHRONIZATION_SYNCHRONIZE, false, PCWSTR(name.as_ptr()))
-        else {
-            // Not launched by the service: nothing to wait for.
-            loop {
-                std::thread::park();
-            }
-        };
-        WaitForSingleObject(event, INFINITE);
-    }
+/// In the host: return when the service asks us to stop. `args`: the
+/// host's command line, which names the stop event when the service
+/// launched it.
+pub fn wait_for_stop_request(args: &[String]) {
+    use windows::Win32::System::Threading::{OpenEventW, SYNCHRONIZATION_SYNCHRONIZE};
+    let event = stop_event_name(args).and_then(|name| {
+        let name = wide(name);
+        // SAFETY: `name` is NUL-terminated and outlives the call.
+        unsafe { OpenEventW(SYNCHRONIZATION_SYNCHRONIZE, false, PCWSTR(name.as_ptr())) }.ok()
+    });
+    let Some(event) = event else {
+        // Not launched by the service: nothing to wait for.
+        loop {
+            std::thread::park();
+        }
+    };
+    // SAFETY: the handle just opened, held for the rest of the process.
+    unsafe { WaitForSingleObject(event, INFINITE) };
 }
