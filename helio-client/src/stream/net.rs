@@ -585,7 +585,10 @@ impl NetLoop {
             *self.ctx.ack.lock() = Some(ack);
             self.ctx.stats.set_ack(ack);
             self.clip = None;
-            if ack.features & control::features::CLIPBOARD != 0 {
+            // The host's feature bit only confirms what this client asked for.
+            if wants_clipboard(&self.ctx.settings)
+                && ack.features & control::features::CLIPBOARD != 0
+            {
                 self.clip = Some(start_clipboard(&self.ctx, &ack));
             }
             self.emit(Event::Started(ack));
@@ -925,6 +928,13 @@ impl NetLoop {
     }
 }
 
+/// Whether this client shares the clipboard: its setting is on, and it is not
+/// a watcher. Asked in `SessionStart`, and checked again when the host's ack
+/// says it agreed: a host cannot start sharing on a client that did not ask.
+fn wants_clipboard(settings: &StreamSettings) -> bool {
+    settings.clipboard && !settings.watch
+}
+
 /// The `SessionStart` this client asks with.
 fn session_start(settings: &StreamSettings, nonce: u32) -> SessionStart {
     let mut flags = 0;
@@ -937,7 +947,7 @@ fn session_start(settings: &StreamSettings, nonce: u32) -> SessionStart {
     if settings.watch {
         flags |= control::flags::WATCH;
     }
-    if settings.clipboard && !settings.watch {
+    if wants_clipboard(settings) {
         flags |= control::flags::CLIPBOARD;
     }
     // The reassembler takes LAN-sized shards (header `lan_shards`);
@@ -1128,6 +1138,20 @@ fn request(ctx: &Ctx, r: Request) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_clipboard_is_shared_only_when_asked_for() {
+        let mut settings = StreamSettings::default();
+        assert!(!wants_clipboard(&settings), "off by default");
+        settings.clipboard = true;
+        assert!(wants_clipboard(&settings));
+        settings.watch = true;
+        assert!(!wants_clipboard(&settings), "a watcher never shares it");
+        assert_eq!(
+            session_start(&settings, 1).flags & control::flags::CLIPBOARD,
+            0
+        );
+    }
 
     #[test]
     fn the_display_rate_replaces_a_rounded_one() {
