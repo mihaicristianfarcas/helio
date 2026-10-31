@@ -1486,7 +1486,43 @@ fn alive(pid: u32) -> bool {
         // Signal 0: nothing sent, only whether it could be.
         unsafe { kill(pid as i32, 0) == 0 }
     }
-    #[cfg(not(unix))]
+    #[cfg(windows)]
+    {
+        use std::ffi::c_void;
+        #[link(name = "kernel32")]
+        extern "system" {
+            fn OpenProcess(access: u32, inherit: i32, pid: u32) -> *mut c_void;
+            fn WaitForSingleObject(handle: *mut c_void, millis: u32) -> u32;
+            fn CloseHandle(handle: *mut c_void) -> i32;
+            fn GetLastError() -> u32;
+        }
+        /// The right to wait on the process (winnt.h's `SYNCHRONIZE`).
+        const SYNCHRONIZE: u32 = 0x0010_0000;
+        /// The wait ran out, so the process has not ended (`WAIT_TIMEOUT`).
+        const WAIT_TIMEOUT: u32 = 0x102;
+        const ERROR_ACCESS_DENIED: u32 = 5;
+        // SAFETY: OpenProcess takes plain values and returns a handle or
+        // null; GetLastError is read right after it, on the same thread.
+        let (handle, error) = unsafe {
+            let handle = OpenProcess(SYNCHRONIZE, 0, pid);
+            (handle, if handle.is_null() { GetLastError() } else { 0 })
+        };
+        if handle.is_null() {
+            // No such process (ERROR_INVALID_PARAMETER), or one this user
+            // may not wait on, which still runs.
+            return error == ERROR_ACCESS_DENIED;
+        }
+        // A wait of 0 ms on the process: signalled once it has ended. Not
+        // its exit code, which a process may end with as STILL_ACTIVE.
+        // SAFETY: `handle` is the one OpenProcess just returned, open
+        // until the CloseHandle below, and not used after it.
+        unsafe {
+            let running = WaitForSingleObject(handle, 0) == WAIT_TIMEOUT;
+            CloseHandle(handle);
+            running
+        }
+    }
+    #[cfg(not(any(unix, windows)))]
     {
         let _ = pid;
         true
@@ -1619,6 +1655,22 @@ pub fn shrink_png(png: &[u8], max: u32) -> Option<Shot> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_process_that_has_ended_is_not_alive() {
+        assert!(alive(std::process::id()));
+        #[cfg(unix)]
+        let mut child = std::process::Command::new("true").spawn().unwrap();
+        #[cfg(windows)]
+        let mut child = std::process::Command::new("cmd")
+            .args(["/c", "exit"])
+            .spawn()
+            .unwrap();
+        let pid = child.id();
+        child.wait().unwrap();
+        drop(child);
+        assert!(!alive(pid));
+    }
 
     #[test]
     fn actions_describe_themselves_briefly() {
