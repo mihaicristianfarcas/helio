@@ -354,7 +354,7 @@ impl Clients {
     /// Stop an agent (its sessions are refused), or allow it again. True if
     /// that changed anything.
     pub fn set_stopped(&mut self, x25519_b64: &str, stopped: bool) -> std::io::Result<bool> {
-        self.modify(|list| {
+        let apply = |list: &mut Vec<Client>| {
             let Some(c) = list.iter_mut().find(|c| c.x25519 == x25519_b64) else {
                 return (false, false);
             };
@@ -363,6 +363,11 @@ impl Clients {
             }
             c.stopped = stopped;
             (true, true)
+        };
+        self.modify(apply).inspect_err(|_| {
+            // Not saved (the file could not be locked, read or written):
+            // this list holds it all the same, until the host starts again.
+            apply(&mut self.list);
         })
     }
 
@@ -566,6 +571,19 @@ mod tests {
         c.set_stopped(&x, true).unwrap();
         c.add("bot", agent.public(), None, true, None).unwrap();
         assert!(!c.is_stopped(&agent.public().x25519));
+    }
+
+    #[test]
+    fn a_stop_that_cannot_be_saved_holds_until_the_host_restarts() {
+        let dir = tempfile::tempdir().unwrap();
+        let agent = Identity::generate();
+        let mut c = Clients::load(dir.path());
+        c.add("bot", agent.public(), None, true, None).unwrap();
+        // The file broken beside the running host (a hand edit).
+        std::fs::write(dir.path().join("clients.toml"), "not toml [").unwrap();
+        let (x, _) = agent.public().to_b64();
+        assert!(c.set_stopped(&x, true).is_err());
+        assert!(c.is_stopped(&agent.public().x25519));
     }
 
     #[test]
