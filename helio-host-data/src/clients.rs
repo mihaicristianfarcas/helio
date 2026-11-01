@@ -280,8 +280,10 @@ impl Clients {
     /// the prompt showed them (`default_permissions`). The prompt cannot
     /// know the device's key, which arrives sealed after the PIN, so a
     /// device pairing again counts there as a person already here; it gets
-    /// that, never more than was shown (`add`, which `helio host
-    /// add-client` uses, leaves it out of the count).
+    /// that (`add`, which `helio host add-client` uses, leaves it out of
+    /// the count). The default is worked out again as the PIN is typed, as
+    /// the prompt shows it each time it asks: it differs from what was on
+    /// screen only if a person's device was removed in the second between.
     pub fn pair(
         &mut self,
         name: &str,
