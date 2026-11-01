@@ -255,8 +255,20 @@ impl Control {
         stop: &dyn Fn() -> Option<String>,
         max_wait: Duration,
     ) -> Result<bool, String> {
+        // The model's own request quotes what it will type, a password
+        // included (APPROVAL_NOTE asks it to): the log has its length
+        // only, as a typed text's (`Action::for_log`). The question file
+        // and the model's answer have it whole.
+        let (logged, why) = if from == "model" {
+            (
+                format!("the model's request ({} characters)", label.chars().count()),
+                format!("({} characters)", ask.why.chars().count()),
+            )
+        } else {
+            (label.to_string(), ask.why.clone())
+        };
         if self.refused.is_some() {
-            tracing::warn!(from, action = label, "nobody can be asked");
+            tracing::warn!(from, action = logged, "nobody can be asked");
             return Err(format!(
                 "Nobody can be asked whether to {label}. Don't do it: stop here and report \
                     that it needs the person's go-ahead."
@@ -275,8 +287,8 @@ impl Control {
         tracing::info!(
             n,
             from,
-            action = label,
-            why = ask.why,
+            action = logged,
+            why,
             "waiting for the person's yes"
         );
         let result = loop {
