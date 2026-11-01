@@ -194,6 +194,17 @@ fn candidates(exe: &Path) -> Vec<PathBuf> {
     out
 }
 
+/// Whether the hosting switch recorded who turned hosting on
+/// (`C:\Program Files\Helio Host\owner`, readable by every user): not on a
+/// host turned on by a Helio from before it did.
+#[cfg(windows)]
+pub fn owner_recorded() -> bool {
+    let programs = std::env::var_os("ProgramFiles")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from(r"C:\Program Files"));
+    programs.join("Helio Host").join("owner").is_file()
+}
+
 /// `program enable` or `disable` through UAC: Windows asks the user, then
 /// it runs elevated; this waits for it.
 #[cfg(windows)]
