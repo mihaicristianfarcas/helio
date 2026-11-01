@@ -40,7 +40,8 @@ pub struct Client {
     /// Seconds since the Unix epoch.
     pub paired_at: u64,
     /// The client's rendezvous secret (hex), for connecting from the
-    /// internet. Absent until it is made (`Clients::rendezvous_secret_or`).
+    /// internet. Made when the client is added; absent only from a file
+    /// written before (`Clients::rendezvous_secret_or` makes it then).
     pub rendezvous_secret: Option<String>,
     /// An AI agent's identity (paired as one).
     pub agent: bool,
@@ -262,7 +263,14 @@ impl Clients {
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_secs())
             .unwrap_or(0);
-        let rendezvous_secret = rendezvous_secret.map(hex);
+        // One added by hand (`helio host add-client`) gets its secret here,
+        // not at its first session, where the host would make and save it
+        // on its receive thread (`rendezvous_secret_or`).
+        let rendezvous_secret = Some(hex(rendezvous_secret.unwrap_or_else(|| {
+            let mut secret = [0u8; 32];
+            rand_core::RngCore::fill_bytes(&mut rand_core::OsRng, &mut secret);
+            secret
+        })));
         self.modify(|list| {
             // Pairing again replaces the entry: it does not count as a
             // person already here when the default is worked out.
@@ -529,11 +537,17 @@ mod tests {
             Identity::generate(),
             Identity::generate(),
         );
+        // Devices from a file written before a secret came with each: the
+        // host makes theirs as they connect, and saves it.
+        let entries: String = [("gone", &gone), ("narrowed", &narrowed), ("kept", &kept)]
+            .iter()
+            .map(|(name, id)| {
+                let (x, m) = id.public().to_b64();
+                format!("[[client]]\nname = \"{name}\"\nx25519 = \"{x}\"\nmlkem = \"{m}\"\npaired_at = 1\n\n")
+            })
+            .collect();
+        std::fs::write(dir.path().join("clients.toml"), entries).unwrap();
         let mut host = Clients::load(dir.path());
-        host.add("gone", gone.public(), None, false, None).unwrap();
-        host.add("narrowed", narrowed.public(), None, false, None)
-            .unwrap();
-        host.add("kept", kept.public(), None, false, None).unwrap();
         let b64 = |id: &Identity| id.public().to_b64().0;
 
         let mut cli = Clients::load(dir.path());
@@ -564,12 +578,31 @@ mod tests {
     }
 
     #[test]
-    fn a_client_without_a_rendezvous_secret_is_given_one_once() {
+    fn a_client_added_by_hand_has_a_secret_from_the_start() {
         let dir = tempfile::tempdir().unwrap();
         let mac = Identity::generate();
         let x = mac.public().to_b64().0;
         let mut c = Clients::load(dir.path());
         c.add("mac", mac.public(), None, false, None).unwrap();
+        let made = Clients::load(dir.path()).list()[0].rendezvous_secret();
+        assert!(made.is_some());
+        assert_eq!(c.rendezvous_secret_or(&x, [1; 32]).unwrap(), made);
+    }
+
+    #[test]
+    fn a_client_without_a_rendezvous_secret_is_given_one_once() {
+        let dir = tempfile::tempdir().unwrap();
+        let mac = Identity::generate();
+        let (x, m) = mac.public().to_b64();
+        // A file from before secrets were made with the client.
+        std::fs::write(
+            dir.path().join("clients.toml"),
+            format!(
+                "[[client]]\nname = \"mac\"\nx25519 = \"{x}\"\nmlkem = \"{m}\"\npaired_at = 1\n"
+            ),
+        )
+        .unwrap();
+        let mut c = Clients::load(dir.path());
         assert_eq!(c.rendezvous_secret_or(&x, [1; 32]).unwrap(), Some([1; 32]));
         assert_eq!(
             c.rendezvous_secret_or(&x, [2; 32]).unwrap(),

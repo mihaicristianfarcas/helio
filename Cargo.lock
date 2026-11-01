@@ -3629,6 +3629,7 @@ version = "0.1.0"
 dependencies = [
  "helio-proto",
  "helio-transport",
+ "rand_core 0.6.4",
  "serde",
  "tempfile",
  "toml 0.8.23",
