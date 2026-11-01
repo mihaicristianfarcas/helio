@@ -1,6 +1,7 @@
 # What AGENTS.md asks before a change is done ("Before you finish"), on every
 # pull request and on main after each merge: the formatting cargo fmt gives,
-# clippy without warnings, and the tests, on macOS, Windows and Linux; then
+# no dependency with a known vulnerability (cargo audit), clippy without
+# warnings, and the tests, on macOS, Windows and Linux; then
 # the app packaged on each, as the release packages it (the host's engine
 # inside it), from a debug build: what breaks the packaging shows here, not
 # at the next release. main takes changes only through pull requests, and
@@ -36,6 +37,24 @@ jobs:
       - name: Rust
         run: rustup toolchain install stable --profile minimal --component rustfmt && rustup default stable
       - run: cargo fmt --all -- --check
+
+  # Cargo.lock against the RustSec advisory database, fetched fresh on each
+  # run. Some dependencies parse what anyone on the internet sends and no
+  # fuzz target of ours covers them (mainline, the DHT's messages). A
+  # vulnerability fails the job; unmaintained, unsound and yanked crates are
+  # listed as warnings.
+  audit:
+    name: Advisories
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - name: Rust
+        run: rustup toolchain install stable --profile minimal && rustup default stable
+      # Pinned as the actions are: one exact version, built with the lock
+      # file it was released with.
+      - name: cargo-audit
+        run: cargo install --locked cargo-audit --version 0.22.2
+      - run: cargo audit
 
   macos:
     name: macOS
