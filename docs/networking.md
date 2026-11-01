@@ -50,13 +50,14 @@ for one too, and also punches.
    day: the slot's Ed25519 signing key and its BEP 44 salt are derived from
    the pair's secret, the role and the day with HKDF-SHA256, so they change
    at midnight UTC, and a reader looks in today's slot and yesterday's at
-   once. A record is sealed with ChaCha20-Poly1305 under a key derived from
+   once (in a day's last 10 minutes, tomorrow's too). A record is sealed with ChaCha20-Poly1305 under a key derived from
    the same secret, with its slot's key and salt as associated data, so it
    opens in that slot alone.
    - The host publishes its candidates in one record per paired client,
-     all at once (a publish takes seconds): when they change, every 30
-     minutes (items expire after about two hours), and when the UTC day
-     turns.
+     eight at once (a publish takes seconds): when they change, every 30
+     minutes (items expire after about two hours), when the UTC day turns,
+     and when a client is paired again. A publish that fails is tried
+     again a minute later, then twice as late each time, up to 30 minutes.
    - A client that wants to connect publishes an *intent*: its candidates,
      a timestamp and a nonce.
    - Removing a client removes its secret, the host's only copy: nothing
@@ -72,8 +73,10 @@ for one too, and also punches.
    its paired clients' records every few seconds; on an intent it has not
    seen before it sends initiations to the client's candidates, once, which
    opens its own NAT towards the client. An intent is new by its nonce, not
-   by its time, so a client's clock minutes off the host's does not matter;
-   one stamped more than 10 minutes before the host's clock is ignored. Whichever handshake lands first wins, and WireGuard roaming
+   by its time, so a client's clock up to 10 minutes off the host's does
+   not matter (near midnight UTC the host looks into the next day's slot
+   too); one stamped more than 10 minutes before the host's clock is
+   ignored. Whichever handshake lands first wins, and WireGuard roaming
    keeps the path.
 4. **Keeping it open.** The tunnel's keepalive holds the NAT mappings during
    a session; the host re-checks its public address by STUN every 25 s.
