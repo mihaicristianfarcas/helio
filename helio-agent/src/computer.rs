@@ -1825,6 +1825,17 @@ mod tests {
         assert!(log.contains("waiting for the person's yes"), "{log}");
         assert!(!log.contains("correct-horse"), "{log}");
         assert!(!refusal.contains("correct-horse"), "{refusal}");
+        // The model's own request quotes it, as it is told to: the person
+        // sees it whole, the log only its length.
+        let (mut c, person) = asked_every_step(dir.path(), true);
+        let request = format!("type `{secret}` into the Password field");
+        let log = logged(|| {
+            c.ask_approval(&request, "to sign in as correct-horse")
+                .unwrap();
+        });
+        assert_eq!(person.join().unwrap().what, request);
+        assert!(log.contains("waiting for the person's yes"), "{log}");
+        assert!(!log.contains("correct-horse"), "{log}");
         // The host's activity log hears what was done, not what was typed.
         assert_eq!(typing.for_log(), "type (23 characters)");
         assert_eq!(
