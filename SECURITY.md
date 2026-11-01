@@ -44,9 +44,11 @@ between the two is signed, found and sealed (ChaCha20-Poly1305) with keys
 derived from it, in slots that change every UTC day. A client cannot read
 another client's records, and a removed client's secret is deleted with it:
 it can read nothing the host publishes afterwards. The DHT's nodes see
-random-looking keys that link neither devices nor days, but they see the
-addresses records are published from and looked up from, and when: enough
-to tell that two addresses talk, on a given day.
+random-looking keys and salts that link neither devices nor days by
+themselves, but they see the addresses records are published from and
+looked up from, and when: enough to tell that two addresses talk, and to
+link one device's slots by its address, within a day and from one day to
+the next (a slot is looked up during the day after its own).
 
 **The host's API** (HTTPS on TCP 47802), which Helio's This computer pages
 and `helio host` use, answers on localhost only (127.0.0.1 and ::1):

@@ -140,7 +140,7 @@ see:
 - **Keys and salts that say nothing.** Each looks random, is different for
   every host-client pair and every role, and changes at midnight UTC.
   Nothing in one names Helio, the host or the client, or links one day's to
-  the next.
+  the next: the addresses that publish and look them up do (below).
 - **Sealed records.** A record's size tells roughly how many addresses it
   holds, not which. Without the pair's secret a node can neither open a
   record nor sign a new one into the slot.
@@ -154,8 +154,12 @@ see:
   tunnel is up (a minute at most).
 
 So a node that sees one address publish into a slot and another look it up
-learns that the two talk, on that day. The addresses inside a record, and
-which slot belongs to which pair on another day, stay closed to it.
+learns that the two talk, on that day. Slots of one device are linked by
+the address they come from: the host's for all its clients at once, a
+client's for all its hosts within seconds, and a slot is still looked up
+during the next day (a record put late the day before is found), so a
+node near it sees the same device on both days. The addresses inside a
+record stay closed to it.
 
 ## Limits
 
