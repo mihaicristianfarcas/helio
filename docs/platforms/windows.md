@@ -290,14 +290,23 @@ at the median, 69 ms p95. Motion at a full 30 fps was not measured.
   asks once, the first time Helio listens. The host's rules are added by
   `helio-host enable`, which runs as an administrator.
 
-Not verified yet (built and type-checked, not run on Windows): a data
-folder that is a junction, or that cannot be moved aside, refused as
-[above](#how-it-runs); the service asking its host to stop through the
-event it names for each run (`--stop-event`); `update-engine` checking
-and starting the new engine by the path its open file resolves to; the
-firewall rules set with `netsh` from System32; the clipboard helper
-inheriting only its two pipes; Helio reading the host's token as the user
-who turned hosting on.
+Run in a Windows 11 virtual machine (ARM64, the x64 programs emulated),
+not yet on an x64 PC: a data folder that is a junction, or another
+user's, moved aside as [above](#how-it-runs) (a junction as a link, its
+target left empty); the service asking its host to stop through the
+event it names for each run (`--stop-event`); `update-engine` starting
+the new engine it checked; the firewall rules set with `netsh` from
+System32, and removed; the clipboard helper, which inherits only its two
+pipes, in a session both ways; `local-token` readable by SYSTEM,
+Administrators and the user who turned hosting on, and refused to
+another account; that user's `helio host restart` and `pair` without an
+administrator.
+
+Not verified yet: a data folder that cannot be moved aside (the host
+then does not start); these changes with the virtual display, which the
+virtual machine cannot load (SudoVDA is built for x64 PCs only); Helio's
+own window reading the token as that user (its pages were checked with
+`HELIO_UI_DEMO` only); a Microsoft Entra ID account as that user.
 
 ## Helio, the client
 
