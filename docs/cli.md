@@ -132,12 +132,15 @@ the certificate it made for itself. A host that has just started takes a
 moment to answer. The API answers this computer only: Helio's This computer
 pages and `helio host` use it.
 
-`identity`, `clients`, `permissions`, `add-client`, `remove-client`,
-`restart` and `pair` read and change the host's data folder. On Windows only
-administrators may read it (`C:\ProgramData\Helio Host`,
+`identity`, `clients`, `permissions`, `add-client` and `remove-client`
+read and change the host's data folder. On Windows only administrators may
+read it (`C:\ProgramData\Helio Host`,
 [platforms/windows.md](platforms/windows.md)), so run them in an
 administrator terminal there: from another, they change nothing and exit
-with 740 (Windows's `ERROR_ELEVATION_REQUIRED`).
+with 740 (Windows's `ERROR_ELEVATION_REQUIRED`). `restart` and `pair` ask
+the running host through its API, with the token that, on Windows, only
+administrators and the user who turned hosting on may read: run them as
+that user, or in an administrator terminal; anyone else gets 740.
 
 A running host reads its clients only when it starts, so `add-client`,
 `remove-client` and `permissions` restart it, as `helio host restart` does:

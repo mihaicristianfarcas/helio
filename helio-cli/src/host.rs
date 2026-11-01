@@ -7,15 +7,17 @@
 //! a switch refused for want of one (exit code 740) is asked again through
 //! UAC.
 //!
-//! The rest read and change the host's data (helio-host-data) in this
-//! process: its identity, its paired clients and what each may do. On
+//! Most of the rest read and change the host's data (helio-host-data) in
+//! this process: its identity, its paired clients and what each may do. On
 //! Windows the host's data folder is readable by administrators only, so
 //! those need an administrator's terminal there: without one they say so
 //! and exit with 740, before they touch the folder (only an administrator
 //! may create it: `private`). A running host reads its clients only when
 //! it starts, so a change to them restarts it (`helio-host restart`: now,
-//! or when its session ends), as `restart` does; the host's own API
-//! needs the token only an administrator may read there too.
+//! or when its session ends). `restart` and `pair` only ask the running
+//! host, through its API, with the token an administrator and the user
+//! who turned hosting on may read (helio-host's `ask` says so to anyone
+//! else, with 740).
 
 use std::io::Write;
 use std::path::Path;
@@ -52,12 +54,14 @@ pub fn run(command: HostCommand) -> ExitCode {
         HostCommand::RemoveClient { x25519 } => {
             with_data("remove-client", |dir| remove_client(dir, &x25519))
         }
-        HostCommand::Restart => with_data("restart", |_| restart()),
+        // These two only ask the running host, through its API: the token
+        // they need is the owner's to read too, not only an administrator's.
+        HostCommand::Restart => restart(),
         HostCommand::Pair {
             pin,
             device,
             permissions,
-        } => with_data("pair", |_| pair(&pin, device.as_deref(), permissions)),
+        } => pair(&pin, device.as_deref(), permissions),
     }
 }
 
