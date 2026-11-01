@@ -1308,8 +1308,13 @@ impl SessionManager {
         let mut injected = None;
         if let Some(mut input) = self.shared.input.lock().take() {
             use helio_input::InputSink;
-            injected = input.last_injected.max(input.sink.last_sent());
             input.release_all();
+            // The key-ups and button-ups just sent are the session's own
+            // input, its last: not a person at the host (`holds`).
+            injected = input
+                .last_injected
+                .max(input.sink.last_sent())
+                .max(Some(Instant::now()));
             self.platform.input_done(&input.sink);
         }
         *self.status.lock() = None;
