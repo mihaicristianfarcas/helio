@@ -16,8 +16,8 @@ shows it: all 162 commits on `main` that no bot made carry a
 Every change reaches `main` through a pull request. A review agent checks
 it, then the maintainer reads it, and it merges once CI passes.
 
-GitHub enforces the pull request and the four CI checks below, for
-administrators too. A pull request merges by rebase only, with its
+GitHub enforces the pull request and four of the CI checks below
+(Formatting, macOS, Windows and Linux), for administrators too. A pull request merges by rebase only, with its
 conversations resolved, so `main`'s history is linear, and `main` takes no
 force push or deletion. GitHub does not enforce the review: branch
 protection asks for no approvals, and the reviews happen outside GitHub, so
