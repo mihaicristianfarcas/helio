@@ -835,7 +835,10 @@ fn http_connection(
                 .fold(0u8, |a, (x, y)| a | (x ^ y))
                 == 0;
         if !authorized {
-            tracing::warn!(method, path, "MCP HTTP request without the right token");
+            // At debug, and the path cut short: a local stranger can make
+            // these as fast as it likes, and must not fill the log.
+            let path: String = path.chars().take(64).collect();
+            tracing::debug!(method, path, "MCP HTTP request without the right token");
             let reply = json!({"error": "unauthorized"});
             return respond(&mut out, "401 Unauthorized", Some(reply), true);
         }
