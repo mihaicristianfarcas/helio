@@ -111,7 +111,8 @@ screenshots included — that is how the next turn resumes it (Codex under
 `~/.codex/sessions/`, Claude Code under `~/.claude/projects/`) — and ending
 the session does not remove those. One-off runs (`helio-agent run`) keep
 nothing: a run's working folder, under `agent/runs/`, is removed when the
-run ends. Both folders hold the screenshots and what the agent did and
+run ends (a run that Helio did not see end, because it crashed or was
+killed, keeps its folder until you delete it). Both folders hold the screenshots and what the agent did and
 asked you about, so on macOS and Linux they are readable only by you.
 Whatever the provider, the screenshots go to the model's maker as
 the model's input; with screen checks on, they also go to Cloudflare.
