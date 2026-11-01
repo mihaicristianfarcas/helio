@@ -224,9 +224,12 @@ pub fn presence(dir: PathBuf) {
                 return;
             }
             let seq = sequence(&dir);
-            // By host: what this client last said, and when.
-            let mut published: std::collections::HashMap<String, (Vec<SocketAddr>, Instant)> =
-                Default::default();
+            // By host: what this client last said, when, and under which
+            // secret (paired again, it has a new one, and new slots).
+            let mut published: std::collections::HashMap<
+                String,
+                (Vec<SocketAddr>, Instant, [u8; 32]),
+            > = Default::default();
             loop {
                 let hosts: Vec<Wan> = Hosts::load(&dir)
                     .list()
@@ -240,14 +243,16 @@ pub fn presence(dir: PathBuf) {
                         let Some(endpoints) = ours.clone().filter(|e| !e.is_empty()) else {
                             continue;
                         };
-                        let stale = published
-                            .get(&wan.host_x25519)
-                            .is_none_or(|(e, at)| *e != endpoints || at.elapsed() >= REPUBLISH);
+                        let stale = published.get(&wan.host_x25519).is_none_or(|(e, at, s)| {
+                            *e != endpoints || at.elapsed() >= REPUBLISH || *s != wan.secret
+                        });
                         if stale {
                             let record = Record::new(Kind::Presence, endpoints.clone());
                             if rv.publish(&wan.secret, &record, &seq).is_ok() {
-                                published
-                                    .insert(wan.host_x25519.clone(), (endpoints, Instant::now()));
+                                published.insert(
+                                    wan.host_x25519.clone(),
+                                    (endpoints, Instant::now(), wan.secret),
+                                );
                             }
                         }
                     }
