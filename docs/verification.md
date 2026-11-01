@@ -43,6 +43,7 @@ CI runs on every pull request and on `main` after each merge
 | Check | Runner | What it does |
 |---|---|---|
 | Formatting | `ubuntu-latest` | `cargo fmt --all -- --check` |
+| Advisories | `ubuntu-latest` | `cargo audit` (cargo-audit 0.22.2, installed with `--locked`): `Cargo.lock` against the [RustSec](https://rustsec.org) advisory database as it stands that day. A known vulnerability fails it; unmaintained, unsound and yanked crates are listed, not failed |
 | macOS | `macos-15`, Apple silicon | clippy with warnings as errors, the tests, and the app packaged with the host and `helio` inside it |
 | Windows | `windows-latest`, x64 | The same, and the installer run for real: install, turn hosting on, install again, uninstall, each step checked. The drivers must be as they were afterwards; a driver the runner refuses is reported in the log, not a failure |
 | Linux | `ubuntu-24.04`, x86_64 | The same as macOS, the host's crate on its own, and the fuzz targets built |
@@ -114,7 +115,9 @@ Other parsers of network input have no target, and rest on unit tests and
 bounds checks: audio datagrams (`helio-proto/src/audio.rs`), clipboard
 messages (`helio-proto/src/clip.rs`), pairing messages
 (`helio-pairing/src/pair.rs`), STUN replies (`helio-nat/src/stun.rs`) and
-rendezvous records (`helio-nat/src/rendezvous.rs`).
+rendezvous records (`helio-nat/src/rendezvous.rs`). The DHT's own messages
+are parsed by the `mainline` crate, which no target covers; CI's
+advisories check watches it with every other dependency.
 
 ## What is and isn't verified
 
