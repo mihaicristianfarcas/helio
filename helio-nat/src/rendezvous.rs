@@ -244,25 +244,31 @@ impl Rendezvous {
     }
 
     /// The newest record of `kind` sealed with `secret`, as of `now_ms`:
-    /// from today's slot or yesterday's (published before midnight UTC, or
-    /// by a clock a little behind ours), both looked up at once, so the
-    /// second costs no time. Blocking.
+    /// from the slots of the days [`days_to_look`] gives, looked up at
+    /// once, so the others cost no time. Blocking.
     pub fn resolve_at(&self, secret: &Secret, kind: Kind, now_ms: u64) -> Option<Record> {
-        let today = utc_day(now_ms);
-        let (current, previous) = std::thread::scope(|s| {
-            let previous = std::thread::Builder::new()
-                .name("helio-rendezvous".into())
-                .spawn_scoped(s, || {
-                    self.resolve_slot(&Slot::derive(secret, kind, today.saturating_sub(1)))
-                });
-            let current = self.resolve_slot(&Slot::derive(secret, kind, today));
-            (current, previous.ok().and_then(|h| h.join().ok()).flatten())
+        let days = days_to_look(now_ms);
+        let found: Vec<(i64, Record)> = std::thread::scope(|s| {
+            let others: Vec<_> = days[1..]
+                .iter()
+                .map(|&day| {
+                    std::thread::Builder::new()
+                        .name("helio-rendezvous".into())
+                        .spawn_scoped(s, move || {
+                            self.resolve_slot(&Slot::derive(secret, kind, day))
+                        })
+                })
+                .collect();
+            let first = self.resolve_slot(&Slot::derive(secret, kind, days[0]));
+            let others = others
+                .into_iter()
+                .map(|h| h.ok().and_then(|h| h.join().ok()).flatten());
+            std::iter::once(first).chain(others).flatten().collect()
         });
         // The higher sequence number is the later publication, whatever
         // the publisher's clock said.
-        [current, previous]
+        found
             .into_iter()
-            .flatten()
             .max_by_key(|(seq, _)| *seq)
             .map(|(_, r)| r)
     }
@@ -285,10 +291,36 @@ impl Rendezvous {
     }
 }
 
+/// How far ahead of the reader's a publisher's clock may be and still be
+/// found: as far as an intent may be old (the host's `INTENT_MAX_AGE`).
+const CLOCK_AHEAD_MS: u64 = 10 * 60 * 1000;
+
+/// The UTC days whose slots may hold the newest record, as of `now_ms`,
+/// today's first: yesterday's too (published before midnight, or by a
+/// clock behind the reader's), and in a day's last 10 minutes tomorrow's
+/// (by a clock that far ahead, already in it).
+fn days_to_look(now_ms: u64) -> Vec<u64> {
+    let today = utc_day(now_ms);
+    let mut days = vec![today, today.saturating_sub(1)];
+    if utc_day(now_ms + CLOCK_AHEAD_MS) != today {
+        days.push(today + 1);
+    }
+    days
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::path::Path;
+
+    #[test]
+    fn a_days_last_minutes_look_into_tomorrow_too() {
+        let day = 20_000u64;
+        let noon = day * 86_400_000 + 12 * 3_600_000;
+        assert_eq!(days_to_look(noon), vec![day, day - 1]);
+        let late = (day + 1) * 86_400_000 - 5 * 60_000;
+        assert_eq!(days_to_look(late), vec![day, day - 1, day + 1]);
+    }
 
     fn record(kind: Kind) -> Record {
         Record::new(

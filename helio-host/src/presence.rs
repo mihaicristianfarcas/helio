@@ -14,10 +14,13 @@
 //!
 //! Each client's records are sealed with its own secret (`helio_nat::keys`),
 //! so no client can read another's, and the host publishes one record per
-//! client, all at once (a put takes seconds): when its addresses change,
-//! every 30 minutes, and when the UTC day turns and the slots move. A
-//! removed client is not published for again; its last record expires from
-//! the DHT within about two hours.
+//! client, eight at once (a put takes seconds): when its addresses change,
+//! every 30 minutes, when the UTC day turns and the slots move, and when a
+//! client is paired again (a new secret). A put that fails is tried again a
+//! minute later, then twice as late each time, up to 30 minutes, so one
+//! refused slot does not hold up the others. A removed client is not
+//! published for again; its last record expires from the DHT within about
+//! two hours.
 //!
 //! An intent is acted on once, when the host first sees its nonce, not by
 //! the time it carries: a client's clock may be minutes off the host's. Its
@@ -60,6 +63,14 @@ const WARM_PACKET: &[u8] = b"\xffhelio-warm";
 const MAPPING_LEASE: Duration = Duration::from_secs(3600);
 /// A router that did not map is asked again this much later.
 const MAPPING_RETRY: Duration = Duration::from_secs(15 * 60);
+/// A client whose record could not be put is tried again this much later,
+/// then twice as late each time, up to `REPUBLISH_EVERY`: a slot that
+/// refuses the host's record (a paired client can sign one with a higher
+/// sequence number into its own) does not cost a put every round, which
+/// would hold up every other client's look-ups.
+const PUBLISH_RETRY: Duration = Duration::from_secs(60);
+/// Puts at once, at most: each is a thread and an iterative DHT query.
+const PUBLISH_AT_ONCE: usize = 8;
 
 /// A paired client the host publishes for and watches.
 struct Watched {
@@ -73,13 +84,46 @@ struct Published {
     endpoints: Vec<SocketAddr>,
     at: Instant,
     day: u64,
+    /// The secret it was sealed with: a client paired again has a new one,
+    /// and its slots with it.
+    secret: Secret,
+}
+
+/// A client whose last put failed.
+struct Retry {
+    /// Not tried again before.
+    next: Instant,
+    wait: Duration,
+    /// The host's addresses then: on new ones (back on a network, say), it
+    /// is tried at once.
+    endpoints: Vec<SocketAddr>,
+}
+
+impl Retry {
+    /// After a failed put, following `last`'s.
+    fn after(last: Option<&Retry>, endpoints: &[SocketAddr]) -> Retry {
+        let wait = last.map_or(PUBLISH_RETRY, |r| (r.wait * 2).min(REPUBLISH_EVERY));
+        Retry {
+            next: Instant::now() + wait,
+            wait,
+            endpoints: endpoints.to_vec(),
+        }
+    }
+
+    fn waits(&self, endpoints: &[SocketAddr]) -> bool {
+        self.endpoints == endpoints && Instant::now() < self.next
+    }
 }
 
 /// Whether a client's record is due: never published, the host's addresses
-/// changed, it is due for its refresh, or the UTC day turned (its slot moved).
-fn due(last: Option<&Published>, endpoints: &[SocketAddr], today: u64) -> bool {
+/// changed, it is due for its refresh, the UTC day turned (its slot moved),
+/// or the client was paired again (a new secret).
+fn due(last: Option<&Published>, endpoints: &[SocketAddr], today: u64, secret: &Secret) -> bool {
     last.is_none_or(|p| {
-        p.endpoints != endpoints || p.at.elapsed() >= REPUBLISH_EVERY || p.day != today
+        p.endpoints != endpoints
+            || p.at.elapsed() >= REPUBLISH_EVERY
+            || p.day != today
+            || p.secret != *secret
     })
 }
 
@@ -100,25 +144,71 @@ fn watched(host: &Host) -> Vec<Watched> {
         .collect()
 }
 
-/// Publish the host's addresses for every client whose record is due, all at
-/// once: each put takes seconds (docs/networking.md, Measured). True if any
-/// was published.
+/// Publish the host's addresses for every client whose record is due, at
+/// once (`PUBLISH_AT_ONCE` at a time): each put takes seconds
+/// (docs/networking.md, Measured). One that failed waits (`Retry`). True if
+/// any was published.
 fn publish_due(
     host: &Host,
     rv: &Rendezvous,
     clients: &[Watched],
     published: &mut HashMap<[u8; 32], Published>,
+    retries: &mut HashMap<[u8; 32], Retry>,
     endpoints: &[SocketAddr],
 ) -> bool {
     let today = utc_day(now_ms());
     let due: Vec<&Watched> = clients
         .iter()
-        .filter(|c| due(published.get(&c.public.x25519), endpoints, today))
+        .filter(|c| due(published.get(&c.public.x25519), endpoints, today, &c.secret))
+        .filter(|c| {
+            !retries
+                .get(&c.public.x25519)
+                .is_some_and(|r| r.waits(endpoints))
+        })
         .collect();
-    let results: Vec<(&Watched, Result<(), String>)> = std::thread::scope(|s| {
-        let running: Vec<_> = due
-            .into_iter()
-            .map(|c| {
+    let mut results: Vec<(&Watched, Result<(), String>)> = Vec::new();
+    for chunk in due.chunks(PUBLISH_AT_ONCE) {
+        results.extend(publish(host, rv, chunk, endpoints));
+    }
+    let mut any = false;
+    for (c, result) in results {
+        let key = c.public.x25519;
+        match result {
+            Ok(()) => {
+                any = true;
+                retries.remove(&key);
+                published.insert(
+                    key,
+                    Published {
+                        endpoints: endpoints.to_vec(),
+                        at: Instant::now(),
+                        day: today,
+                        secret: c.secret,
+                    },
+                );
+            }
+            Err(e) => {
+                let retry = Retry::after(retries.get(&key), endpoints);
+                tracing::debug!(client = c.name, error = %e, retry_secs = retry.wait.as_secs(),
+                    "rendezvous publish failed");
+                retries.insert(key, retry);
+            }
+        }
+    }
+    any
+}
+
+/// Put the host's record for each of `clients`, all at once.
+fn publish<'a>(
+    host: &Host,
+    rv: &Rendezvous,
+    clients: &[&'a Watched],
+    endpoints: &[SocketAddr],
+) -> Vec<(&'a Watched, Result<(), String>)> {
+    std::thread::scope(|s| {
+        let running: Vec<_> = clients
+            .iter()
+            .map(|&c| {
                 let record = Record::new(Kind::Host, endpoints.to_vec());
                 let put = std::thread::Builder::new()
                     .name("rendezvous-publish".into())
@@ -140,25 +230,7 @@ fn publish_due(
                 (c, result)
             })
             .collect()
-    });
-    let mut any = false;
-    for (c, result) in results {
-        match result {
-            Ok(()) => {
-                any = true;
-                published.insert(
-                    c.public.x25519,
-                    Published {
-                        endpoints: endpoints.to_vec(),
-                        at: Instant::now(),
-                        day: today,
-                    },
-                );
-            }
-            Err(e) => tracing::debug!(client = c.name, error = %e, "rendezvous publish failed"),
-        }
-    }
-    any
+    })
 }
 
 /// The intents the host has acted on: the last nonce from each client.
@@ -214,6 +286,7 @@ pub fn run(host: Arc<Host>) {
     let port = host.endpoint.local_port();
     // What was published for each client, by its tunnel key.
     let mut published: HashMap<[u8; 32], Published> = HashMap::new();
+    let mut retries: HashMap<[u8; 32], Retry> = HashMap::new();
     // The addresses last said to be reachable, for the log.
     let mut reachable: Vec<SocketAddr> = Vec::new();
     let mut last_probe: Option<Instant> = None;
@@ -233,6 +306,7 @@ pub fn run(host: Arc<Host>) {
             if dht.take().is_some() {
                 tracing::info!("internet access off: left the DHT");
                 published.clear();
+                retries.clear();
                 reachable.clear();
                 present.clear();
             }
@@ -283,10 +357,18 @@ pub fn run(host: Arc<Host>) {
         // towards it.
         let paired = |key: &[u8; 32]| clients.iter().any(|c| c.public.x25519 == *key);
         published.retain(|k, _| paired(k));
+        retries.retain(|k, _| paired(k));
         intents.seen.retain(|k, _| paired(k));
         present.retain(|k, _| paired(k));
         if !endpoints.is_empty()
-            && publish_due(&host, rv, &clients, &mut published, &endpoints)
+            && publish_due(
+                &host,
+                rv,
+                &clients,
+                &mut published,
+                &mut retries,
+                &endpoints,
+            )
             && reachable != endpoints
         {
             tracing::info!(endpoints = ?endpoints, symmetric_nat = host.stun.looks_symmetric(), "reachable from the internet");
@@ -583,14 +665,38 @@ mod tests {
     fn a_record_is_due_when_the_addresses_change_or_the_day_turns() {
         let here: Vec<SocketAddr> = vec!["203.0.113.7:47800".parse().unwrap()];
         let moved: Vec<SocketAddr> = vec!["198.51.100.9:47800".parse().unwrap()];
-        assert!(due(None, &here, 20_000), "never published");
+        let secret = [1; 32];
+        assert!(due(None, &here, 20_000, &secret), "never published");
         let last = Published {
             endpoints: here.clone(),
             at: Instant::now(),
             day: 20_000,
+            secret,
         };
-        assert!(!due(Some(&last), &here, 20_000));
-        assert!(due(Some(&last), &moved, 20_000), "the host moved");
-        assert!(due(Some(&last), &here, 20_001), "a new day: a new slot");
+        assert!(!due(Some(&last), &here, 20_000, &secret));
+        assert!(due(Some(&last), &moved, 20_000, &secret), "the host moved");
+        assert!(
+            due(Some(&last), &here, 20_001, &secret),
+            "a new day: a new slot"
+        );
+        assert!(
+            due(Some(&last), &here, 20_000, &[2; 32]),
+            "paired again: a new secret, new slots"
+        );
+    }
+
+    #[test]
+    fn a_failed_put_waits_longer_each_time_unless_the_host_moved() {
+        let here: Vec<SocketAddr> = vec!["203.0.113.7:47800".parse().unwrap()];
+        let moved: Vec<SocketAddr> = vec!["198.51.100.9:47800".parse().unwrap()];
+        let first = Retry::after(None, &here);
+        assert_eq!(first.wait, PUBLISH_RETRY);
+        assert!(first.waits(&here));
+        assert!(!first.waits(&moved), "on new addresses, at once");
+        let mut r = first;
+        for _ in 0..10 {
+            r = Retry::after(Some(&r), &here);
+        }
+        assert_eq!(r.wait, REPUBLISH_EVERY, "never longer than a refresh");
     }
 }
