@@ -52,10 +52,11 @@ owner (0600). On Windows, Helio's files are in the user's own `%APPDATA%`,
 and the host makes its data folder (`C:\ProgramData\Helio Host`) private when it
 starts: only SYSTEM, Administrators and the folder's owner can read or write
 it, except `config.toml` and `web-cert.pem`, which Helio's This computer pages
-need and every user may read; the host's tokens are closed to everyone but SYSTEM and
-Administrators. The host uses that folder only if SYSTEM or Administrators
-own it: any user may create it before the host first runs and put an
-account or a device of their own in it, so a folder someone else made, or
+need and every user may read; its local token is readable by SYSTEM,
+Administrators and the user who turned hosting on, no one else. The host
+uses that folder only if SYSTEM or Administrators own it: any user may
+create it before the host first runs and put a device of their own in it,
+so a folder someone else made, or
 a link (a junction) to another folder, is moved aside (`Helio
 Host.untrusted-…`) and the host starts afresh, in one it creates owned by
 Administrators and private from the start; while it cannot be moved, the
