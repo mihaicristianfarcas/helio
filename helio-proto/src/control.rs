@@ -543,7 +543,9 @@ const OP_PING: u8 = 9;
 const OP_PING_REPLY: u8 = 10;
 const OP_GAMEPAD: u8 = 11;
 const OP_RUMBLE: u8 = 12;
-const OP_RENDEZVOUS_OFFER: u8 = 13;
+// 13 and 14 were the offer of a host-wide rendezvous secret (and its key)
+// and the client's answer: retired, never reused, so a host and a client
+// of different releases drop each other's message rather than misread it.
 const OP_HOST_WARNING: u8 = 15;
 const OP_PROGRESS: u8 = 16;
 const OP_AGENT_CONTROL: u8 = 17;
@@ -551,6 +553,7 @@ const OP_AGENT_STATE: u8 = 18;
 const OP_AGENT_NOTE: u8 = 19;
 const OP_HDR_METADATA: u8 = 20;
 const OP_PERMISSIONS: u8 = 21;
+const OP_RENDEZVOUS_OFFER: u8 = 22;
 
 struct W<'a> {
     b: &'a mut [u8],
@@ -906,6 +909,21 @@ mod tests {
         assert_eq!(h.kind, Kind::Control);
         assert_eq!(h.total_len as usize, n);
         assert_eq!(Control::decode(&out[HEADER_LEN..n]), Some(c));
+    }
+
+    #[test]
+    fn an_offer_from_a_host_of_another_release_is_dropped_not_misread() {
+        // Op 13, an earlier host's: its rendezvous key, then the host-wide
+        // secret. Taken as this release's offer, the key would be saved as
+        // the pair's secret.
+        let mut old = vec![13u8];
+        old.extend([7u8; 32]);
+        old.extend([9u8; 32]);
+        assert_eq!(Control::decode(&old), None);
+        // Op 14, an earlier client's answer.
+        let mut answer = vec![14u8];
+        answer.extend([7u8; 32]);
+        assert_eq!(Control::decode(&answer), None);
     }
 
     #[test]
