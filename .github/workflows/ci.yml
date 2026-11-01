@@ -92,7 +92,10 @@ jobs:
       - name: FFmpeg
         shell: pwsh
         run: ./tools/windows/ffmpeg-ci.ps1 -AddToPath
+      # A cache per FFmpeg build: the build output it holds names its folder.
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          key: ${{ env.FFMPEG_BUILD }}
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace --no-fail-fast
       - name: The app, packaged

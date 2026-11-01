@@ -11,7 +11,11 @@
 #   ./tools/windows/ffmpeg-ci.ps1 [-AddToPath]
 #
 # Exports FFMPEG_DIR and LIBCLANG_PATH to the job (GITHUB_ENV); -AddToPath
-# also puts the DLLs' folder on PATH, for the tests that load them.
+# also puts the DLLs' folder on PATH, for the tests that load them. And
+# FFMPEG_BUILD, the pin's tag, which the jobs put in their Rust cache's
+# key: ffmpeg-sys-next's build output names FFmpeg's folder, and a cache
+# from another pin linked against a folder that was not there (cargo
+# reused that output although FFMPEG_DIR had changed).
 #
 # To move to a newer build: download a `win64-lgpl-shared` n8.x zip from
 # an `autobuild-` release of github.com/BtbN/FFmpeg-Builds, copy it into a
@@ -44,4 +48,5 @@ Expand-Archive $zip -DestinationPath $env:RUNNER_TEMP
 $dir = Join-Path $env:RUNNER_TEMP ($Pin.Asset -replace '\.zip$', '')
 "FFMPEG_DIR=$dir" >> $env:GITHUB_ENV
 "LIBCLANG_PATH=C:\Program Files\LLVM\bin" >> $env:GITHUB_ENV
+"FFMPEG_BUILD=$($Pin.Tag)" >> $env:GITHUB_ENV
 if ($AddToPath) { (Join-Path $dir 'bin') >> $env:GITHUB_PATH }

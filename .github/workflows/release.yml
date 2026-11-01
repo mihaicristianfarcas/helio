@@ -174,9 +174,10 @@ jobs:
       - name: FFmpeg
         shell: pwsh
         run: ./tools/windows/ffmpeg-ci.ps1
+      # A cache per FFmpeg build, as in ci.yml.
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
-          key: release
+          key: release-${{ env.FFMPEG_BUILD }}
       # On main, with the publisher set, the engine refuses to turn hosting
       # on with a copy not signed by it (the next job signs it so).
       - name: Build
