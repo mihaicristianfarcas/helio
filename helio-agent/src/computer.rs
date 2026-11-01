@@ -166,10 +166,11 @@ impl Action {
     /// What a yes to the model's own request must quote for it to cover
     /// this action (`control::Step::quote`): the text typed, the keys
     /// pressed. None for a click, a drag or a scroll.
-    pub fn quote(&self) -> Option<&str> {
+    pub fn quote(&self) -> Option<crate::control::Quote<'_>> {
+        use crate::control::Quote;
         match self {
-            Action::Type { text } => Some(text),
-            Action::Key { keys, .. } | Action::HoldKey { keys, .. } => Some(keys),
+            Action::Type { text } => Some(Quote::Text(text)),
+            Action::Key { keys, .. } | Action::HoldKey { keys, .. } => Some(Quote::Keys(keys)),
             _ => None,
         }
     }
@@ -583,8 +584,8 @@ impl Computer {
         self.count_waited(waited.elapsed());
         Ok(Outcome::text(if answer? {
             "Approved: go ahead, as you described it. The yes covers the text you quoted \
-                and the keys you named, as you wrote them; anything else that needs a \
-                go-ahead is asked about again."
+                and the keys you named, as you wrote them, each once; anything else that \
+                needs a go-ahead is asked about again."
         } else {
             "The person said no. Don't do it: find another way, or stop and tell them."
         }))

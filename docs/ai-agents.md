@@ -69,11 +69,13 @@ something, look over its shoulder, do a bit yourself, ask again.
   [screen checks](#screen-checks-cloudflare-clef) on. A question about a
   step shows it whole: all of a text the agent would type, a newline as
   `\n`. A question waits up to 15 minutes (not counted against the turn);
-  no answer is a no. A yes to the model's own request covers the next few
-  risky actions that carry it out (2 minutes, 3 actions), so you are not
-  asked twice: those it quoted, the command or text it types and the keys
-  it presses, word for word. Anything else, a click clef holds among them,
-  is asked about again.
+  no answer is a no. A yes to the model's own request covers the risky
+  actions that carry it out, for 2 minutes, so you are not asked twice:
+  those it quoted, each once. A text it types must be a piece of the
+  request in backticks or quotes, the same but for case and runs of
+  spaces (a line break is not a space: typed, it is Enter); keys may also
+  be a plain word of it, such as Return. Anything else, the same keys
+  pressed again, or a click clef holds, is asked about again.
 - **Notifications** (macOS): when a session is not on screen, Helio tells you
   when the agent asks for your go-ahead (with **Allow** and **Don't** on the
   notification), waits at a sign-in or administrator prompt, is done, or
