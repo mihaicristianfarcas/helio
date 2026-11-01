@@ -1,0 +1,8 @@
+{
+  "name": "helio-publish-tools",
+  "private": true,
+  "description": "wrangler for tools/publish-downloads, at one version with every dependency locked in package-lock.json: the release workflow runs it with the Cloudflare token.",
+  "dependencies": {
+    "wrangler": "4.156.0"
+  }
+}
