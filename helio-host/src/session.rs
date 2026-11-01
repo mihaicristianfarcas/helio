@@ -597,7 +597,8 @@ impl SessionManager {
         self.end_watchers(EndReason::Quit);
         // A restart with new parameters: the platform keeps what it can of
         // the display (Windows reuses its virtual display).
-        drop(self.stop_stream());
+        let ran = self.active.is_some();
+        let display = self.stop_stream();
         let now = Instant::now();
         let local_until = if agent {
             let hold = Duration::from_secs(cfg.agent_local_input_hold_secs as u64);
@@ -615,8 +616,14 @@ impl SessionManager {
                 "someone is using the host, whose monitors an agent's session turns off; refused"
             );
             self.refuse(&peer, &req, AckStatus::AgentNotAllowed);
+            // The session it would have restarted has ended: its display goes
+            // back and the host's monitors come on, as at any end
+            // (`teardown`), for the person at the host.
+            self.platform.ended(display, ran, false, &self.shared);
+            self.shared.restart.session_ended();
             return;
         }
+        drop(display);
 
         let negotiated =
             match crate::negotiate::negotiate(&req, &cfg, &self.supported, |c, asked| {
