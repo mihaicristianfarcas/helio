@@ -827,6 +827,11 @@ impl Computer {
 
     fn act_inner(&mut self, action: &Action) -> Result<Outcome, String> {
         if self.session.is_none() {
+            // A screenshot opens a session as `connect` does: only during
+            // the run or the turn (`connect_for_model`).
+            if let Some(why) = self.run_over() {
+                return Err(why);
+            }
             self.connect(None, None)?;
         }
         if let Some(reason) = self.session.as_ref().and_then(|s| s.ended()) {

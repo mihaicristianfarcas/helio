@@ -1245,6 +1245,10 @@ mod tests {
         computer.lock().end_turn();
         let e = connect(&mut s, None);
         assert!(e.contains("time is up"), "{e}");
+        // Nor through a screenshot, which connects when nothing is.
+        let (content, error) = s.call("screenshot", &json!({}));
+        let said = format!("{content:?}");
+        assert!(error && said.contains("time is up"), "{said}");
         let e = crate::conversation::connect(&computer).unwrap_err();
         assert!(e.contains("damaged"), "{e}");
         conversation.end();
