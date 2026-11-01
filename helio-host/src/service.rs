@@ -557,9 +557,22 @@ fn firewall(program: Option<&Path>) {
 pub fn wait_for_stop_request(args: &[String]) {
     use windows::Win32::System::Threading::{OpenEventW, SYNCHRONIZATION_SYNCHRONIZE};
     let event = stop_event_name(args).and_then(|name| {
-        let name = wide(name);
-        // SAFETY: `name` is NUL-terminated and outlives the call.
-        unsafe { OpenEventW(SYNCHRONIZATION_SYNCHRONIZE, false, PCWSTR(name.as_ptr())) }.ok()
+        let wide_name = wide(name);
+        // SAFETY: `wide_name` is NUL-terminated and outlives the call.
+        let opened = unsafe {
+            OpenEventW(
+                SYNCHRONIZATION_SYNCHRONIZE,
+                false,
+                PCWSTR(wide_name.as_ptr()),
+            )
+        };
+        opened
+            .inspect_err(|e| {
+                // Then the service's stop ends this process the hard way,
+                // after its wait, with the displays not put back.
+                tracing::warn!(name, error = %e, "the service's stop event cannot be opened");
+            })
+            .ok()
     });
     let Some(event) = event else {
         // Not launched by the service: nothing to wait for.
