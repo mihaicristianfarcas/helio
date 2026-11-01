@@ -21,11 +21,14 @@
 # Browser Cache TTL wins over no-cache for the file types the edge caches):
 # the page adds the commit to each link, which makes a new release a new URL.
 #
-# wrangler is the one on PATH, else npx's at the exact version below (this
-# step holds the Cloudflare token, so a floating range would run whatever 4.x
-# is newest that day; its own dependencies still resolve at run time). On a
-# runner it signs in with CLOUDFLARE_API_TOKEN (an API token with Workers R2
-# Storage: Edit) and CLOUDFLARE_ACCOUNT_ID; elsewhere, as `wrangler login` left it. The release
+# wrangler is the one tools/wrangler locks, every dependency at the version
+# and digest in its package-lock.json, installed with `npm ci` and no
+# install scripts: this step holds the Cloudflare token, so it runs only
+# code that was reviewed, not whatever npm resolves that day. To move it,
+# change the version in tools/wrangler/package.json and run `npm install
+# --package-lock-only --ignore-scripts` there. On a runner it signs in with
+# CLOUDFLARE_API_TOKEN (an API token with Workers R2 Storage: Edit) and
+# CLOUDFLARE_ACCOUNT_ID; elsewhere, as `wrangler login` left it. The release
 # workflow (.github/workflows/release.yml) runs this for each push to main.
 set -euo pipefail
 REPO=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
@@ -35,7 +38,8 @@ BASE=${DOWNLOADS_URL:-https://download.helio.mihaicristian.dev}
 VERSION=$(sed -n '/^\[workspace.package\]/,/^\[/ s/^version = "\(.*\)"/\1/p' "$REPO/Cargo.toml")
 COMMIT=${HELIO_COMMIT:-$(git -C "$REPO" rev-parse HEAD)}
 export WRANGLER_SEND_METRICS=false
-if command -v wrangler >/dev/null; then wrangler=(wrangler); else wrangler=(npx --yes wrangler@4.156.0); fi
+npm ci --prefix "$REPO/tools/wrangler" --ignore-scripts --no-audit --no-fund >/dev/null
+wrangler=("$REPO/tools/wrangler/node_modules/.bin/wrangler")
 
 # put KEY FILE TYPE [DISPOSITION]
 put() {
