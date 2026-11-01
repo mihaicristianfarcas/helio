@@ -8,7 +8,8 @@
 //!
 //! Each host's records, and this client's for that host, are found and
 //! opened with the secret pairing gave this client for that host alone
-//! (`helio_nat::keys`): two hosts' records cannot be linked to one client.
+//! (`helio_nat::keys`): nothing in two hosts' records links them to one
+//! client, though the address this client publishes from does.
 
 use std::net::{SocketAddr, UdpSocket};
 use std::path::{Path, PathBuf};
