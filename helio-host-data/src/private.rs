@@ -158,9 +158,6 @@ mod imp {
     const PRIVATE_FILE: PCWSTR = w!("D:P(A;;FA;;;SY)(A;;FA;;;BA)(A;;FA;;;OW)");
     /// One of the public files.
     const PUBLIC_FILE: PCWSTR = w!("D:P(A;;FA;;;SY)(A;;FA;;;BA)(A;;FA;;;OW)(A;;FR;;;BU)");
-    /// The host's tokens, as found when the host starts (it writes its
-    /// local token again, for its owner too: `restrict_token`).
-    const ADMINS_ONLY: PCWSTR = w!("D:P(A;;FA;;;SY)(A;;FA;;;BA)");
 
     /// Replace `path`'s access list with `sddl`.
     fn set_dacl(path: &Path, sddl: PCWSTR) -> std::io::Result<()> {
@@ -355,7 +352,12 @@ mod imp {
             } else if public {
                 set_dacl(&path, PUBLIC_FILE)
             } else if top && is_token(&name) {
-                set_dacl(&path, ADMINS_ONLY)
+                // Left as the host wrote it (`restrict_token`): readable by
+                // the user who turned hosting on too, which this list would
+                // take away until the host's next start. The host writes a
+                // new one at every start, and one on disk while it is down
+                // opens nothing.
+                Ok(())
             } else {
                 set_dacl(&path, PRIVATE_FILE)
             };
@@ -368,8 +370,7 @@ mod imp {
         }
     }
 
-    /// The file kept from everyone but administrators (see `web`), the
-    /// file's owner included, until the host writes it again.
+    /// The host's local token, whose access list the host sets itself.
     fn is_token(name: &std::ffi::OsStr) -> bool {
         name == "local-token"
     }
