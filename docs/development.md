@@ -201,7 +201,7 @@ when it needs to be and never merged into it.
 
 | Script | Makes |
 |---|---|
-| `tools/package-macos` | `Helio-VERSION-macos-ARCH.zip`: Helio.app, with the host inside it as a helper app, `Contents/Helpers/Helio Host.app` (`tools/build-helio-app`, which signs the helper, then the app), and `helio`, the command line: `Contents/Resources/bin/helio`, a link to the app's program, the folder Settings > General names in `/etc/paths.d/helio` |
+| `tools/package-macos` | `Helio-VERSION-macos-ARCH.zip`: Helio.app, with the host inside it as a helper app, `Contents/Helpers/Helio Host.app` (`tools/build-helio-app`; `tools/sign-helio-app` signs the helper, then the app), and `helio`, the command line: `Contents/Resources/bin/helio`, a link to the app's program, the folder Settings > General names in `/etc/paths.d/helio`. `--stage-only` only builds, into `target/stage/Helio.app.zip`; `--from ZIP` only signs, notarizes and archives that, and runs no build |
 | `tools/package-windows.ps1` | `Helio-VERSION-windows-x86_64-setup.exe`, the installer (`tools/windows/helio.iss`, Inno Setup 6.6 or newer): per user, no administrator, Helio in the Start menu and Settings > Apps, whose **Uninstall** turns hosting off first and takes `bin` off the user's `PATH` if Settings > General put it there; Helio's own update runs it again, silently. And `Helio-VERSION-windows-x86_64.zip`, the same files, unpacked: Helio.exe beside FFmpeg's DLLs and license and the host's engine, `helio-host.exe`; `bin\helio.exe`, the `helio` command (helio-app's `helio-console`, which runs `Helio.exe cli`). `-Sign` signs them all (below) |
 | `tools/windows/test-install.ps1 -Setup FILE` | Not a package: installs the installer silently, turns hosting on, installs again (as a person does, then as Helio's update does, `/HELIOUPDATE`, which leaves the host's engine alone), uninstalls, and checks each step and that nothing is left; `-Signed` also verifies every signature, and `-UnsignedEngine` that the engine refuses an unsigned and a changed copy. As an administrator, for a user without Helio. CI runs it on each pull request, the release workflow on each package |
 | `tools/linux/package` | `Helio-VERSION-linux-ARCH.tar.gz`: a folder with `helio-app`, `helio-host`, the host's unit `helio-host.service`, the launcher entry, its icon and `install.sh` (`tools/linux/install-release`; its `--uninstall` also removes the `~/.local/bin/helio` link Settings > General makes) |
@@ -253,11 +253,15 @@ local archives
 put it in a local tap (`brew tap-new`), and `brew install --cask
 --appdir=DIR` from it.
 
-On the runners the macOS app is signed with a Developer ID, the helper
-inside it first, with the hardened runtime and a secure timestamp,
-notarized by Apple in one submission and stapled, so macOS opens it from a
-download. The workflow takes the certificate
-and an App Store Connect API key from five secrets
+On the runners the macOS app is built on one Mac of each architecture,
+signed ad hoc and without secrets (`tools/package-macos --stage-only`),
+and signed on another runner, where no build script of any dependency has
+run: the job `macos-package`, in the environment `release`, on `main` only
+(`tools/package-macos --from`). It signs the app with a Developer ID, the
+helper inside it first, with the hardened runtime and a secure timestamp,
+has Apple notarize it in one submission and staples the ticket, so macOS
+opens it from a download. It takes the certificate and an App Store
+Connect API key from five secrets of that environment
 (`MACOS_CERTIFICATE_P12`, the certificate and its key in base64;
 `MACOS_CERTIFICATE_PASSWORD`; `APPLE_API_KEY_P8`, `APPLE_API_KEY_ID`,
 `APPLE_API_ISSUER`), and a release on `main` fails without them. By hand,
