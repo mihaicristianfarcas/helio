@@ -183,6 +183,11 @@ pub struct AgentSettings {
     pub approvals: Approvals,
     /// What clef checks on the screen (see `judge`).
     pub checks: crate::judge::Checks,
+    /// Agents outside Helio (`Helio mcp` in Claude Code, Codex): nobody can
+    /// be asked there, so a step the rules or clef hold is refused, unless
+    /// this is on. Apart from `approvals`, which is for Helio's own runs:
+    /// allowing one does not stop the person being asked in the other.
+    pub outside_risky: bool,
     /// Settings saved before `approvals`: every action waited (read, then
     /// `approvals` says it).
     #[serde(skip_serializing)]
@@ -204,6 +209,7 @@ impl Default for AgentSettings {
             height: 800,
             approvals: Approvals::Risky,
             checks: crate::judge::Checks::default(),
+            outside_risky: false,
             confirm_actions: false,
         }
     }

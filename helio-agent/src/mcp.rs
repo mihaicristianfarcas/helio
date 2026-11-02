@@ -997,9 +997,9 @@ pub fn main(args: &[String]) -> std::process::ExitCode {
     // The checks the person turned on in Helio apply to every agent that
     // uses the hosts, this server's included. With no control folder
     // nobody can be asked, so what they or the rules hold is refused,
-    // unless the person turned approvals off.
+    // unless the person let outside agents take such steps.
     let settings = crate::providers::AgentSettings::load(&config.data_dir);
-    config.refuse_held = settings.approvals != Approvals::Off;
+    config.refuse_held = refuses_held(&settings);
     config.judge =
         crate::judge::Judge::new(&config.data_dir, &settings.checks).map(std::sync::Arc::new);
     match serve(Computer::new(config), opts) {
@@ -1009,6 +1009,13 @@ pub fn main(args: &[String]) -> std::process::ExitCode {
             std::process::ExitCode::FAILURE
         }
     }
+}
+
+/// Whether this server refuses what the rules or clef hold, where nobody
+/// can be asked: unless the person let agents outside Helio take such
+/// steps (`AgentSettings::outside_risky`), whatever Helio's own runs ask.
+fn refuses_held(settings: &crate::providers::AgentSettings) -> bool {
+    !settings.outside_risky
 }
 
 /// The server's settings from its command line.
@@ -1186,6 +1193,20 @@ mod tests {
             .contains("paired"));
         let r = s.handle(&json!({"jsonrpc": "2.0", "id": 8, "method": "tools/call", "params": {"name": "list_hosts"}})).unwrap();
         assert_eq!(r["result"]["isError"], false);
+    }
+
+    #[test]
+    fn outside_agents_take_held_steps_only_when_the_person_said_so() {
+        use crate::providers::AgentSettings;
+        let mut s = AgentSettings::default();
+        assert!(refuses_held(&s));
+        // Approvals off in Helio's own runs: still refused out here.
+        s.approvals = Approvals::Off;
+        assert!(refuses_held(&s));
+        // Asked for in every run of Helio's: allowed out here all the same.
+        s.approvals = Approvals::Every;
+        s.outside_risky = true;
+        assert!(!refuses_held(&s));
     }
 
     #[test]

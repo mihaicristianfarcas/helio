@@ -159,8 +159,8 @@ the token in Agent setup or with `helio-agent set-key cloudflare`, or set
   such a screen is withheld.
 - **Clicks and Typing a secret apply to `Helio mcp` too.** Nobody can be
   asked there, so a step they hold is refused, as one the rules hold is,
-  and the model is told it needs your go-ahead; with **Ask for your
-  go-ahead** set to **Never**, such steps go ahead.
+  and the model is told it needs your go-ahead; with **Risky steps** on
+  (Agent setup, **Your hosts in other agents**), such steps go ahead.
 - **Each check sends the screen to Cloudflare**, at most 1280 pixels
   across, as a JPEG: Workers AI refuses larger pictures (a PNG of
   Windows 11's own desktop is one) before clef sees them. Clef costs $0.24 per million input tokens; clef-flash, smaller
@@ -238,8 +238,10 @@ Every action answers with a screenshot of the screen once it has settled.
 After 10 minutes without a call the server lets the host go; the next call
 connects again. Nobody can be asked for a go-ahead here: a step the
 [rules](#design-decisions-and-why) or your [screen
-checks](#screen-checks-cloudflare-clef) would hold is refused, unless **Ask
-for your go-ahead** in **Agent setup** is **Never**.
+checks](#screen-checks-cloudflare-clef) would hold is refused, unless
+**Risky steps** under **Your hosts in other agents** in **Agent setup** is
+on. That switch is for these agents alone: **Ask for your go-ahead** is for
+the runs and sessions Helio starts, and neither changes the other.
 
 ### 4. Watch, take over, stop
 
