@@ -134,16 +134,8 @@ pub struct KnownHost {
     /// How to find the host across the internet: the secret this client
     /// and the host alone share (hex), from pairing or the host's offer at
     /// a session's start. Every rendezvous record between the two is
-    /// derived from it (docs/networking.md). Saved as
-    /// `rendezvous_pair_secret`: the `rendezvous_secret` an earlier Helio
-    /// saved is the host-wide one every device it paired was given, and is
-    /// not taken for this pair's (the host offers the pair's at the next
-    /// session).
-    #[serde(
-        rename = "rendezvous_pair_secret",
-        default,
-        skip_serializing_if = "Option::is_none"
-    )]
+    /// derived from it (docs/networking.md).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rendezvous_secret: Option<String>,
     /// Where the host's rendezvous record last said it is on the internet.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -500,33 +492,6 @@ pub(crate) mod tests {
             .upsert(KnownHost::by_hand("other", "192.168.1.20:47800", "x", "m"))
             .unwrap();
         assert_eq!(Hosts::load(&dir).list().len(), 1);
-        let _ = std::fs::remove_dir_all(&dir);
-    }
-
-    #[test]
-    fn a_secret_saved_by_an_earlier_helio_is_not_taken_for_the_pairs() {
-        let dir = scratch("hosts-old-secret");
-        std::fs::create_dir_all(&dir).unwrap();
-        let entry = "[[host]]\nname = \"gaming-pc\"\naddress = \"192.168.1.20:47800\"\n\
-            x25519 = \"x\"\nmlkem = \"m\"\n";
-        let secret = "11".repeat(32);
-        // The host-wide secret an earlier Helio kept: left alone.
-        std::fs::write(
-            dir.join("hosts.toml"),
-            format!("{entry}rendezvous_secret = \"{secret}\"\n"),
-        )
-        .unwrap();
-        assert_eq!(Hosts::load(&dir).list()[0].rendezvous_secret(), None);
-        // This pair's own.
-        std::fs::write(
-            dir.join("hosts.toml"),
-            format!("{entry}rendezvous_pair_secret = \"{secret}\"\n"),
-        )
-        .unwrap();
-        assert_eq!(
-            Hosts::load(&dir).list()[0].rendezvous_secret(),
-            Some([0x11; 32])
-        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 }
