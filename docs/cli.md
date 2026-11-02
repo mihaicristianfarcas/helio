@@ -230,7 +230,7 @@ For everyone:
 | Variable | Used by | Does |
 |---|---|---|
 | `RUST_LOG` | all | Log filter, e.g. `info,helio_client::stats=debug` |
-| `HELIO_DATA_DIR` | Helio, `helio`, `helio-agent` | Helio's data folder |
+| `HELIO_DATA_DIR` | Helio, `helio`, `helio-agent` | Helio's data folder; Helio keeps its logs in its `logs` |
 | `HELIO_HOST_DATA_DIR` | Helio Host, Helio's This computer, `helio host` | Helio Host's data folder. On a Mac, `helio host enable` hands it on to the host it starts |
 | `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `OPENROUTER_API_KEY`, `HELIO_AGENT_API_KEY` (a custom endpoint) | agents | API keys; win over saved keys |
 | `ANTHROPIC_BASE_URL`, `OPENAI_BASE_URL` | agents | Point the API loops at a gateway or proxy |
