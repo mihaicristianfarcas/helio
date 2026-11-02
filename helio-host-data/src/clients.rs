@@ -21,10 +21,6 @@
 //! at the client's first session), and is forgotten with the client:
 //! removing it removes the only copy the host has. The file is written
 //! readable by its owner alone.
-//!
-//! A file from before permissions has none written: a person's device then
-//! keeps everything it could do, and an agent what its `access` said. The
-//! next save writes permissions in their place.
 
 use std::path::{Path, PathBuf};
 
@@ -65,24 +61,16 @@ struct Stored {
     rendezvous_secret: Option<String>,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     agent: bool,
-    /// Absent from files written before permissions.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    permissions: Option<Permissions>,
-    /// An agent's permissions in files written before them: read, never
-    /// written.
-    #[serde(default, skip_serializing)]
-    access: Option<Access>,
+    permissions: Permissions,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     stopped: bool,
 }
 
 impl From<Stored> for Client {
     fn from(s: Stored) -> Client {
-        let permissions = match (s.permissions, s.agent) {
-            (Some(p), agent) => p.fit(agent),
-            (None, false) => Permissions::PERSON_ALL,
-            (None, true) => s.access.unwrap_or_default().permissions(),
-        };
+        // Only what the client's kind can be allowed, whatever a hand
+        // edited into the file.
+        let permissions = s.permissions.fit(s.agent);
         Client {
             name: s.name,
             x25519: s.x25519,
@@ -105,32 +93,8 @@ impl From<Client> for Stored {
             paired_at: c.paired_at,
             rendezvous_secret: c.rendezvous_secret,
             agent: c.agent,
-            permissions: Some(c.permissions),
-            access: None,
+            permissions: c.permissions,
             stopped: c.stopped,
-        }
-    }
-}
-
-/// What an agent could do before permissions, in three steps.
-#[derive(Debug, Clone, Copy, Default, Deserialize)]
-#[serde(rename_all = "lowercase")]
-enum Access {
-    /// See the screen and use the keyboard and mouse.
-    #[default]
-    Control,
-    /// See the screen only.
-    View,
-    /// Nothing: its sessions are refused.
-    Off,
-}
-
-impl Access {
-    fn permissions(self) -> Permissions {
-        match self {
-            Access::Control => Permissions::AGENT_ALL,
-            Access::View => Permissions::SEE_ONLY,
-            Access::Off => Permissions::NONE,
         }
     }
 }
@@ -488,8 +452,6 @@ mod tests {
         // Only while watched.
         let watched = Permissions::from_bits(VIEW | KEYBOARD | MOUSE);
         assert_eq!(c.set_permissions(&x, watched).unwrap(), Some(watched));
-        let text = std::fs::read_to_string(dir.path().join("clients.toml")).unwrap();
-        assert!(!text.contains("access"), "{text}");
         let c = Clients::load(dir.path());
         assert_eq!(c.role_of(&agent.public().x25519), (Role::Agent, watched));
         // What a person's device could have means nothing for an agent.
@@ -622,18 +584,14 @@ mod tests {
     }
 
     #[test]
-    fn a_file_from_before_permissions_keeps_what_each_client_could_do() {
+    fn permissions_are_read_by_name_and_fit_the_clients_kind() {
         let dir = tempfile::tempdir().unwrap();
         std::fs::write(
             dir.path().join("clients.toml"),
-            "[[client]]\nname = \"old\"\nx25519 = \"a\"\nmlkem = \"b\"\npaired_at = 1\n\n\
-             [[client]]\nname = \"bot\"\nx25519 = \"c\"\nmlkem = \"d\"\npaired_at = 1\nagent = true\n\n\
-             [[client]]\nname = \"viewer\"\nx25519 = \"e\"\nmlkem = \"f\"\npaired_at = 1\nagent = true\n\
-             access = \"view\"\n\n\
-             [[client]]\nname = \"gone\"\nx25519 = \"g\"\nmlkem = \"h\"\npaired_at = 1\nagent = true\n\
-             access = \"off\"\n\n\
-             [[client]]\nname = \"new\"\nx25519 = \"i\"\nmlkem = \"j\"\npaired_at = 1\n\
-             permissions = [\"view\", \"mouse\", \"fly\"]\n",
+            "[[client]]\nname = \"mac\"\nx25519 = \"a\"\nmlkem = \"b\"\npaired_at = 1\n\
+             permissions = [\"view\", \"mouse\", \"fly\"]\n\n\
+             [[client]]\nname = \"bot\"\nx25519 = \"c\"\nmlkem = \"d\"\npaired_at = 1\nagent = true\n\
+             permissions = [\"view\", \"keyboard\", \"mouse\", \"launch\", \"take_over\"]\n",
         )
         .unwrap();
         let c = Clients::load(dir.path());
@@ -641,13 +599,24 @@ mod tests {
         assert_eq!(
             got,
             vec![
-                (false, Permissions::PERSON_ALL),
-                (true, Permissions::AGENT_ALL),
-                (true, Permissions::SEE_ONLY),
-                (true, Permissions::NONE),
                 (false, Permissions::from_bits(VIEW | MOUSE)),
+                (true, Permissions::from_bits(VIEW | KEYBOARD | MOUSE)),
             ]
         );
+    }
+
+    #[test]
+    fn an_entry_without_permissions_leaves_the_file_unread() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("clients.toml");
+        let entry = "[[client]]\nname = \"mac\"\nx25519 = \"a\"\nmlkem = \"b\"\npaired_at = 1\n";
+        std::fs::write(&path, entry).unwrap();
+        let mut c = Clients::load(dir.path());
+        assert!(c.list().is_empty());
+        assert!(c
+            .add("new", Identity::generate().public(), None, false, None)
+            .is_err());
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), entry);
     }
 
     #[test]
