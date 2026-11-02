@@ -397,16 +397,14 @@ impl Host {
     }
 
     /// Tell a client how to find us across the internet: its own
-    /// rendezvous secret, made now if it has none (one added by `helio
-    /// host add-client`). A key that is not paired gets nothing; no other
-    /// client's secret is ever sent.
+    /// rendezvous secret, which one added by `helio host add-client` has
+    /// no other way to learn. A key that is not paired gets nothing; no
+    /// other client's secret is ever sent.
     fn offer_rendezvous(&self, peer: &Arc<Peer>) {
         let (x, _) = peer.public().to_b64();
-        let fresh = helio_nat::rendezvous::random_32();
-        match self.clients.lock().rendezvous_secret_or(&x, fresh) {
-            Ok(Some(secret)) => self.reply(peer, Control::RendezvousOffer { secret }),
-            Ok(None) => {}
-            Err(e) => tracing::warn!(error = %e, "could not read the client's rendezvous secret"),
+        let secret = self.clients.lock().rendezvous_secret_of(&x);
+        if let Some(secret) = secret {
+            self.reply(peer, Control::RendezvousOffer { secret });
         }
     }
 
