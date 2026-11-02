@@ -17,9 +17,10 @@
 //! Each client's rendezvous secret is kept here too: the one secret it and
 //! the host share, from which every record that finds the host across the
 //! internet is derived (`helio_nat::keys`). It is made when the client
-//! pairs, or at its first session if it was added without a PIN pairing,
-//! and is forgotten with the client: removing it removes the only copy the
-//! host has. The file is written readable by its owner alone.
+//! pairs, or when it is added without a PIN pairing (the host then offers it
+//! at the client's first session), and is forgotten with the client:
+//! removing it removes the only copy the host has. The file is written
+//! readable by its owner alone.
 //!
 //! A file from before permissions has none written: a person's device then
 //! keeps everything it could do, and an agent what its `access` said. The
@@ -247,8 +248,8 @@ impl Clients {
     /// Add (or rename, if the key is already known) a client. `agent`: the
     /// identity is an AI agent's. `permissions`: what it may do, or the
     /// default (`default_permissions`, counted before it is added).
-    /// `rendezvous_secret`: the one pairing gave it (None: made at its
-    /// first session).
+    /// `rendezvous_secret`: the one pairing gave it (None: made here, and
+    /// offered at its first session).
     pub fn add(
         &mut self,
         name: &str,
