@@ -188,10 +188,6 @@ pub struct AgentSettings {
     /// this is on. Apart from `approvals`, which is for Helio's own runs:
     /// allowing one does not stop the person being asked in the other.
     pub outside_risky: bool,
-    /// Settings saved before `approvals`: every action waited (read, then
-    /// `approvals` says it).
-    #[serde(skip_serializing)]
-    pub confirm_actions: bool,
 }
 
 impl Default for AgentSettings {
@@ -210,7 +206,6 @@ impl Default for AgentSettings {
             approvals: Approvals::Risky,
             checks: crate::judge::Checks::default(),
             outside_risky: false,
-            confirm_actions: false,
         }
     }
 }
@@ -221,14 +216,10 @@ impl AgentSettings {
     }
 
     pub fn load(data_dir: &Path) -> AgentSettings {
-        let mut s: AgentSettings = std::fs::read_to_string(Self::path(data_dir))
+        std::fs::read_to_string(Self::path(data_dir))
             .ok()
             .and_then(|t| toml::from_str(&t).ok())
-            .unwrap_or_default();
-        if std::mem::take(&mut s.confirm_actions) {
-            s.approvals = Approvals::Every;
-        }
-        s
+            .unwrap_or_default()
     }
 
     pub fn save(&self, data_dir: &Path) -> std::io::Result<()> {
