@@ -23,10 +23,10 @@
 #   tools/build-helio-app            -> target/Helio.app
 #   tools/build-helio-app --install  -> also copy it to /Applications
 #
-# Signed inside out, as codesign requires of nested code (never --deep): the
-# helper, then the app around it. With the Developer ID that
-# HELIO_SIGN_IDENTITY names (a release), else the dev identity when there
-# is one, else ad hoc. The bundles' version is the workspace's (Cargo.toml).
+# Signed inside out by tools/sign-helio-app: the helper, then the app around
+# it, with the Developer ID that HELIO_SIGN_IDENTITY names, else the dev
+# identity when there is one, else ad hoc. The bundles' version is the
+# workspace's (Cargo.toml).
 # HELIO_RELEASE=1 makes it a release build, as tools/package-macos does;
 # HELIO_PROFILE=dev builds the debug profile instead (CI's check that the
 # app still packages, without a release build's time).
@@ -83,22 +83,7 @@ bundle "$HELPER" "$REPO/helio-host/macos/Info.plist" "$OUT/helio-host" helio-hos
 mkdir -p "$APP/Contents/Resources/bin"
 ln -s ../../MacOS/Helio "$APP/Contents/Resources/bin/helio"
 
-# A Developer ID (HELIO_SIGN_IDENTITY, as the release workflow sets it)
-# with the hardened runtime and a secure timestamp, which notarization
-# requires. Else the dev identity when there is one (see
-# tools/dev-signing-identity), so the permissions macOS grants the host
-# survive a rebuild; else ad hoc.
-if [[ -n ${HELIO_SIGN_IDENTITY:-} ]]; then
-    SIGN=(--sign "$HELIO_SIGN_IDENTITY" --options runtime --timestamp)
-else
-    DEV=$("$REPO/tools/dev-signing-identity" --check)
-    SIGN=(--sign "${DEV:--}")
-fi
-codesign --force "${SIGN[@]}" --identifier dev.mihaicristian.helio.host "$HELPER" >/dev/null
-codesign --force "${SIGN[@]}" --identifier dev.mihaicristian.helio "$APP" >/dev/null
-# What Gatekeeper and an update check of the bundle: every nested signature
-# whole, and sealed into the app's.
-codesign --verify --deep --strict "$APP"
+"$REPO/tools/sign-helio-app" "$APP"
 echo "built $APP ($VERSION, $PROFILE)"
 
 if [[ ${1:-} == --install ]]; then
