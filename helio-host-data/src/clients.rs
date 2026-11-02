@@ -40,8 +40,7 @@ pub struct Client {
     /// Seconds since the Unix epoch.
     pub paired_at: u64,
     /// The client's rendezvous secret (hex), for connecting from the
-    /// internet. Made when the client is added; absent only from a file
-    /// written before (`Clients::rendezvous_secret_or` makes it then).
+    /// internet, made when the client is added.
     pub rendezvous_secret: Option<String>,
     /// An AI agent's identity (paired as one).
     pub agent: bool,
@@ -263,9 +262,8 @@ impl Clients {
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_secs())
             .unwrap_or(0);
-        // One added by hand (`helio host add-client`) gets its secret here,
-        // not at its first session, where the host would make and save it
-        // on its receive thread (`rendezvous_secret_or`).
+        // One added by hand (`helio host add-client`) gets its secret here:
+        // the host offers it at its first session (`RendezvousOffer`).
         let rendezvous_secret = Some(hex(rendezvous_secret.unwrap_or_else(|| {
             let mut secret = [0u8; 32];
             rand_core::RngCore::fill_bytes(&mut rand_core::OsRng, &mut secret);
@@ -323,37 +321,14 @@ impl Clients {
         )
     }
 
-    /// A paired client's rendezvous secret: the one it has, else `fresh`,
-    /// kept as its own from now on. None for a key that is not paired.
-    ///
-    /// Asked at every session's start, on the host's receive thread: a
-    /// secret already kept is answered from this copy, without touching the
-    /// file. One is made under the file's lock, from the file, so a client
-    /// removed beside the running host (`helio host remove-client`) is
-    /// given none.
-    pub fn rendezvous_secret_or(
-        &mut self,
-        x25519_b64: &str,
-        fresh: [u8; 32],
-    ) -> std::io::Result<Option<[u8; 32]>> {
-        match self.list.iter().find(|c| c.x25519 == x25519_b64) {
-            None => return Ok(None),
-            Some(c) => {
-                if let Some(secret) = c.rendezvous_secret() {
-                    return Ok(Some(secret));
-                }
-            }
-        }
-        self.modify(|list| {
-            let Some(c) = list.iter_mut().find(|c| c.x25519 == x25519_b64) else {
-                return (false, None);
-            };
-            if let Some(secret) = c.rendezvous_secret() {
-                return (false, Some(secret));
-            }
-            c.rendezvous_secret = Some(hex(fresh));
-            (true, Some(fresh))
-        })
+    /// A paired client's rendezvous secret, as this list holds it: asked at
+    /// every session's start, on the host's receive thread, so no file is
+    /// read. None for a key that is not paired.
+    pub fn rendezvous_secret_of(&self, x25519_b64: &str) -> Option<[u8; 32]> {
+        self.list
+            .iter()
+            .find(|c| c.x25519 == x25519_b64)
+            .and_then(Client::rendezvous_secret)
     }
 
     pub fn remove(&mut self, x25519_b64: &str) -> std::io::Result<Option<Client>> {
@@ -537,17 +512,10 @@ mod tests {
             Identity::generate(),
             Identity::generate(),
         );
-        // Devices from a file written before a secret came with each: the
-        // host makes theirs as they connect, and saves it.
-        let entries: String = [("gone", &gone), ("narrowed", &narrowed), ("kept", &kept)]
-            .iter()
-            .map(|(name, id)| {
-                let (x, m) = id.public().to_b64();
-                format!("[[client]]\nname = \"{name}\"\nx25519 = \"{x}\"\nmlkem = \"{m}\"\npaired_at = 1\n\n")
-            })
-            .collect();
-        std::fs::write(dir.path().join("clients.toml"), entries).unwrap();
         let mut host = Clients::load(dir.path());
+        for (name, id) in [("gone", &gone), ("narrowed", &narrowed), ("kept", &kept)] {
+            host.add(name, id.public(), None, false, None).unwrap();
+        }
         let b64 = |id: &Identity| id.public().to_b64().0;
 
         let mut cli = Clients::load(dir.path());
@@ -555,17 +523,9 @@ mod tests {
         cli.set_permissions(&b64(&narrowed), Permissions::NONE)
             .unwrap();
 
-        // The host still has its own copy; the removed device asks for its
-        // rendezvous secret, and a change the host makes saves.
-        assert_eq!(
-            host.rendezvous_secret_or(&b64(&gone), [7; 32]).unwrap(),
-            None,
-            "a removed device gets no secret"
-        );
-        assert_eq!(
-            host.rendezvous_secret_or(&b64(&kept), [8; 32]).unwrap(),
-            Some([8; 32])
-        );
+        // The host still has its own copy, and a change it makes saves.
+        host.set_permissions(&b64(&kept), Permissions::NONE)
+            .unwrap();
         let file = Clients::load(dir.path());
         assert_eq!(
             file.role_of(&gone.public().x25519).1,
@@ -574,7 +534,7 @@ mod tests {
         );
         assert_eq!(file.role_of(&narrowed.public().x25519).1, Permissions::NONE);
         assert_eq!(file.list().len(), 2);
-        assert!(file.list().iter().any(|c| c.rendezvous_secret.is_some()));
+        assert!(file.list().iter().all(|c| c.rendezvous_secret.is_some()));
     }
 
     #[test]
@@ -586,33 +546,7 @@ mod tests {
         c.add("mac", mac.public(), None, false, None).unwrap();
         let made = Clients::load(dir.path()).list()[0].rendezvous_secret();
         assert!(made.is_some());
-        assert_eq!(c.rendezvous_secret_or(&x, [1; 32]).unwrap(), made);
-    }
-
-    #[test]
-    fn a_client_without_a_rendezvous_secret_is_given_one_once() {
-        let dir = tempfile::tempdir().unwrap();
-        let mac = Identity::generate();
-        let (x, m) = mac.public().to_b64();
-        // A file from before secrets were made with the client.
-        std::fs::write(
-            dir.path().join("clients.toml"),
-            format!(
-                "[[client]]\nname = \"mac\"\nx25519 = \"{x}\"\nmlkem = \"{m}\"\npaired_at = 1\n"
-            ),
-        )
-        .unwrap();
-        let mut c = Clients::load(dir.path());
-        assert_eq!(c.rendezvous_secret_or(&x, [1; 32]).unwrap(), Some([1; 32]));
-        assert_eq!(
-            c.rendezvous_secret_or(&x, [2; 32]).unwrap(),
-            Some([1; 32]),
-            "the one it has stays"
-        );
-        assert_eq!(
-            Clients::load(dir.path()).list()[0].rendezvous_secret(),
-            Some([1; 32])
-        );
+        assert_eq!(c.rendezvous_secret_of(&x), made);
     }
 
     #[test]
@@ -631,11 +565,7 @@ mod tests {
         assert!(!std::fs::read_to_string(&file)
             .unwrap()
             .contains(&"05".repeat(32)));
-        assert_eq!(
-            c.rendezvous_secret_or(&x, [6; 32]).unwrap(),
-            None,
-            "and none is made for it again"
-        );
+        assert_eq!(c.rendezvous_secret_of(&x), None);
     }
 
     #[test]
