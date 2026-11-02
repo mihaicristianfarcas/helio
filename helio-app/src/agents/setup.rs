@@ -222,6 +222,16 @@ impl HelioApp {
             });
         });
 
+        let this = cx.weak_entity();
+        let outside =
+            switch("agent-outside-risky", s.outside_risky, t).on_toggle(move |on, _, cx| {
+                let _ = this.update(cx, |app, cx| {
+                    app.agents.settings.outside_risky = on;
+                    app.agents.save_settings();
+                    cx.notify();
+                });
+            });
+
         let server = install::Server::this().unwrap_or_else(|_| install::Server {
             command: "Helio".into(),
             args: vec!["mcp".into()],
@@ -257,9 +267,7 @@ impl HelioApp {
                         Some("Risky steps: deleting, spending, sending, changing settings, \
                             typing a password or a key. The model asks, and rules catch \
                             the commands and keys it did not ask about. A notification \
-                            asks when Helio is in the background. An agent outside Helio \
-                            (Helio mcp) cannot be asked: such steps are refused, unless \
-                            this is Never.".into()),
+                            asks when Helio is in the background.".into()),
                         ask,
                         t,
                     )
@@ -276,6 +284,10 @@ impl HelioApp {
             .child(section("Hosts the agent may use", t).child(self.agent_host_rows(t, cx)))
             .child(section("Your hosts in other agents", t).child(rows(
                 self.mcp_app_rows(t, cx).into_iter().chain([
+                    setting("Risky steps", Some("These agents cannot be asked for your \
+                        go-ahead, so a step the rules or screen checks would ask about is \
+                        refused. On: they take it without asking.".into()), outside, t)
+                    .into_any_element(),
                     setting("Others", Some("Copies the server's settings, to paste where \
                         another agent keeps its MCP servers.".into()), button("mcp-copy", "Copy", t).icon(IconName::Copy).on_click(cx.listener(move |this, _, _, cx| {
                         let config = serde_json::json!({"mcpServers": {install::NAME: {"command": server.command, "args": server.args}}});
