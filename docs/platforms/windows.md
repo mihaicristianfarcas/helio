@@ -290,23 +290,22 @@ at the median, 69 ms p95. Motion at a full 30 fps was not measured.
   asks once, the first time Helio listens. The host's rules are added by
   `helio-host enable`, which runs as an administrator.
 
-Run in a Windows 11 virtual machine (ARM64, the x64 programs emulated),
-not yet on an x64 PC: a data folder that is a junction, or another
+Run on an x64 PC and in a Windows 11 virtual machine (ARM64, the x64
+programs emulated): the service asking its host to stop through the event
+it names for each run (`--stop-event`); `update-engine` starting the new
+engine it checked; the firewall rules set with `netsh` from System32;
+the clipboard helper, which inherits only its two pipes, in a session
+both ways (on the PC, on its virtual display); `local-token` readable by
+SYSTEM, Administrators and the user who turned hosting on, and refused to
+another account; Helio, not elevated, reading it as that user; that
+user's `helio host restart` and `pair` without an administrator. In the
+virtual machine only: a data folder that is a junction, or another
 user's, moved aside as [above](#how-it-runs) (a junction as a link, its
-target left empty); the service asking its host to stop through the
-event it names for each run (`--stop-event`); `update-engine` starting
-the new engine it checked; the firewall rules set with `netsh` from
-System32, and removed; the clipboard helper, which inherits only its two
-pipes, in a session both ways; `local-token` readable by SYSTEM,
-Administrators and the user who turned hosting on, and refused to
-another account; that user's `helio host restart` and `pair` without an
-administrator.
+target left empty), and the firewall rules removed again.
 
 Not verified yet: a data folder that cannot be moved aside (the host
-then does not start); these changes with the virtual display, which the
-virtual machine cannot load (SudoVDA is built for x64 PCs only); Helio's
-own window reading the token as that user (its pages were checked with
-`HELIO_UI_DEMO` only); a Microsoft Entra ID account as that user.
+then does not start); a Microsoft Entra ID account as the user who turns
+hosting on.
 
 ## Helio, the client
 
