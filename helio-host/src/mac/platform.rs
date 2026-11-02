@@ -127,7 +127,7 @@ impl Platform {
         Ok(())
     }
 
-    /// Say why, where the client can show it (older clients ignore it).
+    /// Say why, where the client can show it.
     pub fn refusal_note(&self, status: AckStatus) -> Option<Control> {
         (status == AckStatus::Failed && !crate::permissions::screen_capture_allowed())
             .then_some(Control::HostWarning(control::host_warning::CAPTURE_BLOCKED))
