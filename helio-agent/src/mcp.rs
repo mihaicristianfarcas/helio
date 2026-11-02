@@ -1062,14 +1062,12 @@ fn parse(args: &[String]) -> (crate::computer::Config, Options) {
             "--control-dir" => control_dir = it.next().map(PathBuf::from).or(control_dir),
             // Which steps wait for the person's yes (off, risky, every),
             // answered through the control folder.
-            "--approvals" | "--confirm-actions" => {
-                approvals = Some(if a == "--confirm-actions" {
-                    Approvals::Every
-                } else {
+            "--approvals" => {
+                approvals = Some(
                     it.next()
                         .and_then(|v| Approvals::parse(v))
-                        .unwrap_or(Approvals::Risky)
-                });
+                        .unwrap_or(Approvals::Risky),
+                );
             }
             other => eprintln!("ignoring unknown flag {other}"),
         }
@@ -1119,7 +1117,7 @@ mod tests {
             Some((own.clone(), Approvals::Risky))
         );
         assert_eq!(
-            control(&["--data-dir", "data", "--confirm-actions"]),
+            control(&["--data-dir", "data", "--approvals", "every"]),
             Some((own, Approvals::Every))
         );
         // A folder named is used, whatever the order.
