@@ -97,14 +97,8 @@ impl HostPages {
     /// user's, who runs it.
     pub(super) fn not_allowed(&mut self, t: Theme, cx: &mut Context<Self>) -> AnyElement {
         let line = if cfg!(windows) {
-            if owner_recorded() {
-                "Another user of this PC turned hosting on, so its token is theirs to read. \
-                    Turn it on again from this account to manage it here."
-            } else {
-                "Hosting was turned on by an earlier Helio, which did not record whose it \
-                    is, so only an administrator can read its token. Turn it on again from \
-                    this account to manage it here."
-            }
+            "Another user of this PC turned hosting on, so its token is theirs to read. \
+                Turn it on again from this account to manage it here."
         } else {
             "Helio Host runs here as another user, so its token is theirs. Open Helio as \
                 that user to manage it."
@@ -164,17 +158,4 @@ pub(super) fn waiting(id: &'static str, what: &'static str, t: Theme) -> AnyElem
             .child(spinner("waiting-spin", 13.0, t.tertiary))
             .child(what),
     )
-}
-
-/// Whether hosting here records who turned it on (Windows; see
-/// `helio_cli::engine::owner_recorded`).
-fn owner_recorded() -> bool {
-    #[cfg(windows)]
-    {
-        helio_cli::engine::owner_recorded()
-    }
-    #[cfg(not(windows))]
-    {
-        true
-    }
 }
