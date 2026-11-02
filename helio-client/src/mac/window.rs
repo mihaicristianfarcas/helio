@@ -10,9 +10,7 @@
 //! - the system pointer is captured and hidden while streaming, so hot corners
 //!   (Quick Note, Mission Control) and screen edges never trigger. The host
 //!   draws its pointer into the picture and gets relative motion (Moonlight's
-//!   default), or positions after +M; an older host gets positions on its
-//!   desktop, with the pointer drawn here in the shape it reports, and
-//!   relative motion while a game has the mouse. While ⌘⇧ is held the
+//!   default), or positions after +M. While ⌘⇧ is held the
 //!   pointer is the Mac's, so a screenshot shortcut finds a live one
 //!   (`shortcut_modifiers`);
 //! - the picture fills the area below the notch, at the nearest standard

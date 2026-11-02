@@ -1,7 +1,7 @@
 //! Clipboard sharing: what one side of a session copied, sent to the other.
 //!
-//! Control packets (`kind = 3`) with opcodes of their own, which peers that
-//! predate them ignore (`Control::decode` refuses them). A copy is one
+//! Control packets (`kind = 3`) with opcodes of their own, which
+//! `Control::decode` leaves to this module (it refuses them). A copy is one
 //! transfer: its bytes (encoded [`Item`]s) cut into chunks that the receiver
 //! acknowledges selectively, and that the sender resends until every one is
 //! in. Control messages have no FEC or retransmit of their own, and a

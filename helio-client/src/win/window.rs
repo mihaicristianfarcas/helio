@@ -8,10 +8,7 @@
 //!   Windows'), as SDL's keyboard grab does;
 //! - the pointer is confined to the window and hidden: the host draws its
 //!   own into the picture, and raw relative motion goes to it (Moonlight's
-//!   default), or, after +M, the pointer's position. Against an older host
-//!   that leaves the pointer to the client, it is Windows' own pointer in
-//!   the host application's shape on the desktop, and hidden only while a
-//!   game has taken the mouse;
+//!   default), or, after +M, the pointer's position;
 //! - Ctrl+Alt+Shift+Q quits, +S toggles statistics, +Z releases/recaptures
 //!   the mouse and keyboard, +M switches mouse mode, +X full screen, +V types
 //!   the clipboard, +D minimises (Moonlight's chords).

@@ -75,29 +75,26 @@ pub struct SessionStart {
     /// identical parameters; an unchanged one makes a retransmit a no-op.
     pub nonce: u32,
     /// What to show: `app::DESKTOP`, or an app the host starts for the
-    /// session (Sunshine's default apps, `apps.json`). Absent on the wire from older clients.
+    /// session (Sunshine's default apps, `apps.json`).
     pub app: u8,
     /// The client's keyboard repeat: a held key repeats after this many
     /// milliseconds, then every `repeat_interval_ms`. The host makes the
     /// repeats where its system does not (`helio_input::repeat`); 0 =
-    /// unknown, the host's own settings. Absent from older clients.
+    /// unknown, the host's own settings.
     pub repeat_delay_ms: u16,
     pub repeat_interval_ms: u16,
-    /// `video::*` the client can show and asks for. Absent from older
-    /// clients (none).
+    /// `video::*` the client can show and asks for.
     pub video: u8,
     /// The client display's own refresh in millihertz (59 940) when the
     /// frame rate asked is it, else 0. A field of its own beside the whole
     /// rate, as Moonlight sends `clientRefreshRateX100` beside its frame
-    /// rate (Sunshine's `rtsp.cpp`): older hosts read only `refresh_mhz`, and
-    /// a 0.7 Windows host refused a fractional one there. Absent from older
-    /// clients (0).
+    /// rate (Sunshine's `rtsp.cpp`).
     pub exact_refresh_mhz: u32,
     /// The client display's scale, in percent: 200 on a Retina Mac, the
     /// Windows scaling (100, 125, 150…) elsewhere; 0 = unknown. A host that
     /// makes a display for the session gives it the same density, so its
     /// interface comes out the size the client's own does (a Mac host makes
-    /// it HiDPI only for a client that is). Absent from older clients (0).
+    /// it HiDPI only for a client that is).
     pub scale_pct: u16,
 }
 
@@ -183,7 +180,7 @@ pub enum AckStatus {
     /// This device may not start apps here (`permission::LAUNCH`); the
     /// desktop it may stream.
     AppNotAllowed = 9,
-    /// A refusal this version does not know: a newer host's. Never sent.
+    /// A refusal code this build does not know. Never sent.
     Other = 255,
 }
 
@@ -223,11 +220,11 @@ pub struct SessionAck {
     /// Echo of the request's nonce.
     pub nonce: u32,
     /// What the host runs (`host::*`), so the client can fit its keys to it
-    /// (Command is Command on a Mac). Absent on the wire from older hosts.
+    /// (Command is Command on a Mac).
     pub host: u8,
-    /// `features::*`. Absent on the wire from older hosts (none).
+    /// `features::*`.
     pub features: u8,
-    /// `video::*`: what the stream is. Absent from older hosts (none).
+    /// `video::*`: what the stream is.
     pub video: u8,
     /// What this device may do here (`permission::*` bits), so it can say
     /// what the host holds back. An `Ok` ack always allows
@@ -260,7 +257,7 @@ pub enum EndReason {
     /// own monitors it had turned off).
     HostInUse = 5,
     /// The host no longer lets this device see the screen (or watch agents):
-    /// its permissions changed. Older clients read it as `Error`.
+    /// its permissions changed.
     NotAllowed = 6,
 }
 
@@ -710,12 +707,12 @@ impl Control {
                 flags: r.u8()?,
                 slices: r.u8()?,
                 nonce: r.u32()?,
-                app: r.u8().unwrap_or(app::DESKTOP),
-                repeat_delay_ms: r.u16().unwrap_or(0),
-                repeat_interval_ms: r.u16().unwrap_or(0),
-                video: r.u8().unwrap_or(0),
-                exact_refresh_mhz: r.u32().unwrap_or(0),
-                scale_pct: r.u16().unwrap_or(0),
+                app: r.u8()?,
+                repeat_delay_ms: r.u16()?,
+                repeat_interval_ms: r.u16()?,
+                video: r.u8()?,
+                exact_refresh_mhz: r.u32()?,
+                scale_pct: r.u16()?,
             }),
             OP_SESSION_ACK => Control::SessionAck(SessionAck {
                 status: AckStatus::from_code(r.u8()?),
@@ -726,10 +723,10 @@ impl Control {
                 bitrate_kbps: r.u32()?,
                 audio_channels: r.u8()?,
                 nonce: r.u32()?,
-                host: r.u8().unwrap_or(host::WINDOWS),
-                features: r.u8().unwrap_or(0),
-                video: r.u8().unwrap_or(0),
-                permissions: r.u16().unwrap_or(0),
+                host: r.u8()?,
+                features: r.u8()?,
+                video: r.u8()?,
+                permissions: r.u16()?,
             }),
             OP_SESSION_END => Control::SessionEnd(EndReason::from_code(r.u8()?)),
             OP_REQUEST_IDR => Control::RequestIdr,
@@ -743,8 +740,7 @@ impl Control {
                 frames_lost: r.u16()?,
                 frames_ok: r.u16()?,
                 rtt_us: r.u32()?,
-                // Absent from clients that predate it.
-                received_kbps: r.u32().unwrap_or(0),
+                received_kbps: r.u32()?,
             }),
             OP_PING => Control::Ping {
                 id: r.u32()?,
@@ -978,48 +974,27 @@ mod tests {
             scale_pct: 125,
         })
         .encode(0, &mut out);
-        // What follows the nonce is optional: an older client's request.
-        let optional = 1 + 2 + 2 + 1 + 4 + 2;
-        for cut in HEADER_LEN..n - optional {
-            assert_eq!(Control::decode(&out[HEADER_LEN..cut]), None);
-        }
-        match Control::decode(&out[HEADER_LEN..n - optional]) {
-            Some(Control::SessionStart(s)) => assert_eq!(
-                (s.app, s.repeat_delay_ms, s.repeat_interval_ms, s.video),
-                (app::DESKTOP, 0, 0, 0)
-            ),
-            other => panic!("{other:?}"),
-        }
-        match Control::decode(&out[HEADER_LEN..n - 2 - 4 - 3]) {
-            Some(Control::SessionStart(s)) => assert_eq!(
-                (s.app, s.repeat_delay_ms, s.repeat_interval_ms, s.video),
-                (app::STEAM_BIG_PICTURE, 500, 0, 0)
-            ),
-            other => panic!("{other:?}"),
-        }
-        match Control::decode(&out[HEADER_LEN..n - 2 - 4 - 1]) {
-            Some(Control::SessionStart(s)) => assert_eq!((s.repeat_interval_ms, s.video), (40, 0)),
-            other => panic!("{other:?}"),
-        }
-        // A client from before the exact refresh: the whole rate alone.
-        match Control::decode(&out[HEADER_LEN..n - 2 - 4]) {
-            Some(Control::SessionStart(s)) => {
-                assert_eq!((s.video, s.exact_refresh_mhz), (video::YUV444, 0))
-            }
-            other => panic!("{other:?}"),
-        }
-        // One from before the scale: unknown.
-        match Control::decode(&out[HEADER_LEN..n - 2]) {
-            Some(Control::SessionStart(s)) => {
-                assert_eq!((s.exact_refresh_mhz, s.scale_pct), (59_940, 0))
-            }
-            other => panic!("{other:?}"),
+        // Every field is required: a shorter body is refused.
+        for cut in HEADER_LEN..n {
+            assert_eq!(Control::decode(&out[HEADER_LEN..cut]), None, "cut at {cut}");
         }
         match Control::decode(&out[HEADER_LEN..n]) {
             Some(Control::SessionStart(s)) => assert_eq!(s.scale_pct, 125),
             other => panic!("{other:?}"),
         }
-        // So is the ack's last (the host's system): an older host is Windows.
+        let report = Control::LossReport(LossReport {
+            received: 9,
+            expected: 10,
+            frames_lost: 1,
+            frames_ok: 59,
+            rtt_us: 2_000,
+            received_kbps: 20_000,
+        });
+        let n = report.encode(0, &mut out);
+        for cut in HEADER_LEN..n {
+            assert_eq!(Control::decode(&out[HEADER_LEN..cut]), None, "cut at {cut}");
+        }
+        assert_eq!(Control::decode(&out[HEADER_LEN..n]), Some(report));
         let n = Control::SessionAck(SessionAck {
             status: AckStatus::Ok,
             codec: codec::HEVC,
@@ -1035,25 +1010,13 @@ mod tests {
             permissions: crate::permission::Permissions::SEE_ONLY.bits(),
         })
         .encode(0, &mut out);
-        match Control::decode(&out[HEADER_LEN..n - 5]) {
-            Some(Control::SessionAck(a)) => assert_eq!((a.host, a.features), (host::WINDOWS, 0)),
-            other => panic!("{other:?}"),
+        for cut in HEADER_LEN..n {
+            assert_eq!(Control::decode(&out[HEADER_LEN..cut]), None, "cut at {cut}");
         }
-        // And the features after it: an older host offers none.
-        match Control::decode(&out[HEADER_LEN..n - 4]) {
-            Some(Control::SessionAck(a)) => assert_eq!((a.host, a.features), (host::MACOS, 0)),
-            other => panic!("{other:?}"),
-        }
-        // And the video after them: an older host streams SDR 4:2:0.
-        match Control::decode(&out[HEADER_LEN..n - 3]) {
+        match Control::decode(&out[HEADER_LEN..n]) {
             Some(Control::SessionAck(a)) => {
-                assert_eq!((a.features, a.video), (features::CLIPBOARD, 0))
+                assert_eq!((a.host, a.video), (host::MACOS, video::HDR))
             }
-            other => panic!("{other:?}"),
-        }
-        // And the permissions after it: an older host says nothing (0).
-        match Control::decode(&out[HEADER_LEN..n - 2]) {
-            Some(Control::SessionAck(a)) => assert_eq!((a.video, a.permissions), (video::HDR, 0)),
             other => panic!("{other:?}"),
         }
         // A refusal this version does not know is still a refusal.

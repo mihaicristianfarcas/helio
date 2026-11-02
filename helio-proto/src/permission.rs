@@ -12,7 +12,8 @@
 //!
 //! On the wire and in the host's files the set is a bitmask; in files and
 //! the host's API it is written as names (`"view"`, `"keyboard"`), so a file
-//! reads plainly and a name a newer host wrote is skipped, not misread.
+//! reads plainly and a name this build does not know is skipped, not
+//! misread.
 //!
 //! Apollo has no AI agents. An agent's set uses the same bits for seeing
 //! and for the keyboard and mouse, and one of its own ([`UNWATCHED`]); the
@@ -139,9 +140,8 @@ impl Permissions {
     /// What a device gets when it pairs. A person's: everything when no
     /// other person's device is paired, else see only, as Apollo grants
     /// its first client `_all` and later ones `_default`
-    /// (`nvhttp.cpp`, `clientpairingsecret`). An agent's: see and act, as
-    /// agents could before permissions; the person pairing it sees it is
-    /// an agent, and can choose less.
+    /// (`nvhttp.cpp`, `clientpairingsecret`). An agent's: see and act; the
+    /// person pairing it sees it is an agent, and can choose less.
     pub const fn on_pairing(agent: bool, people_paired: usize) -> Permissions {
         if agent {
             Self::AGENT_ALL
@@ -161,9 +161,8 @@ impl Permissions {
             .collect()
     }
 
-    /// The set these names make. Names this version does not know (a
-    /// newer host's) are left out: a permission not understood is not
-    /// granted.
+    /// The set these names make. Names this build does not know are left
+    /// out: a permission not understood is not granted.
     pub fn from_names<'a>(names: impl IntoIterator<Item = &'a str>) -> Permissions {
         let mut bits = 0;
         for name in names {
