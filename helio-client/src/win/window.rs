@@ -22,7 +22,6 @@ use std::sync::atomic::{AtomicIsize, Ordering};
 use std::sync::Arc;
 use std::thread::JoinHandle;
 
-use helio_proto::control::CursorShape;
 use helio_proto::input::{Button, InputEvent};
 use parking_lot::Mutex;
 use windows::core::{w, PCWSTR};
@@ -592,8 +591,8 @@ fn set_capture(s: &State, captured: bool) {
     tracing::info!(captured, "pointer capture");
 }
 
-/// Confine the pointer to the window while captured, and hide it -- or,
-/// for an older host on its desktop, show it in the host's shape.
+/// Confine the pointer to the window while captured, and hide it: the
+/// host draws its own into the picture.
 fn apply_pointer(s: &State) {
     let h = s.handler.borrow();
     let p = *h.pointer.lock();
@@ -615,25 +614,11 @@ fn apply_pointer(s: &State) {
 }
 
 fn cursor_for(p: &PointerState) -> Option<HCURSOR> {
-    if p.captured && (p.is_relative() || p.host_draws) {
+    if p.captured {
         return None;
     }
-    let id = match p.shape {
-        CursorShape::Arrow => IDC_ARROW,
-        CursorShape::IBeam => IDC_IBEAM,
-        CursorShape::Wait => IDC_WAIT,
-        CursorShape::Cross => IDC_CROSS,
-        CursorShape::SizeAll => IDC_SIZEALL,
-        CursorShape::SizeNS => IDC_SIZENS,
-        CursorShape::SizeWE => IDC_SIZEWE,
-        CursorShape::SizeNWSE => IDC_SIZENWSE,
-        CursorShape::SizeNESW => IDC_SIZENESW,
-        CursorShape::Hand => IDC_HAND,
-        CursorShape::No => IDC_NO,
-        CursorShape::Help => IDC_HELP,
-        CursorShape::AppStarting => IDC_APPSTARTING,
-    };
-    unsafe { LoadCursorW(None, id).ok() }
+    // SAFETY: a system cursor by its id; no module handle is involved.
+    unsafe { LoadCursorW(None, IDC_ARROW).ok() }
 }
 
 /// Map a client-area point to stream pixels, through where the picture is.
@@ -649,7 +634,7 @@ fn to_stream(s: &State, x: i32, y: i32) -> Option<(f32, f32)> {
     ))
 }
 
-/// Ask the window `hwnd` to reconsider the pointer (the host's changed).
+/// Ask the window `hwnd` to reconsider the pointer (a session started).
 pub fn post_cursor_changed(hwnd: isize) {
     unsafe {
         let _ = PostMessageW(
@@ -662,7 +647,7 @@ pub fn post_cursor_changed(hwnd: isize) {
 }
 
 /// Put Windows' pointer on stream pixel (`x`, `y`) of the picture in window
-/// `hwnd` (a controller driving it, or leaving a game).
+/// `hwnd` (a controller driving it).
 pub fn place_pointer(hwnd: isize, render: &RenderShared, x: f32, y: f32) {
     if hwnd == 0 {
         return;

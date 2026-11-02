@@ -2,49 +2,37 @@
 //! position in stream pixels. Shared with the network thread, which hears
 //! from the host.
 //!
-//! **Moonlight's way, against a host that draws the pointer into the
-//! picture** (`features::POINTER_IN_PICTURE`, every current host, as
-//! Sunshine does): the client draws no pointer, and motion is relative
-//! unless the user switches to positions with Ctrl+Alt+Shift+M (Moonlight's
+//! Moonlight's way: the host draws the pointer into the picture, as
+//! Sunshine does, so the client draws none, and motion is relative unless
+//! the user switches to positions with Ctrl+Alt+Shift+M (Moonlight's
 //! "remote desktop" mouse). Relative motion is what games read (raw input),
 //! and the pointer seen is the host's own, so it cannot disagree with where
 //! a click lands.
-//!
-//! **Against an older host** the client draws the pointer itself, in the
-//! shape the host reports, and switches between positions (desktop) and
-//! relative motion (a game took the mouse) as the host's `CursorState`
-//! says.
 
-use helio_proto::control::{self, CursorShape, CursorState, SessionAck};
+use helio_proto::control::SessionAck;
 use helio_proto::input::InputEvent;
 
 use crate::input::InputSender;
 
-/// Where the client draws the host's pointer, if it does.
+/// Where the platform's own pointer belongs, for a client that keeps it at
+/// the stream's: a controller driving it, in positions.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct CursorDraw {
-    pub visible: bool,
-    /// Motion goes as positions: a platform pointer standing in for the
-    /// stream's belongs at (`x`, `y`), drawn or not.
+    /// Motion goes as positions: the platform pointer belongs at (`x`, `y`)
+    /// (hidden: the host draws its own).
     pub absolute: bool,
     /// Stream pixels.
     pub x: f32,
     pub y: f32,
-    pub shape: CursorShape,
 }
 
 #[derive(Debug, Clone, Copy)]
 pub struct PointerState {
-    /// Send relative motion: the user's choice against a host that draws the
-    /// pointer, else the host's (its app hid or clipped the pointer).
+    /// Send relative motion, as Moonlight does once a session starts.
     pub relative: bool,
     /// Ctrl+Alt+Shift+M: the other mode, until pressed again (Moonlight's
     /// mouse-mode toggle).
     pub mode_override: Option<bool>,
-    /// The host draws the pointer into the picture: the client draws none,
-    /// and the host's `CursorState` is not followed.
-    pub host_draws: bool,
-    pub shape: CursorShape,
     /// Pointer position, stream pixels.
     pub x: f32,
     pub y: f32,
@@ -57,8 +45,6 @@ impl PointerState {
         PointerState {
             relative: false,
             mode_override: None,
-            host_draws: false,
-            shape: CursorShape::Arrow,
             x: stream_w as f32 / 2.0,
             y: stream_h as f32 / 2.0,
             captured: false,
@@ -112,9 +98,8 @@ impl PointerState {
         self.mode_override.unwrap_or(self.relative)
     }
 
-    /// Switch to the other mode, or back to the usual one (relative against
-    /// a host that draws the pointer, else the host's choice). Returns
-    /// whether motion is now relative.
+    /// Switch to the other mode, or back to the usual one (relative).
+    /// Returns whether motion is now relative.
     pub fn toggle_mode(&mut self) -> bool {
         self.mode_override = match self.mode_override {
             None => Some(!self.relative),
@@ -123,46 +108,23 @@ impl PointerState {
         self.is_relative()
     }
 
-    /// The session started (or was renegotiated): its size, and whether the
-    /// host draws the pointer. Re-centred on the new size; the user's mode
-    /// switch is kept.
+    /// The session started (or was renegotiated): its size. Re-centred on
+    /// the new size, relative; the user's mode switch is kept.
     pub fn started(&mut self, ack: &SessionAck) {
         let (captured, mode_override) = (self.captured, self.mode_override);
-        let host_draws = ack.features & control::features::POINTER_IN_PICTURE != 0;
         *self = PointerState {
             captured,
             mode_override,
-            host_draws,
-            relative: host_draws,
+            relative: true,
             ..PointerState::new(ack.width as u32, ack.height as u32)
         };
     }
 
-    /// Follow a host that leaves the pointer to the client: `CursorState`
-    /// says whether its foreground application has the mouse, and where its
-    /// pointer is.
-    pub fn apply_host(&mut self, c: &CursorState) {
-        if self.host_draws {
-            return;
-        }
-        let relative = !c.visible || c.clipped;
-        if self.relative && !relative {
-            // Leaving a game: put our pointer where the host's is.
-            self.x = c.x as f32;
-            self.y = c.y as f32;
-        }
-        self.relative = relative;
-        self.shape = c.shape;
-    }
-
     pub fn draw(&self) -> CursorDraw {
-        let absolute = self.captured && !self.is_relative();
         CursorDraw {
-            visible: absolute && !self.host_draws,
-            absolute,
+            absolute: self.captured && !self.is_relative(),
             x: self.x,
             y: self.y,
-            shape: self.shape,
         }
     }
 }
@@ -170,9 +132,9 @@ impl PointerState {
 #[cfg(test)]
 mod tests {
     use super::PointerState;
-    use helio_proto::control::{features, AckStatus, CursorState, SessionAck};
+    use helio_proto::control::{AckStatus, SessionAck};
 
-    fn ack(width: u16, height: u16, features: u8) -> SessionAck {
+    fn ack(width: u16, height: u16) -> SessionAck {
         SessionAck {
             status: AckStatus::Ok,
             codec: 0,
@@ -183,64 +145,36 @@ mod tests {
             audio_channels: 2,
             nonce: 0,
             host: 0,
-            features,
+            features: 0,
             video: 0,
             permissions: 0,
         }
     }
 
     #[test]
-    fn a_host_that_draws_the_pointer_gets_relative_motion_and_no_drawn_pointer() {
+    fn a_session_gets_relative_motion_until_the_user_switches() {
         let mut p = PointerState::new(1920, 1080);
         p.captured = true;
-        p.started(&ack(1920, 1080, features::POINTER_IN_PICTURE));
+        p.started(&ack(1920, 1080));
         assert!(p.is_relative(), "Moonlight's default");
-        assert!(!p.draw().visible);
-        // An older client's cue, which this one does not follow.
-        let desktop = CursorState {
-            visible: true,
-            ..CursorState::IN_PICTURE
-        };
-        p.apply_host(&desktop);
-        assert!(p.is_relative());
+        assert!(!p.draw().absolute);
         assert!(!p.toggle_mode(), "M: positions, the remote desktop mouse");
-        let d = p.draw();
-        assert!(d.absolute && !d.visible, "positions, but the host draws");
+        assert!(p.draw().absolute);
+        assert!(p.toggle_mode(), "M again: relative");
     }
 
     #[test]
-    fn an_older_host_steers_the_mode_and_the_client_draws() {
+    fn a_new_mode_keeps_the_users_switch() {
         let mut p = PointerState::new(1920, 1080);
-        p.captured = true;
-        p.started(&ack(1920, 1080, 0));
-        assert!(!p.is_relative(), "the desktop to begin with");
-        assert!(p.draw().visible);
-        p.apply_host(&CursorState::IN_PICTURE);
-        assert!(p.is_relative(), "a hidden pointer: a game took the mouse");
-        assert!(!p.draw().visible);
-    }
-
-    #[test]
-    fn mouse_mode_flips_then_follows_the_host_again() {
-        let mut p = PointerState::new(1920, 1080);
-        assert!(!p.is_relative(), "the desktop to begin with");
-        assert!(p.toggle_mode(), "M: the other mode");
-        p.relative = true; // the host's game takes the mouse meanwhile
-        assert!(p.is_relative());
-        assert!(
-            p.toggle_mode(),
-            "M again: back to the host's choice, relative now"
-        );
-        assert_eq!(p.mode_override, None);
-        assert!(
-            !p.toggle_mode(),
-            "and from there, M gives the desktop pointer"
-        );
-        p.started(&ack(3024, 1890, 0));
+        p.started(&ack(1920, 1080));
+        assert!(!p.toggle_mode());
+        p.started(&ack(3024, 1890));
         assert_eq!(
             p.mode_override,
             Some(false),
             "a new mode keeps the override"
         );
+        assert!(!p.is_relative());
+        assert_eq!(p.stream_size(), (3024.0, 1890.0));
     }
 }

@@ -25,7 +25,7 @@ use std::time::Duration;
 
 use helio_proto::clock;
 use helio_proto::control::{
-    self, agent_control, agent_state, AgentState, Control, CursorState, EndReason, SessionAck,
+    self, agent_control, agent_state, AgentState, Control, EndReason, SessionAck,
 };
 use helio_transport::{Endpoint, Identity, Peer, PublicIdentity};
 use parking_lot::Mutex;
@@ -204,7 +204,6 @@ pub enum Event {
     /// longer (None).
     Warning(Option<String>),
     Started(SessionAck),
-    Cursor(CursorState),
     /// An agent's session: who drives, and why the agent may not (sent to
     /// the agent and to its watchers, on every change).
     Agent(AgentState),

@@ -21,11 +21,10 @@
 //! version did) lets VideoToolbox recycle the IOSurface into the next decode
 //! while the GPU is still sampling it.
 //!
-//! On top of the video: the client-drawn cursor (lag-free: drawn where the
-//! local pointer is, in the host application's shape) and the statistics
-//! overlay.
+//! On top of the video: the statistics overlay. The pointer is in the
+//! picture: the host draws it.
 
-use std::collections::{HashMap, VecDeque};
+use std::collections::VecDeque;
 use std::ffi::c_void;
 use std::ptr::NonNull;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -35,7 +34,7 @@ use std::time::Duration;
 use block2::RcBlock;
 use helio_decode::DecodedFrame;
 use helio_proto::clock;
-use helio_proto::control::{CursorShape, HdrMetadata};
+use helio_proto::control::HdrMetadata;
 use objc2::rc::{autoreleasepool, Retained};
 use objc2::runtime::ProtocolObject;
 use objc2_core_foundation::{CFRetained, CGSize};
@@ -138,18 +137,6 @@ fragment float4 f_quad_hdr(VOut in [[stage_in]], texture2d<float> t [[texture(0)
 }
 "#;
 
-/// A cursor image: premultiplied RGBA8, in pixels, with its hotspot.
-#[derive(Clone)]
-pub struct CursorImage {
-    pub width: usize,
-    pub height: usize,
-    pub hot_x: f32,
-    pub hot_y: f32,
-    pub rgba: Vec<u8>,
-}
-
-pub use crate::pointer::CursorDraw;
-
 /// Where the picture goes in the drawable.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct Layout {
@@ -174,7 +161,6 @@ pub struct RenderShared {
     timings: Mutex<Vec<FrameTiming>>,
     frame_ready: Condvar,
     new_frame: AtomicBool,
-    cursor: Mutex<CursorDraw>,
     overlay_enabled: AtomicBool,
     /// What the stream is doing before the first frame ("Connecting…"),
     /// shown centred until video arrives, as Moonlight's progress dialog.
@@ -206,13 +192,6 @@ impl RenderShared {
             timings: Mutex::new(Vec::with_capacity(16)),
             frame_ready: Condvar::new(),
             new_frame: AtomicBool::new(false),
-            cursor: Mutex::new(CursorDraw {
-                visible: false,
-                absolute: false,
-                x: 0.0,
-                y: 0.0,
-                shape: CursorShape::Arrow,
-            }),
             overlay_enabled: AtomicBool::new(false),
             status: Mutex::new(None),
             notice: Mutex::new(None),
@@ -361,19 +340,6 @@ impl RenderShared {
         self.frame_ready.notify_one();
     }
 
-    pub fn set_cursor(&self, c: CursorDraw) {
-        let mut cur = self.cursor.lock();
-        if *cur != c {
-            *cur = c;
-            self.dirty.store(true, Ordering::Release);
-            self.frame_ready.notify_one();
-        }
-    }
-
-    pub fn cursor(&self) -> CursorDraw {
-        *self.cursor.lock()
-    }
-
     /// Show or hide the statistics overlay (Ctrl+Alt+Shift+S).
     pub fn toggle_overlay(&self) -> bool {
         let on = !self.overlay_enabled.fetch_xor(true, Ordering::AcqRel);
@@ -430,14 +396,6 @@ impl RenderShared {
 }
 
 type Tex = Retained<ProtocolObject<dyn MTLTexture>>;
-
-struct GpuCursor {
-    texture: Tex,
-    width: f32,
-    height: f32,
-    hot_x: f32,
-    hot_y: f32,
-}
 
 /// The layer's format for SDR, and for HDR: 10 bits a channel, PQ-encoded
 /// BT.2020 (the layer's colour space says so), as Moonlight's HDR renderer
@@ -595,7 +553,6 @@ pub struct Renderer {
     /// What the layer is set up for: HDR with this metadata, or SDR.
     hdr: Option<HdrMetadata>,
     cache: CFRetained<CVMetalTextureCache>,
-    cursors: HashMap<u8, GpuCursor>,
     overlay: Option<(String, Tex, f32, f32)>,
     overlay_at: Option<std::time::Instant>,
     status: Option<(String, Tex, f32, f32)>,
@@ -639,12 +596,7 @@ fn pipeline(
 }
 
 impl Renderer {
-    pub fn new(
-        layer: Retained<CAMetalLayer>,
-        cursors: &[(CursorShape, CursorImage)],
-        vsync: bool,
-        scale: f64,
-    ) -> Result<Renderer, String> {
+    pub fn new(layer: Retained<CAMetalLayer>, vsync: bool, scale: f64) -> Result<Renderer, String> {
         let device = MTLCreateSystemDefaultDevice().ok_or("no Metal device")?;
         layer.setDevice(Some(&device));
         layer.setPixelFormat(SDR_FORMAT);
@@ -676,7 +628,7 @@ impl Renderer {
         }
         let cache = unsafe { CFRetained::from_raw(NonNull::new(cache).unwrap()) };
 
-        let mut renderer = Renderer {
+        let renderer = Renderer {
             layer,
             device,
             queue,
@@ -686,7 +638,6 @@ impl Renderer {
             quad_hdr,
             hdr: None,
             cache,
-            cursors: HashMap::new(),
             overlay: None,
             overlay_at: None,
             status: None,
@@ -696,20 +647,6 @@ impl Renderer {
             current: None,
             scale,
         };
-        for (shape, img) in cursors {
-            if let Some(texture) = renderer.upload(img.width, img.height, &img.rgba) {
-                renderer.cursors.insert(
-                    *shape as u8,
-                    GpuCursor {
-                        texture,
-                        width: img.width as f32,
-                        height: img.height as f32,
-                        hot_x: img.hot_x,
-                        hot_y: img.hot_y,
-                    },
-                );
-            }
-        }
         Ok(renderer)
     }
 
@@ -828,7 +765,6 @@ impl Renderer {
         );
 
         let mut keep: Option<KeepAlive> = None;
-        let mut video_rect = (0.0, 0.0, dw, dh);
         if let Some((frame, _)) = &self.current {
             let image: &CVImageBuffer = unsafe { &*(frame.pixel_buffer as *const CVImageBuffer) };
             let picture = Picture::of(image);
@@ -848,7 +784,6 @@ impl Renderer {
                     let (w, h) = ((vw * s).round(), (vh * s).round());
                     let x = ((aw - w) / 2.0).round();
                     let y = avail_y + ((ah - h) / 2.0).round();
-                    video_rect = (x, y, w, h);
                     enc.setViewport(MTLViewport {
                         originX: x,
                         originY: y,
@@ -916,31 +851,6 @@ impl Renderer {
                 enc.drawPrimitives_vertexStart_vertexCount(MTLPrimitiveType::TriangleStrip, 0, 4);
             }
         };
-
-        let cursor = *shared.cursor.lock();
-        if cursor.visible && self.current.is_some() {
-            let (vx, vy, vw, vh) = video_rect;
-            let (sw, sh) = self
-                .current
-                .as_ref()
-                .map(|(f, _)| (f.width as f64, f.height as f64))
-                .unwrap();
-            let c = self
-                .cursors
-                .get(&(cursor.shape as u8))
-                .or_else(|| self.cursors.get(&(CursorShape::Arrow as u8)));
-            if let Some(c) = c {
-                let px = vx + cursor.x as f64 * vw / sw;
-                let py = vy + cursor.y as f64 * vh / sh;
-                quad(
-                    &c.texture,
-                    px - c.hot_x as f64,
-                    py - c.hot_y as f64,
-                    c.width as f64,
-                    c.height as f64,
-                );
-            }
-        }
 
         if self.current.is_none() {
             let text = shared.status.lock().clone();
@@ -1237,13 +1147,8 @@ unsafe extern "C-unwind" fn on_vsync(
 }
 
 /// Run the renderer until `shared.stop()`. Call on a dedicated thread.
-pub fn run(
-    layer: Retained<CAMetalLayer>,
-    shared: Arc<RenderShared>,
-    cursors: Vec<(CursorShape, CursorImage)>,
-    scale: f64,
-) {
-    let renderer = match Renderer::new(layer.clone(), &cursors, shared.vsync, scale) {
+pub fn run(layer: Retained<CAMetalLayer>, shared: Arc<RenderShared>, scale: f64) {
+    let renderer = match Renderer::new(layer.clone(), shared.vsync, scale) {
         Ok(r) => r,
         Err(e) => {
             tracing::error!(error = %e, "renderer failed to start");

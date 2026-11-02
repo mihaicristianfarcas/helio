@@ -464,7 +464,6 @@ impl NetLoop {
                 );
                 return Next::Stop;
             }
-            Control::CursorState(c) => self.emit(Event::Cursor(c)),
             Control::AgentState(state) => {
                 let changed = self.ctx.agent_state.lock().replace(state) != Some(state);
                 if changed {

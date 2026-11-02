@@ -1,6 +1,5 @@
 //! The macOS stream: window, input, Metal presentation, VideoToolbox.
 
-pub mod cursors;
 pub mod gamepad;
 mod glass;
 mod hid;
@@ -153,7 +152,6 @@ impl Session {
         );
         let scale = window.window.backingScaleFactor();
 
-        let cursors = cursors::load(mtm, scale);
         let layer = SendLayer(window.layer.clone());
         let render_thread = {
             let render = render.clone();
@@ -162,7 +160,7 @@ impl Session {
                 .spawn(move || {
                     let layer = layer;
                     crate::priority::latency_critical();
-                    render::run(layer.0, render, cursors, scale)
+                    render::run(layer.0, render, scale)
                 })
                 .map_err(|e| e.to_string())?
         };
@@ -187,11 +185,6 @@ impl Session {
                 Event::Rumble { index, low, high } => {
                     let _ = rumble_tx.try_send((index, low, high));
                 }
-                Event::Cursor(c) => {
-                    let mut p = pointer.lock();
-                    p.apply_host(&c);
-                    render.set_cursor(p.draw());
-                }
                 Event::Started(ack) => {
                     // Renegotiated after an interruption: the notice is over.
                     render.set_notice(None);
@@ -199,9 +192,7 @@ impl Session {
                     if ack.host == helio_proto::control::host::MACOS {
                         forward_command.store(true, std::sync::atomic::Ordering::Relaxed);
                     }
-                    let mut p = pointer.lock();
-                    p.started(&ack);
-                    render.set_cursor(p.draw());
+                    pointer.lock().started(&ack);
                 }
                 Event::Status(text) => {
                     tracing::info!("{text}");
@@ -255,10 +246,10 @@ impl Session {
         let gamepads = {
             let controls = stream.controls();
             let mouse = opts.gamepad_mouse.then(|| {
-                let render = render.clone();
                 crate::pad::PadMouse {
                     pointer: pointer.clone(),
-                    show: std::sync::Arc::new(move |d| render.set_cursor(d)),
+                    // The host draws its pointer; the Mac's stays hidden.
+                    show: std::sync::Arc::new(|_| {}),
                     input: stream.input().clone(),
                 }
             });

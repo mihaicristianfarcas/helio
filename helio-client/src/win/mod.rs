@@ -183,8 +183,8 @@ impl Session {
             s.width as u32,
             s.height as u32,
         )));
-        // The window, once it is up: the network thread tells it when the
-        // host's pointer changes.
+        // The window, once it is up: the network thread tells it when a
+        // session starts, which sets the pointer's mode.
         let window_hwnd = Arc::new(std::sync::atomic::AtomicIsize::new(0));
         let (rumble_tx, rumble_rx) = crate::pad::rumble_channel();
         let events: crate::stream::EventSink = {
@@ -207,23 +207,6 @@ impl Session {
             Arc::new(move |ev| match ev {
                 Event::Rumble { index, low, high } => {
                     let _ = rumble_tx.try_send((index, low, high));
-                }
-                Event::Cursor(c) => {
-                    let mut p = pointer.lock();
-                    let was_relative = p.is_relative();
-                    p.apply_host(&c);
-                    let (now_relative, draw) = (p.is_relative(), p.draw());
-                    drop(p);
-                    // Leaving a game: our pointer goes where the host's is.
-                    if was_relative && !now_relative && draw.visible {
-                        window::place_pointer(
-                            window_hwnd.load(std::sync::atomic::Ordering::Acquire),
-                            &render,
-                            draw.x,
-                            draw.y,
-                        );
-                    }
-                    cursor_changed();
                 }
                 Event::Started(ack) => {
                     // Renegotiated after an interruption: the notice is over.

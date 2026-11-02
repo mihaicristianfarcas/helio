@@ -539,8 +539,8 @@ impl Encoder {
 /// The screen's capture, and an encoder at the stream's size.
 pub fn open_video(params: &VideoParams) -> Result<(Capture, Encoder), String> {
     let cap = match &params.source {
-        // The pointer drawn in (`features::POINTER_IN_PICTURE`); the portal's
-        // stream has it embedded.
+        // The pointer drawn in: the client draws none. The portal's stream
+        // has it embedded.
         VideoSource::X11 => Capture::X11(Box::new(
             X11Capture::new(None, true).map_err(|e| e.to_string())?,
         )),

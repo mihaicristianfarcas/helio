@@ -294,8 +294,8 @@ impl Platform {
     pub fn idle(&mut self) {}
 }
 
-/// The session's capture of its display, with the pointer drawn in
-/// (`features::POINTER_IN_PICTURE`), and an encoder at its size
+/// The session's capture of its display, with the pointer drawn in (the
+/// client draws none), and an encoder at its size
 /// (ScreenCaptureKit scales to it and hands over NV12: no conversion step).
 pub fn open_video(params: &VideoParams) -> Result<(SckCapture, VtEncoder), String> {
     let e = params.encoder;

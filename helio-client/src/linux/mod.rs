@@ -21,7 +21,6 @@ use std::thread::JoinHandle;
 use std::time::Duration;
 
 use helio_decode::ffmpeg::FfmpegDecoder;
-use helio_proto::control::CursorShape;
 use helio_proto::input::{scancode, Button};
 use parking_lot::Mutex;
 use winit::application::ApplicationHandler;
@@ -340,24 +339,6 @@ struct StreamApp {
     outcome: Option<Result<Option<String>, String>>,
 }
 
-fn cursor_icon(shape: CursorShape) -> CursorIcon {
-    match shape {
-        CursorShape::Arrow => CursorIcon::Default,
-        CursorShape::IBeam => CursorIcon::Text,
-        CursorShape::Wait => CursorIcon::Wait,
-        CursorShape::Cross => CursorIcon::Crosshair,
-        CursorShape::SizeAll => CursorIcon::Move,
-        CursorShape::SizeNS => CursorIcon::NsResize,
-        CursorShape::SizeWE => CursorIcon::EwResize,
-        CursorShape::SizeNWSE => CursorIcon::NwseResize,
-        CursorShape::SizeNESW => CursorIcon::NeswResize,
-        CursorShape::Hand => CursorIcon::Pointer,
-        CursorShape::No => CursorIcon::NotAllowed,
-        CursorShape::Help => CursorIcon::Help,
-        CursorShape::AppStarting => CursorIcon::Progress,
-    }
-}
-
 impl StreamApp {
     fn open(&mut self, el: &ActiveEventLoop) -> Result<Running, String> {
         let r = &self.request;
@@ -434,10 +415,6 @@ impl StreamApp {
             Arc::new(move |ev| match ev {
                 Event::Rumble { index, low, high } => {
                     let _ = rumble_tx.try_send((index, low, high));
-                }
-                Event::Cursor(c) => {
-                    pointer.lock().apply_host(&c);
-                    let _ = proxy.send_event(UserEvent::Cursor);
                 }
                 Event::Started(ack) => {
                     render.set_notice(None);
@@ -580,10 +557,8 @@ fn apply_pointer(r: &Running) {
         if w.set_cursor_grab(grab).is_err() {
             let _ = w.set_cursor_grab(CursorGrabMode::Confined);
         }
-        // The host draws its pointer into the picture; an older host leaves
-        // it to us on its desktop.
-        w.set_cursor_visible(!relative && !p.host_draws);
-        w.set_cursor(cursor_icon(p.shape));
+        // The host draws its pointer into the picture.
+        w.set_cursor_visible(false);
     } else {
         let _ = w.set_cursor_grab(CursorGrabMode::None);
         w.set_cursor_visible(true);

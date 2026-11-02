@@ -186,7 +186,6 @@ impl Handler {
                 // M: mouse mode, relative <-> desktop pointer (Moonlight's).
                 let mut p = self.pointer.lock();
                 let relative = p.toggle_mode();
-                self.render.set_cursor(p.draw());
                 tracing::info!(
                     relative,
                     automatic = p.mode_override.is_none(),
@@ -417,12 +416,12 @@ impl Handler {
         }
         // Points scaled to pixels; in a game, raw-ish relative motion with
         // the residue kept by the input thread's batcher.
-        let render = &self.render;
         p.nudge(
             dx * self.pixels_per_point,
             dy * self.pixels_per_point,
             &self.input,
-            &|d| render.set_cursor(d),
+            // The host draws its pointer; the Mac's stays where it is.
+            &|_| {},
         );
     }
 
@@ -499,7 +498,6 @@ pub fn set_capture(h: &mut Handler, captured: bool) {
         return;
     }
     p.captured = captured;
-    let draw = p.draw();
     drop(p);
     h.shortcut = None;
     h.shortcut_released = false;
@@ -507,7 +505,6 @@ pub fn set_capture(h: &mut Handler, captured: bool) {
         h.release_all();
     }
     h.hold_pointer(captured);
-    h.render.set_cursor(draw);
     tracing::info!(captured, "pointer capture");
 }
 
