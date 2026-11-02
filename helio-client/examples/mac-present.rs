@@ -349,7 +349,7 @@ mod mac {
                 .spawn(move || {
                     let layer = layer;
                     helio_client::priority::latency_critical();
-                    render::run(layer.0, shared, Vec::new(), scale)
+                    render::run(layer.0, shared, scale)
                 })
                 .expect("the render thread")
         };

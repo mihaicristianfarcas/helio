@@ -10,7 +10,7 @@ use helio_client::input::InputSender;
 use helio_client::stats::{Stats, StatsCollector};
 use helio_client::store::{self, Hosts, KnownHost};
 use helio_client::stream::{ControlSender, Event, Stream, StreamSettings};
-use helio_proto::control::{self, AgentState, CursorState, SessionAck};
+use helio_proto::control::{self, AgentState, SessionAck};
 use parking_lot::{Condvar, Mutex};
 
 use crate::decode::{FrameStore, HeadlessVideo};
@@ -50,7 +50,6 @@ impl Default for HeadlessOptions {
 #[derive(Default)]
 struct Seen {
     ack: Option<SessionAck>,
-    cursor: Option<CursorState>,
     agent: Option<AgentState>,
     /// Why it ended (and whether that was an error).
     ended: Option<(String, bool)>,
@@ -142,7 +141,6 @@ impl HeadlessSession {
                         // "Starting the video…" is over.
                         s.status = None;
                     }
-                    Event::Cursor(c) => s.cursor = Some(c),
                     Event::Agent(a) => s.agent = Some(a),
                     Event::Permissions(p) => s.permissions = p,
                     Event::Ended { reason, error } => s.ended = Some((reason, error)),
@@ -262,10 +260,6 @@ impl HeadlessSession {
     pub fn permissions(&self) -> Option<helio_proto::permission::Permissions> {
         let bits = self.seen.0.lock().permissions;
         (bits != 0).then(|| helio_proto::permission::Permissions::from_bits(bits))
-    }
-
-    pub fn cursor(&self) -> Option<CursorState> {
-        self.seen.0.lock().cursor
     }
 
     /// Why the session ended, if it has.

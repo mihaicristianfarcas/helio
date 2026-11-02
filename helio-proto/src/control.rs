@@ -1,10 +1,10 @@
-//! Control messages (`kind = 3`): session setup, loss recovery, cursor state,
-//! latency probes. Body layouts are fixed per opcode, little-endian.
+//! Control messages (`kind = 3`): session setup, loss recovery, latency
+//! probes. Body layouts are fixed per opcode, little-endian.
 //!
 //! Control has no FEC and no transport retransmit. Each message is either
 //! retransmitted by its sender until acknowledged (`SessionStart`), naturally
-//! repeated (`CursorState` heartbeat, `LossReport`), or re-issued by the loss
-//! state machine if its effect does not arrive (`InvalidateRefs`, `RequestIdr`).
+//! repeated (`LossReport`), or re-issued by the loss state machine if its
+//! effect does not arrive (`InvalidateRefs`, `RequestIdr`).
 
 use crate::gamepad::GamepadState;
 use crate::header::{Header, Kind};
@@ -50,12 +50,8 @@ pub mod features {
     /// Video comes in `LAN_PAYLOAD_LEN` shards while the client is on the
     /// host's local network.
     pub const LAN_SHARDS: u8 = 2;
-    /// The pointer is in the picture, drawn by the host where the host's
-    /// desktop shows it, as Sunshine draws it (`display_vram.cpp`). The client
-    /// draws none, and the mouse mode is the user's: relative motion unless
-    /// they switch (Moonlight's default). Hosts without it leave drawing the
-    /// pointer to the client and steer its mode with `CursorState`.
-    pub const POINTER_IN_PICTURE: u8 = 4;
+    // 4 said the host draws the pointer into the picture, which every host
+    // does: retired, never reused.
 }
 
 /// Client -> host: start (or re-describe) the session.
@@ -282,75 +278,6 @@ impl EndReason {
     }
 }
 
-/// Pointer shapes the client maps onto its own cursors. A small closed set:
-/// what `LoadCursorW` defines. Unknown codes become `Arrow`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[repr(u8)]
-pub enum CursorShape {
-    Arrow = 0,
-    IBeam = 1,
-    Wait = 2,
-    Cross = 3,
-    SizeAll = 4,
-    SizeNS = 5,
-    SizeWE = 6,
-    SizeNWSE = 7,
-    SizeNESW = 8,
-    Hand = 9,
-    No = 10,
-    Help = 11,
-    AppStarting = 12,
-}
-
-impl CursorShape {
-    pub fn from_code(c: u8) -> CursorShape {
-        match c {
-            1 => CursorShape::IBeam,
-            2 => CursorShape::Wait,
-            3 => CursorShape::Cross,
-            4 => CursorShape::SizeAll,
-            5 => CursorShape::SizeNS,
-            6 => CursorShape::SizeWE,
-            7 => CursorShape::SizeNWSE,
-            8 => CursorShape::SizeNESW,
-            9 => CursorShape::Hand,
-            10 => CursorShape::No,
-            11 => CursorShape::Help,
-            12 => CursorShape::AppStarting,
-            _ => CursorShape::Arrow,
-        }
-    }
-}
-
-/// What the host's foreground application is doing with the pointer, from a
-/// host that leaves drawing it to the client: hidden or clipped means the
-/// app has taken the mouse (lock, send relative); otherwise draw this shape
-/// and send absolute. A client that the ack tells
-/// `features::POINTER_IN_PICTURE` ignores it.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct CursorState {
-    pub visible: bool,
-    pub clipped: bool,
-    pub shape: CursorShape,
-    /// Host pointer position in stream pixels, for resync when the host moves
-    /// the pointer by itself.
-    pub x: u16,
-    pub y: u16,
-}
-
-impl CursorState {
-    /// What a host that draws the pointer into the picture tells a client
-    /// that does not know `features::POINTER_IN_PICTURE`: draw no pointer,
-    /// send relative motion.
-    pub const IN_PICTURE: CursorState = CursorState {
-        visible: false,
-        clipped: false,
-        shape: CursorShape::Arrow,
-        x: 0,
-        y: 0,
-    };
-}
-
 /// Client -> host, about once a second: what arrived. The host's bitrate
 /// controller acts on it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -383,7 +310,6 @@ pub enum Control {
         first: u32,
         last: u32,
     },
-    CursorState(CursorState),
     LossReport(LossReport),
     /// Latency probe; the peer sends it straight back as `PingReply`.
     Ping {
@@ -535,7 +461,8 @@ pub mod host_warning {
 const OP_SESSION_START: u8 = 2;
 const OP_SESSION_ACK: u8 = 3;
 const OP_SESSION_END: u8 = 4;
-const OP_CURSOR_STATE: u8 = 5;
+// 5 was the pointer's state, for clients that drew the host's pointer:
+// retired, never reused.
 const OP_REQUEST_IDR: u8 = 6;
 const OP_INVALIDATE: u8 = 7;
 const OP_LOSS_REPORT: u8 = 8;
@@ -646,13 +573,6 @@ impl Control {
             Control::SessionEnd(r) => {
                 w.u8(OP_SESSION_END);
                 w.u8(r as u8);
-            }
-            Control::CursorState(c) => {
-                w.u8(OP_CURSOR_STATE);
-                w.u8(c.visible as u8 | (c.clipped as u8) << 1);
-                w.u8(c.shape as u8);
-                w.u16(c.x);
-                w.u16(c.y);
             }
             Control::RequestIdr => w.u8(OP_REQUEST_IDR),
             Control::InvalidateRefs { first, last } => {
@@ -812,16 +732,6 @@ impl Control {
                 permissions: r.u16().unwrap_or(0),
             }),
             OP_SESSION_END => Control::SessionEnd(EndReason::from_code(r.u8()?)),
-            OP_CURSOR_STATE => {
-                let f = r.u8()?;
-                Control::CursorState(CursorState {
-                    visible: f & 1 != 0,
-                    clipped: f & 2 != 0,
-                    shape: CursorShape::from_code(r.u8()?),
-                    x: r.u16()?,
-                    y: r.u16()?,
-                })
-            }
             OP_REQUEST_IDR => Control::RequestIdr,
             OP_INVALIDATE => Control::InvalidateRefs {
                 first: r.u32()?,
@@ -975,13 +885,6 @@ mod tests {
             first: u32::MAX - 1,
             last: 3,
         });
-        round_trip(Control::CursorState(CursorState {
-            visible: true,
-            clipped: false,
-            shape: CursorShape::IBeam,
-            x: 100,
-            y: 200,
-        }));
         round_trip(Control::LossReport(LossReport {
             received: 10_000,
             expected: 10_020,
