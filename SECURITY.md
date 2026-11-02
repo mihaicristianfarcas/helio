@@ -135,9 +135,11 @@ Windows the same is a named event in the signed-in session.
 Helio serves the session's tools over HTTP on 127.0.0.1, on a port the
 system picks, for Codex and Claude Code. Every request needs a token made
 when the session opens, which is never on a command line. Until a request
-shows it, Helio reads at most 16 KiB of it and none of its body, and it
-serves 16 connections at once: another program on your computer can keep
-the endpoint busy, but cannot use it.
+shows it, Helio reads at most 16 KiB of it, and of its body only what
+arrives in the second after the refusal, up to 64 KiB, which it drops (so
+the refusal is not lost to a reset); it serves 16 connections at once:
+another program on your computer can keep the endpoint busy, but cannot
+use it.
 
 **What a device may do** is the host's to say, per device: whether it may
 see the screen, which input it may send, which way the clipboard goes,

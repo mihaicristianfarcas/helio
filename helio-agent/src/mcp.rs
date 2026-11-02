@@ -15,8 +15,9 @@
 //! agent session to Codex or Claude Code turn after turn, the session staying
 //! connected between them. Any local process can reach that port, another
 //! user's too, so a request without the session's token costs a bounded
-//! read of its head and none of its body, and the connections served at
-//! once are few (`HTTP_CONNECTIONS`).
+//! read of its head, and of its body only a little read and dropped after
+//! the refusal so that the refusal arrives (`refuse`), and the connections
+//! served at once are few (`HTTP_CONNECTIONS`).
 
 use std::io::{BufRead, Read, Write};
 use std::path::PathBuf;
@@ -666,6 +667,17 @@ const HTTP_HEAD_WAIT: Duration = Duration::from_secs(10);
 /// requests (the model thinks between tool calls).
 const HTTP_IDLE: Duration = Duration::from_secs(600);
 
+/// How long the rest of a refused request is read and dropped after the
+/// refusal (`refuse`). The client is on this computer, and its body follows
+/// its head within milliseconds; this bounds how long a peer without the
+/// token holds a place.
+const HTTP_LINGER: Duration = Duration::from_secs(1);
+
+/// The most of a refused request read and dropped after the refusal: a
+/// JSON-RPC message sent with a wrong token is a few kilobytes. Past this
+/// the connection closes on what is left, which may reset it.
+const HTTP_LINGER_BYTES: usize = 64 << 10;
+
 /// Serve `computer`'s tools over HTTP on 127.0.0.1 (a port of the system's
 /// choosing), each request checked against a fresh token.
 pub fn serve_http(computer: SharedComputer, opts: Options) -> std::io::Result<HttpServer> {
@@ -814,7 +826,12 @@ fn http_connection(
             HeadRead::Head(head) => head,
             HeadRead::Closed => return Ok(()),
             HeadRead::TooLarge => {
-                return respond(&mut out, "431 Request Header Fields Too Large", None, true)
+                return refuse(
+                    &mut out,
+                    &mut reader,
+                    "431 Request Header Fields Too Large",
+                    None,
+                )
             }
         };
         if stop.load(std::sync::atomic::Ordering::Relaxed) {
@@ -840,10 +857,10 @@ fn http_connection(
             let path: String = path.chars().take(64).collect();
             tracing::debug!(method, path, "MCP HTTP request without the right token");
             let reply = json!({"error": "unauthorized"});
-            return respond(&mut out, "401 Unauthorized", Some(reply), true);
+            return refuse(&mut out, &mut reader, "401 Unauthorized", Some(reply));
         }
         if length > HTTP_BODY_LIMIT {
-            return respond(&mut out, "413 Content Too Large", None, true);
+            return refuse(&mut out, &mut reader, "413 Content Too Large", None);
         }
         out.set_read_timeout(Some(HTTP_IDLE))?;
         let mut body = vec![0u8; length];
@@ -884,6 +901,40 @@ fn http_connection(
             return Ok(());
         }
     }
+}
+
+/// Answer a request refused before its body was read, and end the
+/// connection. Closing a socket with bytes still unread makes the system
+/// answer them with a reset, and a reset can reach the client before it
+/// has read the refusal, which is then lost. So it closes in stages, as
+/// RFC 9112 §9.6 describes: the sending side first, then what the client
+/// still sends is read and dropped until it closes, for `HTTP_LINGER` at
+/// most and up to `HTTP_LINGER_BYTES`.
+fn refuse(
+    out: &mut std::net::TcpStream,
+    reader: &mut impl Read,
+    status: &str,
+    reply: Option<Value>,
+) -> std::io::Result<()> {
+    respond(out, status, reply, true)?;
+    out.shutdown(std::net::Shutdown::Write)?;
+    let until = std::time::Instant::now() + HTTP_LINGER;
+    let mut chunk = [0u8; 4096];
+    let mut left = HTTP_LINGER_BYTES;
+    while left > 0 {
+        let wait = match until.checked_duration_since(std::time::Instant::now()) {
+            Some(wait) if !wait.is_zero() => wait,
+            _ => break,
+        };
+        // The socket's timeout, which `reader`'s clone of it shares.
+        out.set_read_timeout(Some(wait))?;
+        let most = left.min(chunk.len());
+        match reader.read(&mut chunk[..most]) {
+            Ok(0) | Err(_) => break,
+            Ok(n) => left -= n,
+        }
+    }
+    Ok(())
 }
 
 /// Write one response; `close` says the connection ends after it.
@@ -1334,6 +1385,55 @@ mod tests {
             r#"{"jsonrpc":"2.0","method":"notifications/initialized"}"#,
         );
         assert!(status.contains("202") && body.is_empty(), "{status} {body}");
+    }
+
+    /// A refusal sent before the body is read (401 here; 413 and 431 alike)
+    /// reaches the client whole even when the body arrives after it. A
+    /// server that closed on the unread body would answer it with a reset,
+    /// which can lose the refusal on its way.
+    #[test]
+    fn a_refusal_reaches_the_client_when_the_body_comes_after_it() {
+        use std::io::{BufRead, BufReader, Read, Write};
+        let dir = tempfile::tempdir().unwrap();
+        let computer = Arc::new(parking_lot::Mutex::new(Computer::new(
+            crate::computer::Config::new(dir.path().to_path_buf()),
+        )));
+        let http = serve_http(
+            computer,
+            Options {
+                image_dir: None,
+                events: None,
+            },
+        )
+        .unwrap();
+        let port: u16 = http
+            .url
+            .trim_start_matches("http://127.0.0.1:")
+            .trim_end_matches("/mcp")
+            .parse()
+            .unwrap();
+        let body = "x".repeat(4000);
+        let mut s = std::net::TcpStream::connect(("127.0.0.1", port)).unwrap();
+        s.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
+        write!(
+            s,
+            "POST /mcp HTTP/1.1\r\nAuthorization: Bearer nope\r\nContent-Length: {}\r\n\r\n",
+            body.len()
+        )
+        .unwrap();
+        let mut r = BufReader::new(s.try_clone().unwrap());
+        let mut status = String::new();
+        r.read_line(&mut status).unwrap();
+        assert!(status.contains("401"), "{status}");
+        // The body, once the server has answered and is done with the
+        // request.
+        std::thread::sleep(Duration::from_millis(100));
+        s.write_all(body.as_bytes()).unwrap();
+        std::thread::sleep(Duration::from_millis(100));
+        let mut rest = String::new();
+        r.read_to_string(&mut rest)
+            .expect("the connection ends without a reset");
+        assert!(rest.contains("unauthorized"), "{rest}");
     }
 
     #[test]
