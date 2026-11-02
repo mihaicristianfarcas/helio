@@ -66,12 +66,11 @@ pub struct Found {
     pub id: String,
     pub addresses: Vec<IpAddr>,
     pub port: u16,
-    /// The host's system ("windows", "macos"); hosts from before it was
-    /// announced are Windows.
+    /// The host's system as it announces it ("windows", "macos", "linux");
+    /// empty when the record has none.
     pub os: String,
     pub pairing_port: u16,
-    /// Its network adapters, to wake it by (none from hosts before it was
-    /// announced).
+    /// Its network adapters, to wake it by (none when the record has none).
     pub wake: Vec<crate::wake::Mac>,
 }
 
@@ -133,7 +132,7 @@ pub fn browse(timeout: Duration) -> Result<Vec<Found>, String> {
                         id: prop("id").unwrap_or_default(),
                         addresses,
                         port: info.get_port(),
-                        os: prop("os").unwrap_or_else(|| "windows".into()),
+                        os: prop("os").unwrap_or_default(),
                         pairing_port: prop("pair").and_then(|p| p.parse().ok()).unwrap_or(47801),
                         wake: prop("mac")
                             .map(|m| crate::wake::parse_list(&m))
