@@ -283,7 +283,7 @@ running rather than showing it, and the window names Helio and Helio Host
 without their version, so a screenshot does not date with the next release.
 
 Use an empty `HELIO_DATA_DIR` for checks, so they neither read nor change
-your own hosts and settings (`onboarded = true` in its `settings.toml` skips
+your own hosts, settings and logs (`onboarded = true` in its `settings.toml` skips
 setup, which an empty folder opens on), and a throwaway `HELIO_HOST_DATA_DIR` with
 `internet_access = false` and `port_mapping = false` in its `config.toml`
 before turning the switch on for real. An occluded window is not redrawn, so

@@ -20,14 +20,20 @@ names and addresses: edit them out if you like.
 
 ### Helio
 
-Helio keeps this launch's log and the two before it: `helio.log`,
-`helio.1.log` and `helio.2.log`. Each start moves them along and drops the
-oldest, so copy them before you open Helio a third time.
+`helio.log` is this launch's log. Each start sets the one before it aside
+under the time that launch started, in UTC: `helio-2026-11-01-144906.log`.
+Helio keeps the logs of the last 10 launches, and every log from the last
+two weeks however often it started since, up to 1 GiB in all. Send the
+log of the launch that went wrong, which may not be the newest: Helio may
+have started again since (at sign-in, or after an update).
 
 - **On a Mac**, **Help → Show Logs in Finder** opens the folder.
 - **On Linux**, a stream is a process of its own, and each one starts a new
-  log: after a stream, `helio.log` is the stream's and `helio.1.log` the
-  app's. Send all three.
+  log: after a stream, `helio.log` is the stream's and the one before it
+  the app's. Send both.
+
+With `HELIO_DATA_DIR` set, Helio keeps its logs in that folder's `logs`
+instead.
 
 `helio`, `helio-agent` and `Helio mcp` write to the terminal, on standard
 error, and to no file. To keep it:
