@@ -10,7 +10,7 @@
 
 use std::path::PathBuf;
 
-use gpui::{actions, App, KeyBinding, Menu, MenuItem, OsAction, SystemMenuType};
+use gpui::{actions, App, KeyBinding, Menu, MenuItem, OsAction, SystemMenuType, Window};
 
 use crate::text_field;
 
@@ -74,21 +74,9 @@ pub fn init(app: AppMenus, cx: &mut App) {
     cx.on_action(|_: &ShowAll, cx| cx.unhide_other_apps());
     cx.on_action(|_: &BringAllToFront, cx| cx.activate(true));
     // The window in front, as the title bar's own buttons would.
-    cx.on_action(|_: &CloseWindow, cx| {
-        if let Some(window) = cx.active_window() {
-            let _ = window.update(cx, |_, window, _| window.remove_window());
-        }
-    });
-    cx.on_action(|_: &Minimize, cx| {
-        if let Some(window) = cx.active_window() {
-            let _ = window.update(cx, |_, window, _| window.minimize_window());
-        }
-    });
-    cx.on_action(|_: &Zoom, cx| {
-        if let Some(window) = cx.active_window() {
-            let _ = window.update(cx, |_, window, _| window.zoom_window());
-        }
-    });
+    cx.on_action(|_: &CloseWindow, cx| in_front(cx, Window::remove_window));
+    cx.on_action(|_: &Minimize, cx| in_front(cx, |w| w.minimize_window()));
+    cx.on_action(|_: &Zoom, cx| in_front(cx, |w| w.zoom_window()));
     let about = app.clone();
     cx.on_action(move |_: &About, _| {
         crate::desktop::show_about(about.name, &about.version, &about.build)
@@ -97,6 +85,25 @@ pub fn init(app: AppMenus, cx: &mut App) {
     cx.on_action(move |_: &Help, cx| cx.open_url(&help));
     cx.on_action(|_: &ReportIssue, cx| cx.open_url(&format!("{REPOSITORY}/issues")));
     cx.on_action(move |_: &ShowLogs, cx| cx.reveal_path(&app.log));
+}
+
+/// Do `what` to the window in front, once the action that asked is over.
+///
+/// Looks removable, is not: a key or a menu item reaches these handlers
+/// while GPUI is updating the window it came from (`App::dispatch_action`
+/// updates the active window and dispatches inside it), and a window being
+/// updated is out of reach, so updating it here again fails and the window
+/// stays as it was. Deferred, it runs after that update has given the
+/// window back.
+fn in_front(cx: &mut App, what: fn(&mut Window)) {
+    let Some(window) = cx.active_window() else {
+        return;
+    };
+    cx.defer(move |cx| {
+        if let Err(e) = window.update(cx, |_, window, _| what(window)) {
+            tracing::warn!(error = %e, "the window in front went away first");
+        }
+    });
 }
 
 /// The app's own menu. `settings` is the app's Settings item, if it has a
