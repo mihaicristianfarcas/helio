@@ -108,9 +108,9 @@ impl HostPages {
                 if !s.internet {
                     "Off".to_string()
                 } else if s.public.is_empty() {
-                    "On · finding its address…".to_string()
+                    "On, finding its address…".to_string()
                 } else {
-                    format!("On · {}", s.public.join(", "))
+                    format!("On, at {}", s.public.join(", "))
                 },
                 false,
                 t,
@@ -127,7 +127,7 @@ impl HostPages {
             ),
             info_row(
                 "Devices",
-                format!("{} paired · {} connected now", s.clients, s.tunnels),
+                format!("{} paired, {} connected now", s.clients, s.tunnels),
                 false,
                 t,
             ),
@@ -227,7 +227,7 @@ impl HostPages {
         };
         let since = now_ms() / 1000 - sess.started_unix.min(now_ms() / 1000);
         let meta = format!(
-            "{} × {} · {} fps · {} · {} Mbps · {}",
+            "{} × {}, {} fps, {}, {} Mbps, {}",
             sess.width,
             sess.height,
             sess.fps,
@@ -324,7 +324,7 @@ impl HostPages {
                 format!("Held: {}", held.join(", "))
             };
             if !a.watchers.is_empty() {
-                line.push_str(&format!(" · watched by {}", a.watchers.join(", ")));
+                line.push_str(&format!(", watched by {}", a.watchers.join(", ")));
             }
             line
         });

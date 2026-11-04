@@ -48,7 +48,7 @@ pub(super) fn plan_card(plan: &[PlanStep], t: Theme) -> impl IntoElement {
     let title = if plan.is_empty() {
         "Plan".to_string()
     } else {
-        format!("Plan · {done} of {}", plan.len())
+        format!("Plan, {done} of {}", plan.len())
     };
     let body = if plan.is_empty() {
         helio_ui::card(t)
@@ -120,7 +120,7 @@ pub(super) fn session_card(chat: &Chat, watching: bool, t: Theme) -> impl IntoEl
         provider_name(chat.settings.provider).to_string()
     } else {
         format!(
-            "{} · {}",
+            "{}, {}",
             provider_name(chat.settings.provider),
             chat.settings.model
         )
@@ -145,20 +145,20 @@ pub(super) fn session_card(chat: &Chat, watching: bool, t: Theme) -> impl IntoEl
                 "Waiting for someone to watch".into()
             }
             Some(a) if watching => format!(
-                "The agent · you watch{}",
+                "The agent, you watch{}",
                 if a.watchers > 1 {
                     format!(" with {}", a.watchers - 1)
                 } else {
                     String::new()
                 }
             ),
-            Some(a) if a.watchers > 0 => format!("The agent · {} watching", a.watchers),
+            Some(a) if a.watchers > 0 => format!("The agent, {} watching", a.watchers),
             _ => "The agent".into(),
         },
     };
     let connection = match chat.link {
-        Some(l) if l.rtt_ms < 10.0 => format!("{:.1} ms · {:.1}% loss", l.rtt_ms, l.loss_pct),
-        Some(l) => format!("{:.0} ms · {:.1}% loss", l.rtt_ms, l.loss_pct),
+        Some(l) if l.rtt_ms < 10.0 => format!("{:.1} ms, {:.1}% loss", l.rtt_ms, l.loss_pct),
+        Some(l) => format!("{:.0} ms, {:.1}% loss", l.rtt_ms, l.loss_pct),
         None => "—".into(),
     };
     let turn = match &chat.turn {
@@ -171,7 +171,7 @@ pub(super) fn session_card(chat: &Chat, watching: bool, t: Theme) -> impl IntoEl
             let budget = Duration::from_secs(chat.settings.max_minutes.max(1) as u64 * 60) + waited;
             let left = budget.saturating_sub(turn.started.elapsed());
             format!(
-                "{} of {} actions · {} min left",
+                "{} of {} actions, {} min left",
                 chat.turn_actions,
                 chat.settings.max_actions,
                 left.as_secs().div_ceil(60)
@@ -188,12 +188,12 @@ pub(super) fn session_card(chat: &Chat, watching: bool, t: Theme) -> impl IntoEl
         "—".to_string()
     } else {
         format!(
-            "{} in · {} out{}",
+            "{} in, {} out{}",
             thousands(chat.tokens.0),
             thousands(chat.tokens.1),
             chat.tokens
                 .2
-                .map(|c| format!(" · ${c:.2}"))
+                .map(|c| format!(", ${c:.2}"))
                 .unwrap_or_default()
         )
     };
@@ -311,8 +311,8 @@ impl HelioApp {
         };
         let past = chat.selected.is_some_and(|i| i + 1 < n);
         let caption = match (past, step) {
-            (true, Some(s)) => format!("Step {} of {n} · {}", shown.unwrap_or(0) + 1, s.caption),
-            (false, Some(s)) => format!("After {} · {}", s.caption, ago(s.at.elapsed())),
+            (true, Some(s)) => format!("Step {} of {n}, {}", shown.unwrap_or(0) + 1, s.caption),
+            (false, Some(s)) => format!("After {}, {}", s.caption, ago(s.at.elapsed())),
             _ => format!("{} × {}", chat.settings.width, chat.settings.height),
         };
         let header = div()
@@ -483,7 +483,7 @@ impl HelioApp {
                                     if n == 0 {
                                         "Steps".to_string()
                                     } else {
-                                        format!("Steps · {n}")
+                                        format!("Steps, {n}")
                                     },
                                     t,
                                 )

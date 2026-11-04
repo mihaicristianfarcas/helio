@@ -148,7 +148,7 @@ impl HostPages {
                                     .child(div().text_size(px(Type::BODY)).font_weight(FontWeight::MEDIUM).child(p.client_name.clone()))
                                     .when(p.agent, |d| d.child(chip("AI agent", t.accent, t))),
                             )
-                            .child(div().text_size(px(Type::META)).text_color(t.tertiary).child(format!("From {} · waiting {}", p.peer, duration(p.waiting_secs)))),
+                            .child(div().text_size(px(Type::META)).text_color(t.tertiary).child(format!("From {}, waiting {}", p.peer, duration(p.waiting_secs)))),
                     )
                     .children(pin.map(|f| div().w(px(92.0)).child(field(&f, t))))
                     .child(button(ElementId::Name(format!("pin-{id}").into()), "Pair", t).accent().disabled(!has_pin).on_click(cx.listener(move |this, _, _, cx| {
@@ -195,7 +195,7 @@ impl HostPages {
         t: Theme,
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        let detail = format!("Paired {} · {}", date(c.paired_at), c.id);
+        let detail = format!("Paired {}, {}", date(c.paired_at), c.id);
         let key = c.key.clone();
         let access = button(
             ElementId::Name(format!("permissions-{}", c.id).into()),

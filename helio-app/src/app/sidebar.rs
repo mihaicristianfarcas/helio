@@ -420,9 +420,9 @@ impl HelioApp {
                 ChatState::Idle => ("Idle", div().into_any_element()),
             };
             let sub = if watched.contains(&id) {
-                format!("{host} · {label} · you're logged in")
+                format!("{host}, {label}, you're logged in")
             } else {
-                format!("{host} · {label}")
+                format!("{host}, {label}")
             };
             out.push(
                 row(
@@ -440,7 +440,7 @@ impl HelioApp {
         }
         for (id, host, secs) in desktops {
             let sub = format!(
-                "Your desktop · {}",
+                "Your desktop, {}",
                 if secs < 60 {
                     "now".to_string()
                 } else {

@@ -352,15 +352,15 @@ impl HelioApp {
                     let failed = list.iter().filter(|a| !a.ok).count();
                     let latest = list.last().map(|a| a.text.clone()).unwrap_or_default();
                     let summary = if live {
-                        format!("Using the computer · {latest}")
+                        format!("Using the computer, {latest}")
                     } else if failed > 0 {
                         format!(
-                            "Used the computer · {n} action{} ({failed} didn't work)",
+                            "Used the computer, {n} action{} ({failed} didn't work)",
                             if n == 1 { "" } else { "s" }
                         )
                     } else {
                         format!(
-                            "Used the computer · {n} action{}",
+                            "Used the computer, {n} action{}",
                             if n == 1 { "" } else { "s" }
                         )
                     };
