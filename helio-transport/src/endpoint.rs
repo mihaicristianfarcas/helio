@@ -14,6 +14,7 @@
 //!    with an empty datagram until `Done`, or queued packets stall.
 //! 3. Every datagram that authenticates updates the peer's address: that is
 //!    roaming, and it is how a client that changes networks keeps its stream.
+//!    A cookie reply authenticates nothing, in either direction, so it does not.
 
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -61,6 +62,8 @@ const KEEPALIVE_SECS: u16 = 25;
 const HANDSHAKE_RATE_LIMIT: u64 = 10;
 /// pq-boringtun's `COOKIE_REPLY_SZ`.
 const COOKIE_REPLY: usize = 64;
+/// The first byte of a cookie reply: WireGuard's message type 3.
+const COOKIE_REPLY_TYPE: u8 = 3;
 
 thread_local! {
     static ENCAP: RefCell<Vec<u8>> = RefCell::new(vec![0u8; SCRATCH]);
@@ -892,7 +895,21 @@ impl Endpoint {
             tracing::trace!(peer = peer.id, %src, error = %e, "datagram did not authenticate");
             return Ok(Received::Control);
         }
-        // Authenticated: roaming and liveness.
+        // A cookie reply proves no key: a peer's rate limiter answers anyone
+        // who can make a mac1, and a mac1 takes only the public key.
+        let cookie = datagram[0] == COOKIE_REPLY_TYPE
+            || matches!(&post, Post::Send(p)
+                if p.first().and_then(|d| d.first()) == Some(&COOKIE_REPLY_TYPE));
+        if cookie {
+            if let Post::Send(p) = &post {
+                let _ = self.transmit(&peer, p, src);
+            }
+            return Ok(Received::Control);
+        }
+        // Authenticated: roaming and liveness. A segment that is only buffered
+        // counts: pq-boringtun authenticates before it buffers (the first by
+        // its prefix and timestamp, the rest by a tag keyed from it), so a
+        // peer can move before its handshake ends, and a replay cannot move it.
         peer.set_addr(src);
         peer.last_rx_ms.store(self.now_ms(), Ordering::Relaxed);
         peer.rx_datagrams.fetch_add(1, Ordering::Relaxed);
@@ -1116,5 +1133,130 @@ mod tests {
             routed as u64, HANDSHAKE_RATE_LIMIT,
             "then it wants a cookie"
         );
+    }
+
+    /// What someone who is not the peer can send with the host's public key
+    /// alone: a stranger's own initiation under the peer's index, its second
+    /// segment, which `route` takes to the peer without the KEM.
+    fn stranger_segment(host: &Endpoint, peer: PeerId) -> Vec<u8> {
+        let stranger = Identity::generate();
+        let mut tunn = new_tunn(&stranger, host.identity().public(), peer).unwrap();
+        let mut scratch = vec![0u8; SCRATCH];
+        match tunn.format_handshake_initiation(&mut scratch, false) {
+            TunnResult::WriteManyToNetwork(s) => s.iter().nth(1).unwrap().to_vec(),
+            _ => panic!("no segmented initiation"),
+        }
+    }
+
+    #[test]
+    fn a_cookie_reply_neither_moves_a_peer_nor_says_it_is_alive() {
+        let client = Identity::generate();
+        let host = host_with(&client);
+        let peer = host.peers().remove(0);
+        let real: SocketAddr = "127.0.0.1:9".parse().unwrap();
+        peer.set_addr(real);
+        let datagram = stranger_segment(&host, peer.id());
+        let stranger: SocketAddr = "127.0.0.1:7".parse().unwrap();
+        let mut out = vec![0u8; SCRATCH];
+        // Well past the peer's rate limit, where its tunnel answers with a
+        // cookie instead of an error.
+        for _ in 0..40 {
+            host.receive(&datagram, stranger, &mut out).unwrap();
+        }
+        assert!(peer.tx_datagrams() > 0, "it was answered with a cookie");
+        assert_eq!(peer.addr(), Some(real));
+        assert_eq!(peer.rx_datagrams(), 0);
+        assert_eq!(host.since_rx(&peer), None);
+    }
+
+    #[test]
+    fn a_cookie_reply_that_arrives_neither_moves_a_peer_nor_says_it_is_alive() {
+        let client = Arc::new(Identity::generate());
+        let host = host_with(&client);
+        let host_peer = host.peers().remove(0);
+        let endpoint = Endpoint::bind(client.clone(), 0).unwrap();
+        endpoint
+            .add_peer(host.identity().public().clone(), None)
+            .unwrap();
+        let peer = endpoint.peers().remove(0);
+        let real: SocketAddr = "127.0.0.1:9".parse().unwrap();
+        peer.set_addr(real);
+
+        // The client's own initiation, and the host's tunnel past its rate
+        // limit: the replies are genuine, for what the client last sent.
+        let mut scratch = vec![0u8; SCRATCH];
+        let segments: Vec<Vec<u8>> = match peer
+            .tunn
+            .lock()
+            .format_handshake_initiation(&mut scratch, true)
+        {
+            TunnResult::WriteManyToNetwork(s) => s.iter().map(<[u8]>::to_vec).collect(),
+            _ => panic!("no segmented initiation"),
+        };
+        let mut replies = Vec::new();
+        for _ in 0..40 {
+            for segment in &segments {
+                let mut tunn = host_peer.tunn.lock();
+                if let TunnResult::WriteToNetwork(reply) =
+                    tunn.decapsulate(Some(real.ip()), segment, &mut scratch)
+                {
+                    if reply[0] == COOKIE_REPLY_TYPE {
+                        replies.push(reply.to_vec());
+                    }
+                }
+            }
+        }
+        assert!(!replies.is_empty(), "the host's tunnel sent a cookie");
+
+        let elsewhere: SocketAddr = "127.0.0.1:7".parse().unwrap();
+        let mut out = vec![0u8; SCRATCH];
+        for reply in &replies {
+            endpoint.receive(reply, elsewhere, &mut out).unwrap();
+        }
+        assert_eq!(peer.addr(), Some(real));
+        assert_eq!(peer.rx_datagrams(), 0);
+        assert_eq!(endpoint.since_rx(&peer), None);
+    }
+
+    #[test]
+    fn a_first_segment_moves_a_peer_once_and_a_replay_of_it_does_not() {
+        let client = Identity::generate();
+        let host = host_with(&client);
+        let peer = host.peers().remove(0);
+        let mut tunn = new_tunn(&client, host.identity().public(), 1).unwrap();
+        let mut scratch = vec![0u8; SCRATCH];
+        let mut out = vec![0u8; SCRATCH];
+        let first = match tunn.format_handshake_initiation(&mut scratch, false) {
+            TunnResult::WriteManyToNetwork(s) => s.iter().next().unwrap().to_vec(),
+            _ => panic!("no segmented initiation"),
+        };
+        let moved: SocketAddr = "127.0.0.1:9".parse().unwrap();
+        host.receive(&first, moved, &mut out).unwrap();
+        assert_eq!(peer.addr(), Some(moved));
+        host.receive(&first, "127.0.0.1:7".parse().unwrap(), &mut out)
+            .unwrap();
+        assert_eq!(peer.addr(), Some(moved));
+        assert_eq!(peer.rx_datagrams(), 1);
+    }
+
+    #[test]
+    fn a_peers_own_handshake_still_moves_it() {
+        let client = Identity::generate();
+        let host = host_with(&client);
+        let peer = host.peers().remove(0);
+        peer.set_addr("127.0.0.1:9".parse().unwrap());
+        let moved: SocketAddr = "127.0.0.1:7".parse().unwrap();
+        let mut tunn = new_tunn(&client, host.identity().public(), 1).unwrap();
+        let mut scratch = vec![0u8; SCRATCH];
+        let mut out = vec![0u8; SCRATCH];
+        match tunn.format_handshake_initiation(&mut scratch, false) {
+            TunnResult::WriteManyToNetwork(segments) => {
+                for segment in segments.iter() {
+                    host.receive(segment, moved, &mut out).unwrap();
+                }
+            }
+            _ => panic!("no segmented initiation"),
+        }
+        assert_eq!(peer.addr(), Some(moved));
     }
 }

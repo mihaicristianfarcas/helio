@@ -22,7 +22,10 @@ externally audited ([docs/verification.md](docs/verification.md#not-audited)).
 WireGuard tunnel (pq-boringtun) whose handshake combines X25519 with
 ML-KEM-768 and authenticates both peers with static keys: a recording of the
 traffic stays closed to a future quantum computer. A host accepts handshakes
-only from paired clients' keys. Keys rotate every two minutes.
+only from paired clients' keys. Keys rotate every two minutes. A peer's
+address follows only a datagram that proves its key, which is how a client
+keeps its stream when it changes networks; a cookie reply, the tunnel's answer
+to too many handshakes, proves none, and changes nothing.
 
 **Pairing.** Devices trust each other only after a PIN pairing on the local
 network: SPAKE2 over a four-digit PIN, with an ML-KEM-768 exchange beside it,
