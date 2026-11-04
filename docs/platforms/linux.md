@@ -118,7 +118,13 @@ portal`).
 - **Input.** XTest: keys by position, text by the layout's own keys (spare
   key codes remapped only for characters the layout lacks), the wheel as
   buttons 4–7, and a client's trackpad as those buttons too, a notch per
-  100 of the screen's pixels (`helio-input/src/x11.rs`).
+  120 of the desktop's device-independent pixels, about as far as a browser
+  goes ([measured](../benchmarks.md#on-a-linux-host)). The desktop's scale
+  comes from its settings daemon (XSETTINGS) as a session starts: one changed
+  during a session counts from the next, and a scale only one app has
+  (`GDK_SCALE`, a browser's flag) is not seen. Only whole notches go, so at
+  200% the first 240 stream pixels of a scroll move nothing
+  (`helio-input/src/x11.rs`).
 - **Sound.** The default output's monitor through libpulse-simple, which
   PipeWire serves too; stereo.
 - The screensaver and DPMS are held off during a session.
@@ -133,8 +139,9 @@ where the desktop has no RemoteDesktop portal (wlroots: sway, Hyprland — no
 input from the client there). Frames come over PipeWire with the pointer
 drawn in by the compositor; keys go as Linux key codes, text as keysyms,
 the pointer as the portal's motion and buttons, the wheel and a client's
-trackpad as its wheel steps (a trackpad's at a step per 100 of the
-desktop's pixels).
+trackpad as its wheel steps (a trackpad's at a whole step per 120 of the
+desktop's logical pixels, on GNOME's virtual display too, at the monitor's
+scale).
 
 The first time, the desktop asks whoever is at the host — Helio Host asks as it
 starts, not when a client connects. On GNOME, switch on **Allow Remote
@@ -218,13 +225,14 @@ Data and logs are in `~/.config/helio-host`.
   window manager, compositor and cursor theme, keyboard and mouse through
   the client's window (the container has none; scripted input goes around
   the window).
-- The wheel under Wayland: the nested test desktop gives X clients no wheel
-  events at all, so the portal's scroll is sent but unseen.
-- How far a client's trackpad scrolls a Linux host: a notch per 100 of the
-  desktop's pixels is Chromium's figure for Windows. Scripted scrolls gave
-  that many notches on an X screen (`tools/linux/loopback-test`, in a
-  container); the Wayland path is unit-tested only, and no real trackpad or
-  Linux app has been measured.
+- The portal's wheel: the nested test desktop gives X clients no wheel events
+  at all, so the portal's scroll is sent but unseen. Mutter's own, on a virtual
+  monitor, reached browsers native to Wayland.
+- How far a client's trackpad scrolls KDE, and through the portal: the figure
+  is [measured](../benchmarks.md#on-a-linux-host) in browsers on X11 and on
+  GNOME's virtual monitor, with scripted input in a container. KDE and the
+  portal are unit-tested only, and what KDE writes for its scale on X11 was read
+  from its source. No real trackpad has run against a Linux host.
 - wlroots desktops (Ubuntu 24.04's wlroots portal needs a GPU to share the
   screen, and the container has none).
 

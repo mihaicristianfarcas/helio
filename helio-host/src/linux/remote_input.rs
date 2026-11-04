@@ -4,10 +4,15 @@
 //! text, buttons, wheel notches, the pointer in the stream's coordinates —
 //! so the client's events are mapped once, here, into [`Op`]s, and each
 //! backend sends them its way. A trackpad's scroll, a distance, becomes
-//! notches at 100 of the desktop's pixels each (`helio_input::scroll`):
-//! Chromium's figure for Windows, not measured on a Linux desktop.
+//! notches at 120 of the desktop's logical pixels each
+//! (`helio_input::scroll`). KWin and the portal say the stream's size in those
+//! pixels; mutter takes its pointer in the stream's own, and its monitor's
+//! scale is settled only once the session has started, so it hands that over
+//! when it knows it ([`RemoteSink::scaled_by`]).
 
-use helio_input::scroll::{DEFAULT_LINES, NOTCH};
+use std::sync::{Arc, OnceLock};
+
+use helio_input::scroll::{LINUX_NOTCH_PIXELS, NOTCH};
 use helio_input::{HeldSet, InputError, InputSink, ScrollDistance};
 use helio_proto::input::{Button, InputEvent};
 
@@ -52,11 +57,19 @@ impl RemoteSink {
             map: Mapping {
                 picture,
                 size,
+                monitor_scale: None,
                 wheel: (0, 0),
                 scroll: ScrollDistance::new(),
             },
             held: HeldSet::new(),
         }
+    }
+
+    /// `scale`, once set, is how many stream pixels a logical pixel takes
+    /// where `size` does not say; until then, one.
+    pub fn scaled_by(mut self, scale: Arc<OnceLock<f64>>) -> RemoteSink {
+        self.map.monitor_scale = Some(scale);
+        self
     }
 }
 
@@ -87,6 +100,8 @@ struct Mapping {
     picture: (u32, u32, u32, u32),
     /// The shared screen in the desktop's coordinates.
     size: (u32, u32),
+    /// The monitor's scale, where `size` is not in logical pixels.
+    monitor_scale: Option<Arc<OnceLock<f64>>>,
     /// Wheel movement short of a notch, (vertical, horizontal).
     wheel: (i32, i32),
     /// A trackpad's distances, as wheel units.
@@ -124,10 +139,12 @@ impl Mapping {
             }
             InputEvent::Wheel { dv, dh } => self.notches(dv as i32, dh as i32, out),
             InputEvent::Scroll { dv, dh } => {
-                // The desktop's pixels per stream pixel.
-                let scale = self.size.0 as f64 / self.picture.2.max(1) as f64;
-                let lines = (DEFAULT_LINES, DEFAULT_LINES);
-                let (v, h) = self.scroll.wheel_units(dv, dh, scale, lines);
+                // The desktop's logical pixels per stream pixel.
+                let monitor_scale = self.monitor_scale.as_ref().and_then(|s| s.get());
+                let scale = self.size.0 as f64
+                    / self.picture.2.max(1) as f64
+                    / monitor_scale.copied().unwrap_or(1.0);
+                let (v, h) = self.scroll.wheel_units(dv, dh, scale, LINUX_NOTCH_PIXELS);
                 self.notches(v, h, out);
             }
             InputEvent::Text(c) => {
@@ -178,6 +195,7 @@ mod tests {
         Mapping {
             picture: (0, 40, 1280, 720),
             size: (1920, 1080),
+            monitor_scale: None,
             wheel: (0, 0),
             scroll: ScrollDistance::new(),
         }
@@ -220,15 +238,36 @@ mod tests {
     }
 
     #[test]
-    fn a_trackpad_scrolls_a_notch_per_100_desktop_pixels() {
-        // 67 stream pixels are 100.5 of the 1920-wide desktop's: one notch,
-        // down, and half a pixel's worth kept.
+    fn a_trackpad_scrolls_a_notch_per_120_desktop_pixels() {
+        // 80 stream pixels are 120 of the 1920-wide desktop's: one notch, down.
         let mut m = map();
         let mut out = Vec::new();
-        m.ops(InputEvent::Scroll { dv: -67, dh: 0 }, &mut out);
+        m.ops(InputEvent::Scroll { dv: -80, dh: 0 }, &mut out);
         assert_eq!(out, [Op::Scroll(true, 1)]);
         out.clear();
-        m.ops(InputEvent::Scroll { dv: 0, dh: 66 }, &mut out);
-        assert!(out.is_empty(), "99 pixels are short of a notch");
+        m.ops(InputEvent::Scroll { dv: 0, dh: 79 }, &mut out);
+        assert!(out.is_empty(), "118.5 pixels are short of a notch");
+    }
+
+    #[test]
+    fn a_monitor_at_200_percent_takes_twice_the_stream_pixels_a_notch() {
+        // Mutter's: the stream's size is the picture's, scale settled later.
+        let scale = Arc::new(OnceLock::new());
+        let mut m = map();
+        m.size = (m.picture.2, m.picture.3);
+        m.monitor_scale = Some(scale.clone());
+        let mut out = Vec::new();
+        m.ops(InputEvent::Scroll { dv: -120, dh: 0 }, &mut out);
+        assert_eq!(
+            out,
+            [Op::Scroll(true, 1)],
+            "until it is settled, a scale of 1"
+        );
+        out.clear();
+        scale.set(2.0).unwrap();
+        m.ops(InputEvent::Scroll { dv: -239, dh: 0 }, &mut out);
+        assert!(out.is_empty(), "119.5 logical pixels are short of a notch");
+        m.ops(InputEvent::Scroll { dv: -1, dh: 0 }, &mut out);
+        assert_eq!(out, [Op::Scroll(true, 1)]);
     }
 }
