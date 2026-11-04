@@ -14,14 +14,15 @@
 //! bar (GPUI's `WindowControlArea`).
 
 use gpui::{
-    div, prelude::*, px, AnyElement, Div, ElementId, FontWeight, Pixels, ScrollHandle, Stateful,
-    Window, WindowControlArea,
+    div, prelude::*, px, AnyElement, Div, ElementId, FontWeight, Pixels, Rgba, ScrollHandle,
+    Stateful, Window, WindowControlArea,
 };
 
+use crate::controls::dot;
 use crate::focus::{focus_ring, scrolled};
 use crate::icon::{icon, IconName};
 use crate::motion::Glide;
-use crate::theme::{rgba, Metrics, Radius, Theme, Type};
+use crate::theme::{hex, rgba, Metrics, Radius, Theme, Type, ACCENT_DEEP};
 
 /// The air above the sidebar's rows and below its foot, where nothing else
 /// sits there (no traffic lights).
@@ -202,6 +203,26 @@ pub fn nav_row(
         )
         .when(ring, |d| d.child(focus_ring(t, Radius::ROW, 0.0)))
 }
+
+/// A sidebar row's status, at its right: a plain dot in the status's
+/// colour (an [`Ink`] hue, or the accent), deepened on light surfaces. No
+/// halo and no count inside, so every mark along the sidebar is one kind
+/// and only its colour says what it is.
+pub fn nav_dot(hue: Rgba, t: Theme) -> Div {
+    let ink = if hue == t.accent && !t.dark {
+        // On light surfaces the soft blue is faint, and pulled toward the
+        // text, as `ink` pulls other hues, it reads as gray: the deeper
+        // accent, as a focus ring there is.
+        hex(ACCENT_DEEP, 1.0)
+    } else {
+        t.ink(hue)
+    };
+    dot(ink, NAV_DOT)
+}
+
+/// A sidebar dot's size, in points: the size of the status dots elsewhere
+/// (a session's "waiting for you").
+const NAV_DOT: f32 = 7.0;
 
 /// A sidebar row's count, at its right.
 pub fn nav_count(n: usize, t: Theme) -> Div {

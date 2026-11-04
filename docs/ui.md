@@ -64,7 +64,10 @@ Linux keeps the system's title bar.
 A sidebar on the glass, as asides': **Hosts**; **This computer**; **Agents**
 (**New Session**, the Agents page) and the open **Sessions**; the
 **Settings** pages; at its foot the version,
-or "Looking for hosts…", and above it a line when a newer Helio exists. The
+or "Looking for hosts…", and above it a line when a newer Helio exists. A
+plain dot at a row's end says what is happening on its page, by its colour
+alone: green a stream, or an agent's session at work or connected; amber
+an agent waiting for you; the soft blue a device asking to pair. The
 pages are one stop for Tab, the arrows going up and down them, each shown as
 the keyboard comes to it; each page fades in as it is picked, as the pill
 slides to it. ⌘1, ⌘2 and ⌘3 go to Hosts, This computer and Agents, ⌘,
