@@ -8,8 +8,8 @@
 //! system must allow, each said in a line before it is asked (on a Mac,
 //! Screen Recording and Accessibility for the host; on Windows, the
 //! administrator UAC asks for, whether there are NVIDIA graphics, and the
-//! drivers turning hosting on installs); how to pair from the other
-//! computer; done.
+//! drivers turning hosting on installs); what is paired already on either
+//! side, and how to pair from the other computer; done.
 //!
 //! The step reached is saved as it is reached, so setup goes on from there
 //! after a restart (a Mac asks for one once Screen Recording is allowed).
@@ -101,6 +101,11 @@ impl Use {
 
     pub fn hosts(self) -> bool {
         self != Use::Play
+    }
+
+    /// It plays other computers from here.
+    pub fn plays(self) -> bool {
+        self != Use::Host
     }
 }
 
@@ -504,9 +509,10 @@ impl HelioApp {
             .into_any_element()
     }
 
-    /// Pairing: hosting, the devices asking to pair as they come, each with
-    /// the field for the PIN it shows; else how to pair from here, in a
-    /// line.
+    /// Pairing: playing, the hosts this computer is paired with, and how to
+    /// pair another; hosting, the devices asking to pair as they come, each
+    /// with the field for the PIN it shows, and the devices paired. Both,
+    /// both: set up again, what is paired already shows on either side.
     fn setup_pairing(&mut self, t: Theme, cx: &mut Context<Self>) -> AnyElement {
         let device = crate::app::device_word();
         let line = |text: String| {
@@ -525,27 +531,34 @@ impl HelioApp {
             )
             .into_any_element()
         };
-        let (subtitle, body): (&str, Vec<AnyElement>) = match self.setup.use_for {
-            Some(Use::Host | Use::Both) => (
-                "Pair once with each device that will play this one.",
-                match self.host.clone() {
-                    Some(host) => host.update(cx, |h, cx| h.pairing(t, cx)),
-                    None => vec![line(
-                        "Hosting is off, so no device can ask to pair yet. Turn it on in \
-                         Permissions (Back), or later in Settings → Hosting; then pair from \
-                         This computer → Devices."
-                            .to_string(),
-                    )],
-                },
-            ),
-            _ => (
-                "Pair once with each computer you want to play.",
-                vec![line(format!(
-                    "On the other computer, turn hosting on in Helio. Then pick it in Hosts on \
-                     this {device}: it shows a PIN, which you type into Helio on the other one."
-                ))],
-            ),
+        let use_for = self.setup.use_for.unwrap_or(Use::Play);
+        let subtitle = match use_for {
+            Use::Play => "Pair once with each computer you want to play.",
+            Use::Host => "Pair once with each device that will play this one.",
+            Use::Both => {
+                "Pair once with each computer you want to play, and each device that will \
+                 play this one."
+            }
         };
+        let mut body = Vec::new();
+        if use_for.plays() {
+            body.push(self.paired_hosts(t));
+            body.push(line(format!(
+                "On the other computer, turn hosting on in Helio. Then pick it in Hosts on \
+                 this {device}: it shows a PIN, which you type into Helio on the other one."
+            )));
+        }
+        if use_for.hosts() {
+            match self.host.clone() {
+                Some(host) => body.extend(host.update(cx, |h, cx| h.pairing(t, cx))),
+                None => body.push(line(
+                    "Hosting is off, so no device can ask to pair yet. Turn it on in \
+                     Permissions (Back), or later in Settings → Hosting; then pair from \
+                     This computer → Devices."
+                        .to_string(),
+                )),
+            }
+        }
         div()
             .flex()
             .flex_col()
@@ -556,6 +569,61 @@ impl HelioApp {
                 "Pairing uses a PIN, never a password: nothing else is copied between them.",
                 t,
             ))
+            .into_any_element()
+    }
+
+    /// The hosts this computer is paired with, each saying whether it
+    /// answers, as Hosts does.
+    fn paired_hosts(&self, t: Theme) -> AnyElement {
+        let paired: Vec<AnyElement> = self
+            .model
+            .items
+            .iter()
+            .filter(|i| i.is_paired())
+            .map(|item| {
+                let state = match item.online {
+                    Some(true) => "Online",
+                    Some(false) if item.can_wake() => "Asleep",
+                    Some(false) => "Offline",
+                    None => "Checking…",
+                };
+                div()
+                    .min_h(px(Metrics::SETTINGS_ROW))
+                    .px(px(12.0))
+                    .py(px(8.0))
+                    .flex()
+                    .items_center()
+                    .gap(px(10.0))
+                    .child(icon(
+                        if item.is_mac() {
+                            IconName::Laptop
+                        } else {
+                            IconName::Monitor
+                        },
+                        18.0,
+                        t.secondary,
+                    ))
+                    .child(helio_ui::label_stack(
+                        item.name.clone(),
+                        Some(state.into()),
+                        t,
+                    ))
+                    .into_any_element()
+            })
+            .collect();
+        let paired = if paired.is_empty() {
+            vec![div()
+                .px(px(12.0))
+                .py(px(14.0))
+                .text_size(px(12.5))
+                .text_color(t.tertiary)
+                .child("No paired hosts yet.")
+                .into_any_element()]
+        } else {
+            paired
+        };
+        section("Paired hosts", t)
+            .child(rows(paired, t))
             .into_any_element()
     }
 
@@ -625,44 +693,56 @@ impl HelioApp {
                 cx,
             ));
         }
-        // Paired: hosting, the devices that may play this one; playing
-        // only, the computers this one may play.
-        let paired = if hosts {
-            self.host
-                .as_ref()
-                .map_or(0, |h| h.read(cx).snapshot().clients.len())
-        } else {
-            self.model.items.iter().filter(|i| i.is_paired()).count()
-        };
-        let (label, detail) = match (hosts, paired) {
-            (true, 0) => (
-                "Pair your devices".into(),
-                "Their PINs go in This computer → Devices.".into(),
-            ),
-            (true, n) => (
-                format!("{n} {} paired", if n == 1 { "device" } else { "devices" }),
-                "This computer → Devices has them, and pairs more.".into(),
-            ),
-            (false, 0) => (
-                "Pair your computers".into(),
-                "Pick a computer in Hosts to pair with it.".into(),
-            ),
-            (false, n) => (
-                format!(
-                    "Paired with {n} {}",
-                    if n == 1 { "computer" } else { "computers" }
+        // Paired: playing, the computers this one may play; hosting, the
+        // devices that may play this one; both, a line each.
+        if self.setup.use_for.unwrap_or(Use::Play).plays() {
+            let n = self.model.items.iter().filter(|i| i.is_paired()).count();
+            let (label, detail) = match n {
+                0 => (
+                    "Pair your computers".into(),
+                    "Pick a computer in Hosts to pair with it.".into(),
                 ),
-                "Hosts lists them: a click plays one.".into(),
-            ),
-        };
-        list.push(item(
-            "setup-done-pairing",
-            Step::Pairing,
-            paired > 0,
-            label,
-            detail,
-            cx,
-        ));
+                n => (
+                    format!(
+                        "Paired with {n} {}",
+                        if n == 1 { "computer" } else { "computers" }
+                    ),
+                    "Hosts lists them: a click plays one.".into(),
+                ),
+            };
+            list.push(item(
+                "setup-done-pairing",
+                Step::Pairing,
+                n > 0,
+                label,
+                detail,
+                cx,
+            ));
+        }
+        if hosts {
+            let n = self
+                .host
+                .as_ref()
+                .map_or(0, |h| h.read(cx).snapshot().clients.len());
+            let (label, detail) = match n {
+                0 => (
+                    "Pair your devices".into(),
+                    "Their PINs go in This computer → Devices.".into(),
+                ),
+                n => (
+                    format!("{n} {} paired", if n == 1 { "device" } else { "devices" }),
+                    "This computer → Devices has them, and pairs more.".into(),
+                ),
+            };
+            list.push(item(
+                "setup-done-devices",
+                Step::Pairing,
+                n > 0,
+                label,
+                detail,
+                cx,
+            ));
+        }
         div()
             .flex()
             .flex_col()
@@ -697,6 +777,15 @@ mod tests {
             use_for,
             showing: true,
         }
+    }
+
+    #[test]
+    fn doing_both_shows_the_hosts_played_and_the_devices_paired() {
+        // The pairing step and Done list each side this computer is for:
+        // set up again, both what it plays and who plays it show.
+        assert!(Use::Both.plays() && Use::Both.hosts());
+        assert!(Use::Play.plays() && !Use::Play.hosts());
+        assert!(!Use::Host.plays() && Use::Host.hosts());
     }
 
     #[test]
@@ -735,5 +824,6 @@ mod tests {
         assert!(!Setup::resume(&over).showing());
         assert_eq!(Step::named("pairing"), Some(Step::Pairing));
         assert_eq!(Use::named("host").map(Use::hosts), Some(true));
+        assert_eq!(Use::named("host").map(Use::plays), Some(false));
     }
 }
