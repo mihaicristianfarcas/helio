@@ -53,6 +53,7 @@ pub struct Button {
     disabled: bool,
     large: bool,
     full_width: bool,
+    spinning: bool,
     tooltip: Option<SharedString>,
     on_click: Option<OnClick>,
 }
@@ -67,6 +68,7 @@ pub fn button(id: impl Into<ElementId>, label: impl Into<SharedString>, theme: T
         disabled: false,
         large: false,
         full_width: false,
+        spinning: false,
         tooltip: None,
         on_click: None,
     }
@@ -88,6 +90,7 @@ pub fn icon_button(
         disabled: false,
         large: false,
         full_width: false,
+        spinning: false,
         tooltip: Some(tooltip.into()),
         on_click: None,
     }
@@ -137,6 +140,13 @@ impl Button {
         self
     }
 
+    /// Its icon turns, as the [`spinner`] does: what it does is under way
+    /// (the refresh arrow while the hosts are looked for again).
+    pub fn spinning(mut self, spinning: bool) -> Self {
+        self.spinning = spinning;
+        self
+    }
+
     pub fn on_click(mut self, f: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static) -> Self {
         self.on_click = Some(Rc::new(f));
         self
@@ -180,6 +190,14 @@ impl RenderOnce for Button {
             Radius::CONTROL
         };
         let icon_size = if icon_only { IconSize::REGULAR } else { 14.0 };
+        let glyph = self.icon.map(|name| {
+            if self.spinning {
+                let id = ElementId::Name(format!("{:?}-turning", self.id).into());
+                turning(id, name, icon_size, ink).into_any_element()
+            } else {
+                icon(name, icon_size, ink).into_any_element()
+            }
+        });
         let mut el = div()
             .id(self.id)
             .relative()
@@ -204,7 +222,7 @@ impl RenderOnce for Button {
             })
             .text_color(ink)
             .whitespace_nowrap()
-            .when_some(self.icon, |d, name| d.child(icon(name, icon_size, ink)))
+            .children(glyph)
             .when_some(self.label, |d, l| d.child(l));
         if !self.disabled {
             let on_click = self.on_click.clone();
@@ -1327,18 +1345,27 @@ pub fn live_dot(color: Rgba) -> impl IntoElement {
         .child(dot(color, 7.0))
 }
 
-/// Work in progress: a turning arrow.
+/// Work in progress: the refresh arrow, turning. A button that refreshes
+/// turns its own arrow instead ([`Button::spinning`]), so what was pressed
+/// is what shows the wait.
 pub fn spinner(id: impl Into<ElementId>, size: f32, color: Rgba) -> impl IntoElement {
+    turning(id, IconName::Refresh, size, color)
+}
+
+/// One turn of a turning icon: the same for the spinner and a refreshing
+/// button, so every wait in the window turns alike.
+const TURN: Duration = Duration::from_millis(900);
+
+/// `name`, turning about its centre for as long as it shows.
+fn turning(id: impl Into<ElementId>, name: IconName, size: f32, color: Rgba) -> impl IntoElement {
     svg()
-        .path(IconName::Refresh.path())
+        .path(name.path())
         .flex_none()
         .size(px(size))
         .text_color(color)
-        .with_animation(
-            id,
-            Animation::new(Duration::from_millis(900)).repeat(),
-            |s, delta| s.with_transformation(Transformation::rotate(percentage(delta))),
-        )
+        .with_animation(id, Animation::new(TURN).repeat(), |s, delta| {
+            s.with_transformation(Transformation::rotate(percentage(delta)))
+        })
 }
 
 /// A key or chord, as a keycap.
@@ -1386,7 +1413,23 @@ pub fn stat(value: impl Into<SharedString>, label: impl Into<SharedString>, t: T
 
 /// A message in a tinted card: success, warning, failure.
 pub fn notice(icon_name: IconName, tint: Rgba, text: impl Into<SharedString>, t: Theme) -> Div {
-    let ink = t.ink(tint);
+    let glyph = icon(icon_name, 14.0, t.ink(tint)).into_any_element();
+    notice_with(glyph, tint, text, t)
+}
+
+/// A notice for what is under way, the refresh arrow turning as its icon:
+/// a restart until the host is back.
+pub fn busy_notice(
+    id: impl Into<ElementId>,
+    tint: Rgba,
+    text: impl Into<SharedString>,
+    t: Theme,
+) -> Div {
+    let glyph = spinner(id, 14.0, t.ink(tint)).into_any_element();
+    notice_with(glyph, tint, text, t)
+}
+
+fn notice_with(glyph: AnyElement, tint: Rgba, text: impl Into<SharedString>, t: Theme) -> Div {
     div()
         .flex()
         .items_start()
@@ -1398,7 +1441,7 @@ pub fn notice(icon_name: IconName, tint: Rgba, text: impl Into<SharedString>, t:
         .text_size(px(12.0))
         .line_height(px(17.0))
         .text_color(t.primary.opacity(if t.dark { 0.88 } else { 0.8 }))
-        .child(div().pt(px(1.0)).child(icon(icon_name, 14.0, ink)))
+        .child(div().pt(px(1.0)).child(glyph))
         .child(div().flex_1().min_w_0().child(text.into()))
 }
 
