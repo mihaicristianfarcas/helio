@@ -1,6 +1,9 @@
 //! How `helio` looks in a terminal: headings, commands and what worked or
 //! failed in colour, lists in aligned columns, as cargo's and gh's output
-//! does (cargo's colours: headings bold green, what to type cyan).
+//! does, in the window's colours ([`crate::palette`]): headings bold and
+//! what to type in its soft blue, what to type in their place and what is
+//! said in passing in its gray, what worked, is under way or failed in its
+//! green, amber and red.
 //!
 //! Only in a terminal. Piped or redirected, the output is plain text, lists
 //! tab-separated, as programs read it ([`terminal`]). Colour follows the
@@ -12,6 +15,8 @@
 
 use std::io::IsTerminal;
 use std::sync::OnceLock;
+
+use crate::palette::{Palette, Role};
 
 /// Where text goes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -42,19 +47,32 @@ pub enum Look {
 }
 
 impl Look {
-    /// Its SGR parameters.
-    fn sgr(self) -> &'static str {
-        match self {
-            Look::Heading => "1;32",
-            Look::Literal => "1;36",
-            Look::Placeholder => "36",
-            Look::Quiet => "2",
-            Look::Good => "32",
-            Look::Warn => "33",
-            Look::Bad => "1;31",
-            Look::Strong => "1",
+    /// Its SGR parameters, in `palette`'s colours.
+    fn sgr(self, palette: Palette) -> String {
+        let (bold, role) = match self {
+            Look::Heading => (true, Some(Role::Accent)),
+            Look::Literal => (false, Some(Role::Accent)),
+            Look::Placeholder | Look::Quiet => (false, Some(Role::Gray)),
+            Look::Good => (false, Some(Role::Good)),
+            Look::Warn => (false, Some(Role::Warn)),
+            Look::Bad => (true, Some(Role::Bad)),
+            Look::Strong => (true, None),
+        };
+        let colour = role.map(|r| palette.sgr(r));
+        match (bold, colour) {
+            (true, Some(c)) => format!("1;{c}"),
+            (false, Some(c)) => c,
+            (_, None) => "1".to_string(),
         }
     }
+}
+
+/// This terminal's colours, found once. The terminal is asked for its
+/// background only when both outputs are it: piped into a pager, the pager
+/// reads the terminal too, and could take its answer.
+fn palette() -> Palette {
+    static PALETTE: OnceLock<Palette> = OnceLock::new();
+    *PALETTE.get_or_init(|| Palette::of_terminal(terminal(To::Out) && terminal(To::Err)))
 }
 
 /// Whether `to` is a terminal: lists are laid out for a person, not as
@@ -134,10 +152,18 @@ fn escapes_shown(_: To) -> bool {
 /// `text` as `look` makes it, in colour or not.
 pub fn paint(colour: bool, look: Look, text: &str) -> String {
     if colour && !text.is_empty() {
-        format!("\x1b[{}m{text}\x1b[0m", look.sgr())
+        paint_in(palette(), look, text)
     } else {
         text.to_string()
     }
+}
+
+/// `text` as `look` makes it in `palette`'s colours.
+fn paint_in(palette: Palette, look: Look, text: &str) -> String {
+    if text.is_empty() {
+        return String::new();
+    }
+    format!("\x1b[{}m{text}\x1b[0m", look.sgr(palette))
 }
 
 /// `text` as `look` makes it, for `to`.
@@ -242,6 +268,7 @@ pub fn table(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::palette::Depth;
 
     #[test]
     fn colour_is_for_a_terminal_unless_no_color_says_otherwise_or_it_is_forced() {
@@ -275,9 +302,30 @@ mod tests {
 
     #[test]
     fn painted_text_is_the_text_between_escape_codes_and_plain_text_is_itself() {
-        assert_eq!(paint(true, Look::Bad, "error:"), "\x1b[1;31merror:\x1b[0m");
+        let basic = Palette {
+            depth: Depth::Basic,
+            light: false,
+        };
+        assert_eq!(
+            paint_in(basic, Look::Bad, "error:"),
+            "\x1b[1;31merror:\x1b[0m"
+        );
         assert_eq!(paint(false, Look::Bad, "error:"), "error:");
         assert_eq!(paint(true, Look::Bad, ""), "");
+    }
+
+    #[test]
+    fn headings_and_what_to_type_are_the_soft_blue_and_the_rest_gray() {
+        let dark = Palette {
+            depth: Depth::True,
+            light: false,
+        };
+        let blue = "38;2;194;214;246";
+        assert_eq!(Look::Heading.sgr(dark), format!("1;{blue}"));
+        assert_eq!(Look::Literal.sgr(dark), blue);
+        assert_eq!(Look::Placeholder.sgr(dark), Look::Quiet.sgr(dark));
+        assert_eq!(Look::Quiet.sgr(dark), "38;2;142;142;147");
+        assert_eq!(Look::Strong.sgr(dark), "1");
     }
 
     #[test]

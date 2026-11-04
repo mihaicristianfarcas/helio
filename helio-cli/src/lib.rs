@@ -16,6 +16,7 @@ mod args;
 pub mod engine;
 mod help;
 mod host;
+mod palette;
 #[cfg(any(target_os = "macos", windows, target_os = "linux"))]
 mod script;
 #[cfg(any(target_os = "macos", windows, target_os = "linux"))]

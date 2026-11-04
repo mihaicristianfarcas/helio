@@ -306,7 +306,7 @@ mod tests {
     fn the_help_in_colour_is_the_same_text_with_escape_codes() {
         for host in [false, true] {
             let painted = text(host, true);
-            assert!(painted.contains("\x1b[1;32mUsage:\x1b[0m"));
+            assert!(painted.contains(&paint(true, Look::Heading, "Usage:")));
             let mut plain = String::new();
             let mut rest = painted.as_str();
             while let Some(start) = rest.find('\x1b') {
@@ -321,13 +321,20 @@ mod tests {
 
     #[test]
     fn a_command_is_painted_as_typed_and_a_placeholder_as_what_goes_there() {
+        let literal = |w| paint(true, Look::Literal, w);
+        let placeholder = |w| paint(true, Look::Placeholder, w);
         assert_eq!(
             typed("stream NAME [FLAGS]", true),
-            "\x1b[1;36mstream\x1b[0m \x1b[36mNAME\x1b[0m \x1b[36m[FLAGS]\x1b[0m"
+            format!(
+                "{} {} {}",
+                literal("stream"),
+                placeholder("NAME"),
+                placeholder("[FLAGS]")
+            )
         );
         assert_eq!(
             typed("--codec h264|hevc|av1", true),
-            "\x1b[1;36m--codec\x1b[0m \x1b[1;36mh264|hevc|av1\x1b[0m"
+            format!("{} {}", literal("--codec"), literal("h264|hevc|av1"))
         );
     }
 }

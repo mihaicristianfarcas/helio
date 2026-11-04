@@ -35,11 +35,16 @@ The app's program also takes the command after `cli`, wherever it is:
 `helio stream` is the app's streaming code, in a window of the platform's
 own.
 
-In a terminal, `helio` is in colour (headings, what to type, what worked
-and what failed) and its lists (`hosts`, `discover`, `host clients`) are
-in columns under a header. Piped or redirected, it prints plain text, each
-list a line of tab-separated cells per row, for scripts. `NO_COLOR` turns
-the colour off, `CLICOLOR_FORCE=1` on (through a pager, say).
+In a terminal, `helio` is in the window's colours: headings and what to
+type in Helio's soft blue, what goes in their place and what is said in
+passing in its gray, and what worked, is under way or failed in its green,
+amber and red. Its lists (`hosts`, `discover`, `host clients`) are in
+columns under a header. On a light background the blue is a deeper one,
+which reads there: `helio` takes the background from `COLORFGBG` when the
+terminal sets it, else asks the terminal (on macOS and Linux), else takes
+it as dark. Piped or redirected, it prints plain text, each list a line of
+tab-separated cells per row, for scripts. `NO_COLOR` turns the colour off,
+`CLICOLOR_FORCE=1` on (through a pager, say).
 
 ### Streaming
 
@@ -237,6 +242,7 @@ For everyone:
 | `CLOUDFLARE_AUTH_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` | agents | The Workers AI token and account clef's screen checks use; win over Agent setup's |
 | `HELIO_APPEARANCE` | the apps | `light` or `dark`, whatever the system says |
 | `NO_COLOR`, `CLICOLOR_FORCE` | `helio` | No colour in a terminal; colour even where the output is not one ([no-color.org](https://no-color.org), [bixense.com/clicolors](https://bixense.com/clicolors/)) |
+| `COLORFGBG` | `helio` | The terminal's colours as `FG;BG`, two of the 16 basic ones: a background of `7` or `15` gets colours for a light background (`0;15`), `0` for a dark one (`15;0`) |
 | `HELIO_UPDATE_API` | the apps | Where the update check asks instead of `https://api.github.com`, and where an update's files are downloaded from (a mirror, or a test) |
 | `HELIO_SOFTWARE_DECODE` | Helio on Linux | Decode in software even where VA-API is available |
 | `HELIO_HOST_CAPTURE` | Helio Host on Linux | `x11` or `portal`, where the session type is not clear |
