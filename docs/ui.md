@@ -21,7 +21,9 @@ action on a page. Light and dark follow the system
   line-icon family (24×24, 1.75 pt round strokes), the controls (buttons,
   icon buttons, switch, segmented control, select menu, slider, stepper,
   text field with IME, menus, sheets, cards and setting rows, choice rows,
-  chips, status dots, spinner, keycaps, stats, notices), and Markdown
+  chips, status dots, spinner, keycaps, stats, notices; the spinner is the
+  refresh arrow turning, and a button that refreshes turns its own arrow
+  while it works), and Markdown
   rendering for the agents' words. Also what the app needs of the desktop:
   the menu bar a Mac app has (`menus`), the tray icon (`tray`), one running
   copy per data folder (`instance`), starting at login (`login`), the About

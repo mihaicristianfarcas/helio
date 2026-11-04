@@ -450,6 +450,8 @@ pub fn version_setting(
         crate::name_with_version(app.name(), &app.build.describe()),
         Some(detail),
         button("update-check-now", "Check for Updates…", t)
+            .icon(IconName::Refresh)
+            .spinning(status.checking)
             .disabled(status.checking)
             .on_click(move |_, window, cx| on_check(window, cx)),
         t,

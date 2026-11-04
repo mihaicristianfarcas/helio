@@ -46,17 +46,17 @@ impl HostPages {
                 }))
                 .into_any_element()
         };
-        let waiting = div()
-            .flex()
-            .items_center()
-            .gap(px(8.0))
-            .child(spinner("waiting-host", 11.0, t.tertiary))
-            .child(
-                button("retry", "Look Again", t).on_click(cx.listener(|this, _, _, cx| {
+        // Asked again all along until it answers: the arrow turns, and a
+        // click asks now.
+        let waiting = div().flex().items_center().child(
+            button("retry", "Look Again", t)
+                .icon(IconName::Refresh)
+                .spinning(true)
+                .on_click(cx.listener(|this, _, _, cx| {
                     this.send(Cmd::Refresh);
                     cx.notify();
                 })),
-            );
+        );
         let content = div()
             .flex()
             .flex_col()

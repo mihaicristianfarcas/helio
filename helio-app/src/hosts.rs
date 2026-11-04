@@ -42,6 +42,7 @@ impl HelioApp {
                 format!("Look for hosts again ({})", helio_ui::shortcut("R")),
                 t,
             )
+            .spinning(self.model.searching)
             .on_click(cx.listener(|this, _, _, cx| this.refresh(cx)))
             .into_any_element(),
             button("add-host", "Add Host", t)
@@ -320,21 +321,20 @@ impl HelioApp {
     /// get one. `actions`: the page's, beside its title.
     fn empty(&mut self, actions: AnyElement, t: Theme, cx: &mut Context<Self>) -> impl IntoElement {
         let searching = self.model.searching;
-        let look: AnyElement = if searching {
-            div()
-                .flex()
-                .items_center()
-                .gap(px(7.0))
-                .text_size(px(Type::META + 0.5))
-                .text_color(t.tertiary)
-                .child(spinner("empty-searching", 11.0, t.tertiary))
-                .child("Looking…")
-                .into_any_element()
-        } else {
-            button("empty-refresh", "Look Again", t)
-                .on_click(cx.listener(|this, _, _, cx| this.refresh(cx)))
-                .into_any_element()
-        };
+        let look: AnyElement = button(
+            "empty-refresh",
+            if searching {
+                "Looking…"
+            } else {
+                "Look Again"
+            },
+            t,
+        )
+        .icon(IconName::Refresh)
+        .spinning(searching)
+        .disabled(searching)
+        .on_click(cx.listener(|this, _, _, cx| this.refresh(cx)))
+        .into_any_element();
         page_body(
             "hosts-page",
             &self.page_scroll,

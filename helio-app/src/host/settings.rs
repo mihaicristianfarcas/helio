@@ -36,8 +36,15 @@ impl HostPages {
         }
         let mut out = Vec::new();
         let pending = self.snap.status.as_ref().and_then(|s| s.restart.as_deref());
-        if let Some(line) = restart_line(pending, self.restarting.is_some()) {
-            out.push(notice(IconName::Refresh, Ink::ATTENTION, line, t).into_any_element());
+        match restart_line(pending, self.restarting.is_some()) {
+            Some((line, true)) => out.push(
+                helio_ui::busy_notice("host-restarting", Ink::ATTENTION, line, t)
+                    .into_any_element(),
+            ),
+            Some((line, false)) => {
+                out.push(notice(IconName::Refresh, Ink::ATTENTION, line, t).into_any_element())
+            }
+            None => {}
         }
         if let Some((glyph, tint, text, _)) = self.note.clone() {
             out.push(notice(glyph, tint, text, t).into_any_element());
@@ -433,12 +440,15 @@ impl HostPages {
 /// The line over the host's settings while a restart is ahead: `pending`,
 /// the host's word on it ("after_session", "now"); `asked_here`, a change
 /// made in this window restarts it and the host has not answered again.
-fn restart_line(pending: Option<&str>, asked_here: bool) -> Option<&'static str> {
+/// With the line, whether the restart is under way (its arrow turns) or
+/// waits for the stream to end.
+fn restart_line(pending: Option<&str>, asked_here: bool) -> Option<(&'static str, bool)> {
     match (pending, asked_here) {
-        (Some("after_session"), _) => {
-            Some("Helio Host restarts when the stream ends, to apply a change.")
-        }
-        (Some(_), _) | (None, true) => Some("Helio Host is restarting to apply a change…"),
+        (Some("after_session"), _) => Some((
+            "Helio Host restarts when the stream ends, to apply a change.",
+            false,
+        )),
+        (Some(_), _) | (None, true) => Some(("Helio Host is restarting to apply a change…", true)),
         (None, false) => None,
     }
 }
@@ -451,13 +461,16 @@ mod tests {
     fn a_restart_waiting_for_the_stream_says_so() {
         assert_eq!(
             restart_line(Some("after_session"), true),
-            Some("Helio Host restarts when the stream ends, to apply a change.")
+            Some((
+                "Helio Host restarts when the stream ends, to apply a change.",
+                false
+            ))
         );
     }
 
     #[test]
     fn a_restart_under_way_says_so_until_the_host_is_back() {
-        let line = Some("Helio Host is restarting to apply a change…");
+        let line = Some(("Helio Host is restarting to apply a change…", true));
         assert_eq!(restart_line(Some("now"), false), line);
         // Asked here, and the host is gone meanwhile: still under way.
         assert_eq!(restart_line(None, true), line);
