@@ -1,10 +1,21 @@
 //! What a session will be, from what the client asked for and what the host
-//! allows. Shared by the Windows and macOS session managers.
+//! allows. Every system's host starts its sessions through here (`session.rs`).
 
 use helio_encode::Codec;
 use helio_proto::control::{video, AckStatus, SessionStart};
 
 use crate::config::HostConfig;
+
+/// The narrowest stream a host starts, on the even width. A client can ask for
+/// any size its 16 bits hold, and the size goes on to the display driver and
+/// the encoders, so the range is decided here rather than left to what each of
+/// them refuses. The bottom keeps out sizes nothing can be drawn at (0 x 0).
+const MIN_WIDTH: u16 = 320;
+/// The lowest stream a host starts, on the even height: see [`MIN_WIDTH`].
+const MIN_HEIGHT: u16 = 200;
+/// The longest side a host starts, either way: it holds 8K (7680 x 4320), and
+/// the same turned on its side.
+const MAX_SIDE: u16 = 8192;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Negotiated {
@@ -17,7 +28,8 @@ pub struct Negotiated {
     /// `control::video::*`: HDR and 4:4:4, where the client asked, the
     /// host's encoder can, and the settings allow.
     pub video: u8,
-    /// Even, as encoders want.
+    /// Even, as encoders want, from [`MIN_WIDTH`] x [`MIN_HEIGHT`] up to
+    /// [`MAX_SIDE`] a side.
     pub width: u16,
     pub height: u16,
 }
@@ -30,6 +42,10 @@ pub fn negotiate(
     supported: &[Codec],
     caps: impl Fn(Codec, u8) -> u8,
 ) -> Result<Negotiated, AckStatus> {
+    let (width, height) = (req.width & !1, req.height & !1);
+    if !(MIN_WIDTH..=MAX_SIDE).contains(&width) || !(MIN_HEIGHT..=MAX_SIDE).contains(&height) {
+        return Err(AckStatus::ModeUnsupported);
+    }
     let codec = codec_for(req.codecs, supported, cfg.allow_hevc, cfg.allow_av1)
         .ok_or(AckStatus::NoCodec)?;
     let mut fps_mhz = requested_mhz(req).clamp(10_000, 240_000);
@@ -52,8 +68,8 @@ pub fn negotiate(
         codec,
         fps_mhz,
         bitrate_kbps,
-        width: req.width & !1,
-        height: req.height & !1,
+        width,
+        height,
     })
 }
 
@@ -231,5 +247,39 @@ mod tests {
             ),
             Err(AckStatus::NoCodec)
         );
+    }
+
+    #[test]
+    fn a_size_outside_the_range_is_refused_before_anything_starts() {
+        for (w, h) in [
+            (0, 0),
+            (318, 200),
+            (320, 198),
+            (8194, 4320),
+            (7680, 8194),
+            (u16::MAX, u16::MAX),
+        ] {
+            let req = request(codec::HEVC, w, h, 60, 20_000);
+            assert_eq!(
+                negotiate(&req, &HostConfig::default(), &[Codec::Hevc], |_, _| 0),
+                Err(AckStatus::ModeUnsupported),
+                "{w}x{h}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_size_inside_the_range_is_kept_even() {
+        for ((w, h), want) in [
+            ((320, 200), (320, 200)),
+            ((321, 201), (320, 200)),
+            ((7680, 4320), (7680, 4320)),
+            ((8192, 8192), (8192, 8192)),
+            ((8193, 8193), (8192, 8192)),
+        ] {
+            let req = request(codec::HEVC, w, h, 60, 20_000);
+            let n = negotiate(&req, &HostConfig::default(), &[Codec::Hevc], |_, _| 0).unwrap();
+            assert_eq!((n.width, n.height), want, "{w}x{h}");
+        }
     }
 }

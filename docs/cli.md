@@ -60,7 +60,7 @@ the mode:
 
 | Flag | |
 |---|---|
-| `--size WxH` | Stream resolution, exactly as given |
+| `--size WxH` | Stream resolution, exactly as given. A host starts sizes from 320x200 up to 8192 a side |
 | `--fps N` | Frame rate |
 | `--mbps N` | Bitrate (otherwise automatic) |
 | `--codec h264\|hevc\|av1` | Only this codec |
