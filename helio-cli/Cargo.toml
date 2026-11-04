@@ -23,6 +23,10 @@ dispatch2 = "0.3"
 objc2 = "0.6"
 objc2-app-kit = { version = "0.3", features = ["std", "NSApplication", "NSResponder", "NSRunningApplication"] }
 
+[target.'cfg(unix)'.dependencies]
+# Asking the terminal for its background (palette.rs).
+libc = "0.2"
+
 [target.'cfg(target_os = "linux")'.dependencies]
 # The scripted `paste` step reads this computer's clipboard (script.rs).
 arboard = "3"

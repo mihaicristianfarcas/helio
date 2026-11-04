@@ -3457,6 +3457,7 @@ dependencies = [
  "helio-pairing",
  "helio-proto",
  "helio-transport",
+ "libc",
  "objc2 0.6.4",
  "objc2-app-kit 0.3.2",
  "tracing-subscriber",
