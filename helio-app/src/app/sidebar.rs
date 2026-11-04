@@ -3,7 +3,9 @@
 //! session) and the open sessions; the settings pages; and a foot that says
 //! the version, or offers an update. The pages are one stop for Tab, the arrows going up
 //! and down them, each shown as the keyboard comes to it; the glass pill
-//! slides to the page shown.
+//! slides to the page shown. What is happening on a page is a plain dot at
+//! its row's end (`helio_ui::nav_dot`), its colour saying what: green live,
+//! amber waiting for you, the accent a device asking to pair.
 
 use std::borrow::Cow;
 
@@ -11,7 +13,7 @@ use gpui::{
     div, prelude::*, px, svg, AnyElement, AssetSource, Context, ElementId, FocusHandle, FontWeight,
     KeyDownEvent, Rgba, SharedString,
 };
-use helio_ui::{dot, icon, spinner, IconName, Ink, Radius, Theme, Type};
+use helio_ui::{icon, spinner, IconName, Ink, Radius, Theme, Type};
 
 use crate::host::Page as HostPage;
 use crate::settings::Tab;
@@ -184,9 +186,9 @@ impl HelioApp {
             .collect();
         let host = self.host.clone();
         let agent_badge = if self.agents.is_running() {
-            Some(helio_ui::live_dot(t.fresh).into_any_element())
+            Some(helio_ui::nav_dot(Ink::FRESH, t).into_any_element())
         } else if self.agents.awaiting_answer() {
-            Some(dot(t.attention, 7.0).into_any_element())
+            Some(helio_ui::nav_dot(Ink::ATTENTION, t).into_any_element())
         } else {
             None
         };
@@ -236,23 +238,17 @@ impl HelioApp {
         if let Some(host) = host {
             let snap = host.read(cx).snapshot().clone();
             let streaming = snap.status.as_ref().is_some_and(|s| s.session.is_some());
-            let pending = snap.status.as_ref().map_or(0, |s| s.pending.len());
+            let pending = snap.status.as_ref().is_some_and(|s| !s.pending.is_empty());
             for n in &HOST_PAGES {
                 let badge = match n.page {
                     Page::Host(HostPage::Overview) if streaming => {
-                        Some(helio_ui::live_dot(t.fresh).into_any_element())
+                        Some(helio_ui::nav_dot(Ink::FRESH, t).into_any_element())
                     }
-                    Page::Host(HostPage::Devices) if pending > 0 => Some(
-                        div()
-                            .px(px(6.0))
-                            .rounded(px(8.0))
-                            .bg(t.accent)
-                            .text_size(px(Type::META))
-                            .font_weight(FontWeight::SEMIBOLD)
-                            .text_color(t.on_accent)
-                            .child(pending.to_string())
-                            .into_any_element(),
-                    ),
+                    // A device asking to pair: the accent, as its banner on
+                    // Overview is.
+                    Page::Host(HostPage::Devices) if pending => {
+                        Some(helio_ui::nav_dot(t.accent, t).into_any_element())
+                    }
                     _ => None,
                 };
                 list = list.child(row(n, badge, cx));
@@ -400,11 +396,18 @@ impl HelioApp {
             .collect();
         for (id, title, host, state) in chats {
             let (label, badge): (&str, AnyElement) = match state {
-                ChatState::Working => {
-                    ("Working", helio_ui::live_dot(Ink::FRESH).into_any_element())
-                }
-                ChatState::Waiting => ("Waiting for you", dot(t.attention, 7.0).into_any_element()),
-                ChatState::Paused => ("Paused", dot(t.attention, 7.0).into_any_element()),
+                ChatState::Working => (
+                    "Working",
+                    helio_ui::nav_dot(Ink::FRESH, t).into_any_element(),
+                ),
+                ChatState::Waiting => (
+                    "Waiting for you",
+                    helio_ui::nav_dot(Ink::ATTENTION, t).into_any_element(),
+                ),
+                ChatState::Paused => (
+                    "Paused",
+                    helio_ui::nav_dot(Ink::ATTENTION, t).into_any_element(),
+                ),
                 ChatState::Connecting => (
                     "Connecting…",
                     spinner(
@@ -414,9 +417,10 @@ impl HelioApp {
                     )
                     .into_any_element(),
                 ),
-                ChatState::Connected => {
-                    ("Connected", dot(t.ink(Ink::FRESH), 6.0).into_any_element())
-                }
+                ChatState::Connected => (
+                    "Connected",
+                    helio_ui::nav_dot(Ink::FRESH, t).into_any_element(),
+                ),
                 ChatState::Idle => ("Idle", div().into_any_element()),
             };
             let sub = if watched.contains(&id) {
@@ -455,7 +459,7 @@ impl HelioApp {
                     IconName::Display,
                     host,
                     sub,
-                    helio_ui::live_dot(Ink::FRESH).into_any_element(),
+                    helio_ui::nav_dot(Ink::FRESH, t).into_any_element(),
                 )
                 .on_click(cx.listener(move |this, _, _, cx| this.set_page(Page::Desktop(id), cx)))
                 .into_any_element(),
