@@ -126,7 +126,12 @@ on the installer, Helio's Authenticode certificate (required by releases
 built once Helio had one). On Windows, while
 hosting is on, the host's engine in Program Files is replaced only by the
 new engine's own `enable`, which checks the signature of its copy there
-as turning hosting on does. The check can be turned off
+as turning hosting on does. The package is downloaded and unpacked in your
+own temporary folder on macOS and Windows. On Linux, where the temporary
+folder is shared with other users, it is `helio-update` in your cache folder
+(`$XDG_CACHE_HOME`, else `~/.cache`), which Helio closes to everyone else
+(0700), and the update stops if that is not a real folder of yours. The check
+can be turned off
 ([docs/usage.md](docs/usage.md#updates)).
 
 **The window's local socket.** On macOS and Linux each app listens on a

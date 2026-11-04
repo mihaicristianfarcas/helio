@@ -88,6 +88,12 @@ pub(crate) fn method() -> Result<Method, String> {
 }
 
 /// Whether the release's package is downloaded first: Homebrew gets its own.
+/// The folder updates are staged in: the temp folder, which on macOS is
+/// this user's own: `$TMPDIR`, under `/var/folders`, is theirs alone.
+pub(crate) fn stage_root() -> Result<PathBuf, String> {
+    Ok(std::env::temp_dir().join("helio-update"))
+}
+
 pub(crate) fn needs_package(method: &Method) -> bool {
     matches!(method, Method::Bundles { .. })
 }

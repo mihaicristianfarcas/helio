@@ -34,6 +34,10 @@
 //! version was being installed: the next start says whether it was
 //! ([`finish`]).
 //!
+//! The package is downloaded and unpacked in this user's own folder for it
+//! (`platform::stage_root`), never one other users can write in: what is
+//! unpacked there goes on to run as this user.
+//!
 //! Only a packaged release installs updates: a build from a checkout is
 //! updated the way it was made.
 
@@ -165,10 +169,8 @@ pub(crate) fn log_path(dir: &Path) -> PathBuf {
 
 /// Where an update is downloaded and unpacked, apart from the app's data
 /// (on Windows that is the roaming profile, no place for a package).
-fn staging(version: &str) -> PathBuf {
-    std::env::temp_dir()
-        .join("helio-update")
-        .join(format!("{}-{version}", crate::APP))
+fn staging(version: &str) -> Result<PathBuf, String> {
+    Ok(platform::stage_root()?.join(format!("{}-{version}", crate::APP)))
 }
 
 /// The start after an update the app began: was it installed? `None` when
@@ -176,7 +178,9 @@ fn staging(version: &str) -> PathBuf {
 /// folder goes either way.
 pub(crate) fn finish(build: &Build, dir: &Path) -> Option<Install> {
     let pending = Pending::take(dir)?;
-    let _ = std::fs::remove_dir_all(staging(&pending.version));
+    if let Ok(stage) = staging(&pending.version) {
+        let _ = std::fs::remove_dir_all(stage);
+    }
     let (Some(wanted), Some(mine)) = (
         Version::parse(&pending.version),
         Version::parse(build.version),
@@ -299,7 +303,7 @@ fn install(
     let method = platform::method()?;
     let api = github::Api::new(build);
     let offer = offer(&api, build)?;
-    let stage = staging(&offer.version);
+    let stage = staging(&offer.version)?;
     let _ = std::fs::remove_dir_all(&stage);
     std::fs::create_dir_all(&stage).map_err(|e| format!("{}: {e}", stage.display()))?;
     if !platform::needs_package(&method) {
@@ -451,9 +455,10 @@ pub fn rehearse(
 ) -> Result<String, String> {
     let api = github::Api::new(build);
     let offer = offer(&api, build)?;
-    let stage = std::env::temp_dir()
-        .join("helio-update-rehearsal")
-        .join(format!("{}-{}", crate::APP, offer.version));
+    let stage =
+        platform::stage_root()?
+            .join("rehearsal")
+            .join(format!("{}-{}", crate::APP, offer.version));
     let _ = std::fs::remove_dir_all(&stage);
     std::fs::create_dir_all(&stage).map_err(|e| e.to_string())?;
     let rehearsed = download(&api, build, &offer, &stage, progress)

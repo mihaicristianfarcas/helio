@@ -142,6 +142,12 @@ pub(crate) fn needs_package(_method: &Method) -> bool {
     true
 }
 
+/// The folder updates are staged in: the temp folder, which on Windows is
+/// this user's own, under their local profile.
+pub(crate) fn stage_root() -> Result<PathBuf, String> {
+    Ok(std::env::temp_dir().join("helio-update"))
+}
+
 /// The installer, once its signature is known to be Helio's publisher's.
 pub(crate) fn open(setup: &Path, _stage: &Path) -> Result<PathBuf, String> {
     authenticode::check(setup, authenticode::PUBLISHER)?;
