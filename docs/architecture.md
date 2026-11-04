@@ -231,8 +231,9 @@ No keys are copied by hand:
 
 1. Helio finds Helio Host by mDNS (`_helio._udp`), or is given an address.
 2. Helio shows a PIN; you type it into the host's Helio (This computer →
-   Devices), or give it to `helio host pair PIN` on the host (over SSH,
-   for a host you cannot sit at).
+   Devices), or give it to `helio host pair PIN` on the host. A host
+   nobody sits at gets it through another paired device's stream, or over
+   SSH ([usage.md](usage.md#pairing-a-host-you-cannot-sit-at)).
 3. SPAKE2 over the PIN, with an ML-KEM-768 exchange beside it, gives both
    sides a key that only they have — the pairing is hybrid, like the tunnel,
    so a recording of it stays closed to a future quantum computer. Each side

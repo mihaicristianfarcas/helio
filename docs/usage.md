@@ -185,11 +185,6 @@ network can. They use the token the host writes for its own user: on
 Windows, for the user who turned hosting on, so another account's Helio
 shows **Another user's host** until hosting is turned on from it.
 
-A host you cannot sit at pairs from a terminal, over SSH: start pairing on
-the device (`helio pair HOST`, or **Add Host** in Helio), then give the PIN
-it shows to the host with `helio host pair PIN`
-([cli.md](cli.md#helio-host--this-computer-as-a-host)).
-
 **Helio's icon** sits in the menu bar on a Mac and in the taskbar's
 notification area on Windows while hosting is on, with or without the
 window open. Its menu says what the host is doing (ready, streaming to
@@ -242,6 +237,23 @@ its API's certificate and token, and `logs/`:
 | Linux | `~/.config/helio-host` |
 
 `HELIO_HOST_DATA_DIR` points Helio Host elsewhere.
+
+## Pairing a host you cannot sit at
+
+Start pairing on the new device, on the host's local network: choose the
+host in **Hosts** (or **Add Host**), or run `helio pair HOST`. Keep the PIN
+it shows on screen: the host keeps the request for five minutes. Then give
+the PIN to the host in one of two ways:
+
+- **Through a device already paired with it**, one that may use the
+  **Keyboard** and **Mouse** there. Stream the host from it, open Helio on
+  the host, and type the PIN under **This computer → Devices**.
+- **From a terminal on the host**, such as over SSH:
+  `helio host pair PIN` ([cli.md](cli.md#helio-host--this-computer-as-a-host)).
+
+Only the first device paired with a host may do everything by default;
+the ones after it see only, unless you choose more at the PIN
+([What each device may do](#what-each-device-may-do)).
 
 ## What each device may do
 

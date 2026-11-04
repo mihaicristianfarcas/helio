@@ -335,8 +335,9 @@ Details: [platforms/linux.md](platforms/linux.md).
    others can be added by address (**Add Host**, or ⌘N / Ctrl+N).
 2. Click the host: Helio shows a four-digit PIN.
 3. On the host, open Helio (**This computer → Devices**) and type the PIN.
-   On a host you cannot sit at, give it to the host from a terminal there,
-   over SSH: `helio host pair PIN` ([cli.md](cli.md#helio-host--this-computer-as-a-host)).
+   On a host you cannot sit at, type it there through another device's
+   stream, or give it from a terminal on the host
+   ([usage.md](usage.md#pairing-a-host-you-cannot-sit-at)).
 
 Pairing is done once, on the local network; afterwards Helio connects from
 anywhere ([networking.md](networking.md)). Next: [usage.md](usage.md).

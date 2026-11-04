@@ -23,7 +23,7 @@ it applies), **no** (not built, with the reason), **n/a** (does not apply).
 | Moonlight + Sunshine/Apollo | Helio + Helio Host | Status |
 |---|---|---|
 | Hosts found on the LAN (mDNS) | Same; every address a host announces is kept, LAN first, VPN overlays (such as Tailscale) last | done |
-| PIN pairing, the PIN entered in Sunshine's web UI from any browser on the network | PIN shown in Helio, entered in the host's Helio (This computer), or with `helio host pair PIN` on the host (over SSH, for a host nobody sits at); hybrid post-quantum (SPAKE2 + ML-KEM-768) | done |
+| PIN pairing, the PIN entered in Sunshine's web UI from any browser on the network | PIN shown in Helio, entered in the host's Helio (This computer), or with `helio host pair PIN` on the host; a host nobody sits at takes it through another paired device's stream, or over SSH ([usage.md](usage.md#pairing-a-host-you-cannot-sit-at)); hybrid post-quantum (SPAKE2 + ML-KEM-768) | done |
 | Add a host by address | Same | done |
 | Encryption (AES-GCM, pairing certificates) | WireGuard tunnel with ML-KEM (post-quantum) | done |
 | Reaching the host from outside (UPnP when on, port forwarding, a VPN) | Built in: sealed rendezvous records and hole punching, no port forwarding ([networking.md](networking.md)); from a phone hotspot, no loss, 40 ms round trip. UPnP / NAT-PMP port mapping too, on by default (Sunshine's is off) | done |

@@ -108,7 +108,7 @@ reason other than you quitting.
 | `helio host permissions X25519 [LIST]` | Show what a paired device or agent may do, or set it. `LIST`: `all`, `none`, `see-only`, or names joined by commas (`view,keyboard,mouse`; the names are in [usage.md](usage.md#what-each-device-may-do)). What a client of its kind cannot have is left out |
 | `helio host add-client NAME X25519 MLKEM [--agent] [--permissions LIST]` | Pair a device by hand (headless setups), with the keys from `helio identity` on it, or an agent's from `helio-agent identity` with `--agent`. Without `--permissions` it gets what pairing gives: everything for the first person's device, see only after it; an agent sees and acts |
 | `helio host remove-client X25519` | Unpair a device or an agent |
-| `helio host pair PIN [--device NAME] [--permissions LIST]` | Give the running host the PIN a device asking to pair shows (`helio pair HOST` on it): how a host you cannot sit at pairs, over SSH. `--device` says which device, when more than one asks; `--permissions` what it may do (else what pairing gives). A wrong PIN ends that attempt: start pairing again on the device |
+| `helio host pair PIN [--device NAME] [--permissions LIST]` | Give the running host the PIN a device asking to pair shows (`helio pair HOST` on it), from a terminal on the host, such as over SSH ([usage.md](usage.md#pairing-a-host-you-cannot-sit-at)). `--device` says which device, when more than one asks; `--permissions` what it may do (else what pairing gives). A wrong PIN ends that attempt: start pairing again on the device |
 
 `helio host enable` and `disable` run the host's own program, as the
 hosting switch in Helio does, and the program comes with Helio (where, on
