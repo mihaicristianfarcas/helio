@@ -115,7 +115,7 @@ impl HelioApp {
                     .gap(px(22.0))
                     .child(helio_ui::page_header(
                         "Hosts",
-                        Some(parts.join(" · ").into()),
+                        Some(parts.join(", ").into()),
                         Some(actions),
                         t,
                     ))
@@ -403,7 +403,7 @@ fn status(item: &Item, waking: bool, t: Theme) -> (&'static str, gpui::Rgba, boo
     }
     match item.online {
         Some(true) => ("Online", t.ink(Ink::FRESH), false),
-        Some(false) if item.can_wake() => ("Asleep · click to wake", Ink::IDLE, false),
+        Some(false) if item.can_wake() => ("Asleep, click to wake", Ink::IDLE, false),
         Some(false) => ("Offline", Ink::IDLE, false),
         None => ("Checking…", t.quaternary, true),
     }

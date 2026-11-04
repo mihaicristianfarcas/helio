@@ -35,7 +35,7 @@ something, look over its shoulder, do a bit yourself, ask again.
 
 - **The model answers in words** (Markdown) and **uses the host when a
   message needs it**. A turn's actions fold into one line ("Used the
-  computer · 6 actions") that opens to each action, its result and the
+  computer, 6 actions") that opens to each action, its result and the
   screen after it.
 - **The connection is the session's**: made at the first action (or when
   you log in), kept between turns so the next turn finds the desktop as the
