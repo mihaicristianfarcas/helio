@@ -100,7 +100,7 @@ impl HostPages {
             clients.iter().map(|c| self.client_row(c, t, cx)).collect()
         };
         content.push(
-            section("Paired", t)
+            section("Paired devices", t)
                 .child(rows(paired, t))
                 .into_any_element(),
         );

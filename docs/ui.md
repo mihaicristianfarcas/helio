@@ -143,7 +143,9 @@ along the top, the step, and Back, Skip and Continue at the bottom.
    UAC asks for once, whether there are NVIDIA graphics (else it streams
    in software H.264), and SudoVDA (else the main display, scaled) and
    ViGEmBus (else no controllers), which turning hosting on installs.
-4. **Pairing**: in a line, how to pair from the other computer.
+4. **Pairing**: playing, the hosts this computer is paired with, and in
+   a line how to pair another; hosting, the devices asking to pair, each
+   with its PIN field, and the devices paired; both, both.
 5. **Done**.
 
 The step reached is saved as it is reached (`setup_step` in the settings),
