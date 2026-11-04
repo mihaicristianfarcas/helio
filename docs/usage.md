@@ -93,7 +93,7 @@ Windows and Linux) opens them.
 | Hosting | Let my devices play this computer | The hosting switch ([Hosting on and off](#hosting-on-and-off)), with what it needs: on a Mac, Screen Recording and Accessibility for the host; on Windows, whether there are NVIDIA graphics, and the drivers turning hosting on installs (SudoVDA, ViGEmBus) |
 | Updates | Look for updates | New releases (the default for a packaged release), releases and main (the default for a build from a checkout: also commits on `main` newer than the build's), or off. See [Updates](#updates) |
 | | Check for Updates | Asks GitHub now, whatever the setting |
-| Video | Resolution | This display's native size (the default), the scaled desktop size (Mac), or a custom size. Each is fitted to the nearest standard aspect ratio (16:10, 16:9, 21:9...): a size between them makes games draw a smaller picture with strips around it, which a Windows host does not refresh. Below a MacBook's notch that is 16:10, 3024 × 1890 on a 14" |
+| Video | Resolution | This display's native size (the default), the scaled desktop size (Mac), or a custom size. Each is fitted to the nearest standard aspect ratio (16:10, 16:9, 21:9...): a size between them makes games draw a smaller picture with strips around it, which a Windows host does not refresh. Below a MacBook's notch that is 16:10, 3024 × 1890 on a 14". A host starts sizes from 320 × 200 up to 8192 a side, and refuses any other |
 | | Frame rate | Frames per second the host sends; up to this display's maximum |
 | | Video codec | Automatic (HEVC when both ends can), AV1 (on a Mac that decodes it, an M3 or later: AV1 when the host's GPU encodes it, else HEVC or H.264), HEVC, or H.264 |
 | | Display mode | Full screen or a window |

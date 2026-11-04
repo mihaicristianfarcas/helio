@@ -154,6 +154,9 @@ see the screen, which input it may send, which way the clipboard goes,
 whether it may start apps, take over or watch agents. The host enforces it
 on what arrives, so a modified client gains nothing by ignoring it; a
 second device paired may only see until the host's owner allows more.
+Whatever a device may do, the size it asks for is checked before anything
+starts ([docs/usage.md](docs/usage.md#helios-settings)): the size goes on to the
+host's display driver and encoders.
 
 **AI agents** are clients of their own, held to rules the host enforces:
 never over a person, never on a secure screen, only with the permissions
