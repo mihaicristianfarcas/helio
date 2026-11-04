@@ -36,7 +36,7 @@ use std::sync::mpsc::{self, Sender};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use crate::scroll::DEFAULT_LINES;
+use crate::scroll::{windows_notch_pixels, DEFAULT_LINES};
 use crate::{
     AbsoluteTransform, DisplayRect, HeldSet, InputError, InputSink, RepeatRate, ScrollDistance,
     VirtualDesktop,
@@ -180,7 +180,8 @@ impl SendInputSink {
             InputEvent::Wheel { dv, dh } => wheel_inputs(dv as i32, dh as i32, out),
             InputEvent::Scroll { dv, dh } => {
                 let scale = self.dips_per_stream_pixel();
-                let (dv, dh) = self.scroll.wheel_units(dv, dh, scale, wheel_lines());
+                let notch = windows_notch_pixels(wheel_lines());
+                let (dv, dh) = self.scroll.wheel_units(dv, dh, scale, notch);
                 wheel_inputs(dv, dh, out);
             }
             // Text: each UTF-16 unit as a Unicode keystroke (Sunshine's way),

@@ -15,6 +15,7 @@
 //! own). The monitor goes when the session stops.
 
 use std::collections::HashMap;
+use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
 use ashpd::zbus::{self, Connection, Proxy};
@@ -42,6 +43,8 @@ pub struct VirtualMonitor {
     tx: UnboundedSender<Cmd>,
     /// Hung up when the session's task has stopped the session.
     done: std::sync::mpsc::Receiver<()>,
+    /// The scale the monitor was arranged at, once it has been.
+    scale: Arc<OnceLock<f64>>,
 }
 
 /// Whether mutter's screen cast is on the session bus: a GNOME session.
@@ -77,11 +80,17 @@ impl VirtualMonitor {
         let (tx, rx) = unbounded_channel();
         let (ready_tx, ready_rx) = std::sync::mpsc::sync_channel(1);
         let (done_tx, done) = std::sync::mpsc::channel::<()>();
+        let arranged = Arc::new(OnceLock::new());
+        let monitor_scale = arranged.clone();
         crate::portal::runtime()?.spawn(async move {
-            serve(mode, isolate, scale, rx, ready_tx).await;
+            serve(mode, isolate, scale, arranged, rx, ready_tx).await;
             drop(done_tx);
         });
-        let monitor = VirtualMonitor { tx, done };
+        let monitor = VirtualMonitor {
+            tx,
+            done,
+            scale: monitor_scale,
+        };
         match ready_rx.recv_timeout(wait) {
             Ok(Ok(node)) => Ok((monitor, node)),
             Ok(Err(e)) => Err(e),
@@ -94,14 +103,15 @@ impl VirtualMonitor {
 
     /// The client's input, to the virtual monitor: `picture` is where the
     /// picture sits in the stream (all of it), whose coordinates mutter's
-    /// pointer takes.
+    /// pointer takes. A trackpad's distance also needs the scale the monitor
+    /// was arranged at, which comes after this is called.
     pub fn sink(&self, picture: (u32, u32, u32, u32)) -> RemoteSink {
         let tx = self.tx.clone();
         let deliver: Deliver = Box::new(move |ops| {
             tx.send(Cmd::Input(ops))
                 .map_err(|_| InputError::Unavailable)
         });
-        RemoteSink::new(deliver, picture, None)
+        RemoteSink::new(deliver, picture, None).scaled_by(self.scale.clone())
     }
 }
 
@@ -136,6 +146,7 @@ async fn serve(
     mode: DisplayMode,
     isolate: bool,
     scale: f64,
+    arranged: Arc<OnceLock<f64>>,
     mut rx: UnboundedReceiver<Cmd>,
     ready: std::sync::mpsc::SyncSender<Result<u32, String>>,
 ) {
@@ -177,8 +188,13 @@ async fn serve(
     let arranging = before.map(|before| {
         let conn = conn.clone();
         tokio::spawn(async move {
-            if let Err(e) = crate::mutter_layout::arrange(conn, before, isolate, scale).await {
-                tracing::warn!(error = %e, "the virtual monitor stays where mutter put it");
+            match crate::mutter_layout::arrange(conn, before, isolate, scale).await {
+                Ok(scale) => {
+                    let _ = arranged.set(scale);
+                }
+                Err(e) => {
+                    tracing::warn!(error = %e, "the virtual monitor stays where mutter put it")
+                }
             }
         })
     });

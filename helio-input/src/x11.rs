@@ -12,22 +12,31 @@
 //! one, which fast typing into GTK apps did.
 //! Absolute positions are the stream's pixels, mapped through where the
 //! picture sits in the stream (letterboxed) onto the X screen.
+//! A trackpad's distance goes through the same mapping and the desktop's
+//! scale, read once as the session starts (`crate::xsettings`), to the wheel
+//! buttons: reading it for each event would hold input up on a round trip to
+//! the X server, so a scale changed during a session counts from the next.
 
 use std::collections::HashMap;
 use std::time::Duration;
 
 use helio_proto::input::{Button, InputEvent};
 use x11rb::connection::{Connection, RequestConnection};
-use x11rb::protocol::xproto::{self, ConnectionExt as _};
+use x11rb::protocol::xproto::{self, AtomEnum, ConnectionExt as _};
 use x11rb::protocol::xtest::ConnectionExt as _;
 use x11rb::rust_connection::RustConnection;
 
-use crate::scroll::{DEFAULT_LINES, NOTCH};
+use crate::scroll::{LINUX_NOTCH_PIXELS, NOTCH};
 use crate::{HeldSet, InputError, InputSink, ScrollDistance};
 
 /// Key codes borrowed for text, taken in turn so a client still reading the
 /// last one's mapping does not see it change under it.
 const SPARE_KEYS: usize = 4;
+
+/// How much of the settings property to read, in the protocol's 4-byte units:
+/// far more than the few KiB a desktop's settings take. Cut short, it is
+/// refused, and the desktop counts as being at a scale of 1.
+const SETTINGS_WORDS: u32 = 64 * 1024;
 
 pub struct XTestSink {
     conn: RustConnection,
@@ -40,6 +49,8 @@ pub struct XTestSink {
     wheel: (i32, i32),
     /// A trackpad's distances, as wheel units.
     scroll: ScrollDistance,
+    /// The screen's pixels to a device-independent pixel.
+    desktop_scale: f64,
     spare: Vec<u8>,
     next_spare: usize,
     keysyms_per_keycode: u8,
@@ -90,6 +101,8 @@ impl XTestSink {
         }
         let typing = typing_map(min, per, &map.keysyms, &spare);
         let shift = typing.get(&SHIFT_L).map(|&(kc, _)| kc);
+        let desktop_scale = desktop_scale(&conn, screen);
+        tracing::info!(desktop_scale, "the X desktop's scale");
         Ok(XTestSink {
             conn,
             root,
@@ -98,6 +111,7 @@ impl XTestSink {
             held: HeldSet::new(),
             wheel: (0, 0),
             scroll: ScrollDistance::new(),
+            desktop_scale,
             spare,
             next_spare: 0,
             keysyms_per_keycode: per,
@@ -244,6 +258,41 @@ impl XTestSink {
     }
 }
 
+/// The desktop's scale from its settings daemon. 1 without one, or with one
+/// that cannot be read: that is what browsers take then, measured.
+fn desktop_scale(conn: &RustConnection, screen: usize) -> f64 {
+    let read = || -> Option<f64> {
+        let atom = |name: &str| {
+            let reply = conn.intern_atom(false, name.as_bytes()).ok()?.reply();
+            Some(reply.ok()?.atom)
+        };
+        let selection = atom(&format!("_XSETTINGS_S{screen}"))?;
+        let owner = conn
+            .get_selection_owner(selection)
+            .ok()?
+            .reply()
+            .ok()?
+            .owner;
+        if owner == x11rb::NONE {
+            return None;
+        }
+        let settings = conn
+            .get_property(
+                false,
+                owner,
+                atom("_XSETTINGS_SETTINGS")?,
+                AtomEnum::ANY,
+                0,
+                SETTINGS_WORDS,
+            )
+            .ok()?
+            .reply()
+            .ok()?;
+        crate::xsettings::desktop_scale(&settings.value)
+    };
+    read().unwrap_or(1.0)
+}
+
 impl InputSink for XTestSink {
     fn inject(&mut self, events: &[InputEvent]) -> Result<(), InputError> {
         for &ev in events {
@@ -262,12 +311,9 @@ impl InputSink for XTestSink {
                 InputEvent::ButtonUp(b) => self.button(b, false)?,
                 InputEvent::Wheel { dv, dh } => self.wheel(dv as i32, dh as i32)?,
                 InputEvent::Scroll { dv, dh } => {
-                    // Notches at 100 of the screen's pixels each
-                    // (`crate::scroll`): Chromium's figure for Windows, not
-                    // measured on an X desktop.
-                    let scale = self.screen.0 as f64 / self.picture.2.max(1) as f64;
-                    let lines = (DEFAULT_LINES, DEFAULT_LINES);
-                    let (v, h) = self.scroll.wheel_units(dv, dh, scale, lines);
+                    let screen_per_stream = self.screen.0 as f64 / self.picture.2.max(1) as f64;
+                    let scale = screen_per_stream / self.desktop_scale;
+                    let (v, h) = self.scroll.wheel_units(dv, dh, scale, LINUX_NOTCH_PIXELS);
                     self.wheel(v, h)?;
                 }
                 InputEvent::Text(c) => self.text(c)?,

@@ -33,6 +33,8 @@ pub use scroll::ScrollDistance;
 pub mod typing;
 #[cfg(target_os = "linux")]
 pub mod x11;
+/// The scale an X desktop runs at (pure; the X11 sink's).
+pub mod xsettings;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum InputError {

@@ -11,6 +11,12 @@
 //! user changed it. A browser on the host then moves its page as far as the
 //! fingers moved the picture; an app whose line is shorter goes less far.
 //!
+//! A Linux host goes by a fixed figure instead, 120 device-independent pixels
+//! a notch: Chromium's on X11 and under GNOME's Wayland, at every scale
+//! measured, with Firefox a little under it (`docs/benchmarks.md`). Those
+//! desktops take only whole notches from a host, so there the page moves in
+//! steps of a notch, and what is short of one waits for the next scroll.
+//!
 //! Sending the trackpad as notches from the client instead, as Moonlight's
 //! does (`mouse.cpp`, `handleMouseWheelEvent`), leaves the client to guess
 //! what a notch is worth on the host. An earlier Helio guessed 40 points of a
@@ -41,6 +47,26 @@ pub const PIXELS_PER_LINE: f64 = 100.0 / 3.0;
 /// both wheels (`SPI_GETWHEELSCROLLLINES`, `SPI_GETWHEELSCROLLCHARS`).
 pub const DEFAULT_LINES: f64 = 3.0;
 
+/// How far a notch scrolls on a Linux desktop, in device-independent pixels:
+/// Chromium's, measured on X11 and under GNOME's Wayland; Firefox's 114 to 116
+/// then go 0.95 times as far as the fingers. Firefox's sideways notch is
+/// shorter and no single figure fits both (`docs/benchmarks.md`).
+pub const LINUX_NOTCH_PIXELS: (f64, f64) = (120.0, 120.0);
+
+/// How far a notch scrolls on Windows at `lines` lines a notch on each wheel,
+/// in device-independent pixels.
+pub fn windows_notch_pixels(lines: (f64, f64)) -> (f64, f64) {
+    let pixels = |lines: f64| {
+        let lines = if lines.is_finite() && lines >= 1.0 {
+            lines
+        } else {
+            DEFAULT_LINES
+        };
+        lines * PIXELS_PER_LINE
+    };
+    (pixels(lines.0), pixels(lines.1))
+}
+
 /// Distances in, wheel units out, with what is short of a unit kept for the
 /// next: a slow scroll is many events of a pixel or two.
 #[derive(Debug, Default, Clone)]
@@ -55,24 +81,23 @@ impl ScrollDistance {
 
     /// `dv`, `dh` stream pixels as wheel units (vertical, horizontal), in
     /// the protocol's directions. `scale` is the desktop's
-    /// device-independent pixels per stream pixel; `lines` how many lines a
-    /// notch scrolls on each wheel.
-    pub fn wheel_units(&mut self, dv: i16, dh: i16, scale: f64, lines: (f64, f64)) -> (i32, i32) {
+    /// device-independent pixels per stream pixel; `notch_pixels` how many of
+    /// those a notch scrolls on each wheel.
+    pub fn wheel_units(
+        &mut self,
+        dv: i16,
+        dh: i16,
+        scale: f64,
+        notch_pixels: (f64, f64),
+    ) -> (i32, i32) {
         let scale = if scale.is_finite() && scale > 0.0 {
             scale
         } else {
             1.0
         };
-        let units_per_pixel = |lines: f64| {
-            let lines = if lines.is_finite() && lines >= 1.0 {
-                lines
-            } else {
-                DEFAULT_LINES
-            };
-            scale * NOTCH as f64 / (lines * PIXELS_PER_LINE)
-        };
-        let v = self.rest.0 + dv as f64 * units_per_pixel(lines.0);
-        let h = self.rest.1 + dh as f64 * units_per_pixel(lines.1);
+        let units_per_pixel = |notch: f64| scale * NOTCH as f64 / notch;
+        let v = self.rest.0 + dv as f64 * units_per_pixel(notch_pixels.0);
+        let h = self.rest.1 + dh as f64 * units_per_pixel(notch_pixels.1);
         let (whole_v, whole_h) = (whole_units(v), whole_units(h));
         self.rest = (v - whole_v, h - whole_h);
         (whole_v as i32, whole_h as i32)
@@ -88,7 +113,10 @@ impl ScrollDistance {
 mod tests {
     use super::*;
 
-    const DEFAULT: (f64, f64) = (DEFAULT_LINES, DEFAULT_LINES);
+    const DEFAULT: (f64, f64) = (
+        DEFAULT_LINES * PIXELS_PER_LINE,
+        DEFAULT_LINES * PIXELS_PER_LINE,
+    );
 
     #[test]
     fn a_hundred_pixels_at_100_percent_is_a_notch() {
@@ -113,14 +141,29 @@ mod tests {
     #[test]
     fn more_lines_to_a_notch_takes_fewer_units() {
         let mut s = ScrollDistance::new();
-        assert_eq!(s.wheel_units(100, 100, 1.0, (6.0, 1.0)), (60, 360));
+        let notch = windows_notch_pixels((6.0, 1.0));
+        assert_eq!(s.wheel_units(100, 100, 1.0, notch), (60, 360));
+    }
+
+    #[test]
+    fn on_linux_a_notch_takes_120_pixels_at_the_desktops_scale() {
+        // The stream at the screen's size, a desktop at 200%: a CSS pixel is
+        // two stream pixels, and a wheel unit is one CSS pixel.
+        let mut s = ScrollDistance::new();
+        assert_eq!(s.wheel_units(240, 0, 0.5, LINUX_NOTCH_PIXELS), (120, 0));
+        assert_eq!(
+            s.wheel_units(120, -120, 1.0, LINUX_NOTCH_PIXELS),
+            (120, -120)
+        );
     }
 
     #[test]
     fn nonsense_from_the_system_falls_back_to_the_defaults() {
         let mut s = ScrollDistance::new();
-        assert_eq!(s.wheel_units(100, 0, f64::NAN, (0.0, 0.0)), (120, 0));
-        assert_eq!(s.wheel_units(100, 0, 0.0, (f64::INFINITY, 3.0)), (120, 0));
+        let notch = windows_notch_pixels((0.0, 0.0));
+        assert_eq!(s.wheel_units(100, 0, f64::NAN, notch), (120, 0));
+        let notch = windows_notch_pixels((f64::INFINITY, 3.0));
+        assert_eq!(s.wheel_units(100, 0, 0.0, notch), (120, 0));
     }
 
     #[test]

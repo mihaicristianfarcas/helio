@@ -176,13 +176,14 @@ async fn display_config(conn: &Connection) -> zbus::Result<Proxy<'static>> {
     .await
 }
 
-/// Arrange the session's virtual monitor once it shows up (see [`plan`]).
+/// Arrange the session's virtual monitor once it shows up (see [`plan`]); the
+/// scale it took.
 pub async fn arrange(
     conn: Connection,
     before: HashSet<String>,
     isolate: bool,
     scale: f64,
-) -> Result<(), String> {
+) -> Result<f64, String> {
     let config = display_config(&conn)
         .await
         .map_err(|e| format!("mutter's display configuration: {e}"))?;
@@ -206,7 +207,7 @@ pub async fn arrange(
                 scale,
                 "the virtual monitor is arranged in the desktop"
             );
-            return Ok(());
+            return Ok(scale);
         }
         match tokio::time::timeout_at(deadline, changed.next()).await {
             Ok(Some(_)) => continue,

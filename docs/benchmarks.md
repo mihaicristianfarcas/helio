@@ -471,4 +471,71 @@ moved it a whole one, and why the same small movement sometimes moves it and
 sometimes does not.
 
 Not measured: other apps that use whole notches, Explorer's horizontal
-scrolling, and a Mac or Linux host.
+scrolling, and a Mac host.
+
+### On a Linux host
+
+How far the same 795-point gesture moves a browser on a Linux host: 1590 stream
+pixels, replayed as scripted input through a real stream at 3024x1890, 30 fps,
+H.264 in software, debug build, in a container (Ubuntu 24.04 on Arm, no GPU),
+from a Linux client on another X screen. The browsers are Chromium 156 and Firefox 157,
+on a page that logged its position.
+
+- **X11:** Xvfb with no window manager, the scale set through `xsettingsd` with
+  the values the desktops' daemons write (below).
+- **GNOME:** mutter 46.2 headless, browsers native to Wayland, on the session's
+  virtual monitor at the scale a client asks for, set for the test (a Linux
+  client does not send one). 150% takes mutter's experimental
+  `scale-monitor-framebuffer`. A CSS pixel is counted as the monitor's scale in
+  stream pixels: the page's own device pixel ratio stayed at 1 in some runs,
+  opened as the monitor changed.
+
+| Desktop | Scale | Chromium: 100 pixels a notch, scale ignored | Chromium: 120 pixels a notch at the desktop's scale | Firefox: 100 pixels a notch, scale ignored | Firefox: 120 pixels a notch at the desktop's scale |
+|---|---|---|---|---|---|
+| X11 | 100% | 1.13× | 0.98× | 1.08× | 0.93× |
+| X11 | 150% | 1.70× | 0.91× | 1.64× | 0.88× |
+| X11 | 200% | 2.26× | 0.91× | 2.15× | 0.86× |
+| GNOME | 100% | 1.13× | 0.98× | 1.08× | 0.93× |
+| GNOME | 150% | 1.70× | 0.91× | 1.75× | 0.88× |
+| GNOME | 200% | 2.26× | 0.91× | 2.15× to 3.30×, four runs | 0.86×, three runs |
+
+These desktops take whole notches only, so a gesture stops short by up to a
+notch and the rest waits for the next scroll: at 200% a notch is 240 stream
+pixels, 1590 of them are 6.6 notches, and six moved the page. Over several
+scrolls it adds up: at 200% on X11, scripted scrolls of 1000 down, 400 up and
+600 down (1200 stream pixels in all) moved Chromium 960, 240 and 480, 1200 in
+all. Firefox's run-to-run spread at 200% under GNOME is not explained: at 100
+pixels a notch it moved further than the notches sent, which X11 did not show.
+
+How far a notch goes, at the scales above (sideways under GNOME, at 100% and
+200%):
+
+| Browser | Desktop | Down, in CSS pixels | Sideways, in CSS pixels |
+|---|---|---|---|
+| Chromium | X11, GNOME | 120 | 120 |
+| Firefox | X11 | 114 to 116 | 20 to 21 |
+| Firefox | GNOME | 114 to 116 | 60 |
+
+Firefox's sideways notch is shorter than any figure that suits its vertical one:
+at 120 pixels a notch it goes about a sixth as far as the fingers on X11, and half
+as far under GNOME.
+
+Where the scale on an X desktop comes from: real settings daemons on Xvfb, wheel
+buttons clicked with `xdotool`. The DPIs are as the settings give them over 1024.
+
+| Daemon | Set to | `Xft/DPI` | `Gdk/UnscaledDPI` | `Gdk/WindowScalingFactor` | `Xft.dpi` in the X resources | Both browsers' device pixel ratio |
+|---|---|---|---|---|---|---|
+| None | `Xft.dpi: 192` with `xrdb` | none | none | none | 192 | 1 |
+| `gsd-xsettings` 46.0, under mutter on X11 | Scale 2 | 192 | 96 | 2 | 192 | 2 |
+| `gsd-xsettings` 46.0 | Text 1.25 | 120 | 120 | 1 | 120 | 1.25 |
+| `xfsettingsd` 4.18.4 | Window scale 2 | 96 | none | 2 | 96 | 2 |
+| `xfsettingsd` 4.18.4 | DPI 144 | 144 | none | 1 | 144 | 1.5 |
+| `xsettingsd` 1.0.2 | Window scale 2 alone | none | none | 2 | none | 2 |
+| `xsettingsd` 1.0.2 | `Xft/DPI` of 192 and window scale 2 | 192 | none | 2 | none | 4 |
+| `xsettingsd` 1.0.2 | `Xft/DPI` of -1 | -1, as written | none | none | none | 1 |
+
+So the ratio is the window scale times `Gdk/UnscaledDPI` (else `Xft/DPI`) over
+96. A desktop's `Xft.dpi` alone neither sets it nor always follows it.
+
+Not measured: KDE, the desktop portal's path, a real trackpad, and apps other
+than browsers.
