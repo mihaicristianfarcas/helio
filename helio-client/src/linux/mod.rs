@@ -35,6 +35,7 @@ use winit::window::{CursorGrabMode, CursorIcon, Fullscreen, Window, WindowId};
 use crate::input::InputSender;
 use crate::keyboard::{Hotkey, KeyAction, Keyboard};
 use crate::pointer::PointerState;
+use crate::scroll::{stream_pixels_per_point, Residue};
 use crate::session::{EndCallback, StreamRequest};
 use crate::stats::StatsCollector;
 use crate::stream::{Codec, ControlSender, Event, FrameTiming, HostTarget, Stream, VideoOut};
@@ -324,7 +325,10 @@ struct Running {
     pointer: Arc<Mutex<PointerState>>,
     keyboard: Keyboard,
     held_buttons: Vec<Button>,
-    scroll_residue: (f64, f64),
+    /// A touchpad's scroll short of a whole stream pixel, and a wheel's
+    /// short of a whole unit.
+    scroll_residue: Residue,
+    wheel_residue: Residue,
 }
 
 struct StreamApp {
@@ -499,7 +503,8 @@ impl StreamApp {
             pointer,
             keyboard: Keyboard::default(),
             held_buttons: Vec::new(),
-            scroll_residue: (0.0, 0.0),
+            scroll_residue: Residue::default(),
+            wheel_residue: Residue::default(),
         })
     }
 
@@ -743,21 +748,30 @@ impl ApplicationHandler<UserEvent> for StreamApp {
                 if !r.pointer.lock().captured {
                     return;
                 }
-                // Windows counts 120 per wheel notch; a touchpad's pixels are
-                // finer (about 40 to a notch).
-                let (x, y) = match delta {
-                    MouseScrollDelta::LineDelta(x, y) => (x as f64 * 120.0, y as f64 * 120.0),
-                    MouseScrollDelta::PixelDelta(p) => (p.x * 3.0, p.y * 3.0),
-                };
-                let (rx, ry) = r.scroll_residue;
-                let (fx, fy) = (rx + x, ry + y);
-                let (dh, dv) = (fx.trunc(), fy.trunc());
-                r.scroll_residue = (fx - dh, fy - dv);
-                if dv != 0.0 || dh != 0.0 {
-                    input.wheel(
-                        dv.clamp(i16::MIN as f64, i16::MAX as f64) as i16,
-                        dh.clamp(i16::MIN as f64, i16::MAX as f64) as i16,
-                    );
+                match delta {
+                    // A wheel, in lines: 120 each, as Windows counts a notch.
+                    MouseScrollDelta::LineDelta(x, y) => {
+                        let (dv, dh) = r.wheel_residue.whole(y as f64 * 120.0, x as f64 * 120.0);
+                        if dv != 0 || dh != 0 {
+                            input.wheel(dv, dh);
+                        }
+                    }
+                    // A touchpad: this window's pixels the content moves,
+                    // sent as the stream's for the host to scroll as far
+                    // (`crate::scroll`).
+                    MouseScrollDelta::PixelDelta(p) => {
+                        let per_pixel = r
+                            .render
+                            .video_rect()
+                            .and_then(|((_, _, vw, vh), size)| {
+                                stream_pixels_per_point((vw, vh), size)
+                            })
+                            .unwrap_or(1.0);
+                        let (dv, dh) = r.scroll_residue.whole(p.y * per_pixel, p.x * per_pixel);
+                        if dv != 0 || dh != 0 {
+                            input.scroll(dv, dh);
+                        }
+                    }
                 }
             }
             _ => {}

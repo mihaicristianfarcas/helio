@@ -184,7 +184,17 @@ with it (the app listens for `TaskbarCreated`).
   mapped from the desktop as it is at each move, so a game that changes the
   display's resolution does not move every click. Typed text (an agent's
   `type`, a pasted clipboard) goes one character every 15 ms: Windows 11's
-  WinUI text fields garble faster Unicode keystrokes.
+  WinUI text fields garble faster Unicode keystrokes. A wheel's notches go
+  as they come, parts of a notch included (Sunshine's high-resolution
+  scrolling). A client's trackpad arrives as a distance and goes as wheel
+  units at the display's scaling and the lines a notch scrolls, at
+  Chromium's 100 pixels per three lines, so a browser moves as far as the
+  fingers did ([measured](../benchmarks.md#trackpad-scrolling-2026-11-04)).
+  What an app does with parts of a notch is its own: browsers and Settings
+  move for each, File Explorer keeps them and moves only on a whole notch,
+  so a gentle movement can move nothing there, and a longer one moves it in
+  steps. Helio Host as a service reads the lines from the SYSTEM account:
+  Windows' default of 3, not a number the user set.
 - **The pointer.** Desktop Duplication reports the pointer beside the
   desktop image, never in it: its place, whether it shows, and its shape.
   Helio Host draws it into a copy of the desktop on the GPU, as Sunshine does, so

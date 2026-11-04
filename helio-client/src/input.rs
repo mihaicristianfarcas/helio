@@ -85,15 +85,26 @@ impl InputSender {
         });
     }
 
-    /// This computer's wheel or trackpad scrolled, in Windows' units (120
-    /// a notch); the other way if the user asked.
+    /// This computer's wheel turned, in Windows' units (120 a notch); the
+    /// other way if the user asked.
     pub fn wheel(&self, dv: i16, dh: i16) {
-        let (dv, dh) = if self.mouse.reverse_scroll {
+        let (dv, dh) = self.scroll_direction(dv, dh);
+        self.send(InputEvent::Wheel { dv, dh });
+    }
+
+    /// This computer's trackpad scrolled the picture `dv`, `dh` stream
+    /// pixels, in the wheel's directions; the other way if the user asked.
+    pub fn scroll(&self, dv: i16, dh: i16) {
+        let (dv, dh) = self.scroll_direction(dv, dh);
+        self.send(InputEvent::Scroll { dv, dh });
+    }
+
+    fn scroll_direction(&self, dv: i16, dh: i16) -> (i16, i16) {
+        if self.mouse.reverse_scroll {
             (dv.saturating_neg(), dh.saturating_neg())
         } else {
             (dv, dh)
-        };
-        self.send(InputEvent::Wheel { dv, dh });
+        }
     }
 
     pub fn motion(&self, dx: f64, dy: f64) {
@@ -311,8 +322,9 @@ mod tests {
         sender.mouse.reverse_scroll = true;
         sender.wheel(120, -40);
         sender.wheel(i16::MIN, 0);
+        sender.scroll(7, -2);
         assert_eq!(
-            received(&rx, 3),
+            received(&rx, 4),
             vec![
                 InputEvent::Wheel { dv: 120, dh: -40 },
                 InputEvent::Wheel { dv: -120, dh: 40 },
@@ -320,6 +332,7 @@ mod tests {
                     dv: i16::MAX,
                     dh: 0
                 },
+                InputEvent::Scroll { dv: -7, dh: 2 },
             ]
         );
     }

@@ -6,6 +6,11 @@
 //! For text entry the character follows the host's layout, not the client's.
 //! v2 design §5.1 states that tradeoff and accepts it deliberately; it is not
 //! a bug.
+//!
+//! A trackpad's scrolling arrives as a distance and goes out as wheel units
+//! (`scroll`), from the scaling of the display being streamed and the
+//! lines a notch scrolls, both read as each scroll comes in: the user may
+//! change either mid-session.
 
 use helio_proto::input::{Button, InputEvent};
 use windows::Win32::UI::Input::KeyboardAndMouse::{
@@ -22,7 +27,8 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{
 use windows::Win32::UI::WindowsAndMessaging::{
     GetSystemMetrics, SystemParametersInfoW, SM_CXSCREEN, SM_CXVIRTUALSCREEN, SM_CYSCREEN,
     SM_CYVIRTUALSCREEN, SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN, SPI_GETKEYBOARDDELAY,
-    SPI_GETKEYBOARDSPEED, SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS, XBUTTON1, XBUTTON2,
+    SPI_GETKEYBOARDSPEED, SPI_GETWHEELSCROLLCHARS, SPI_GETWHEELSCROLLLINES,
+    SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS, XBUTTON1, XBUTTON2,
 };
 
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
@@ -30,8 +36,10 @@ use std::sync::mpsc::{self, Sender};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
+use crate::scroll::DEFAULT_LINES;
 use crate::{
-    AbsoluteTransform, DisplayRect, HeldSet, InputError, InputSink, RepeatRate, VirtualDesktop,
+    AbsoluteTransform, DisplayRect, HeldSet, InputError, InputSink, RepeatRate, ScrollDistance,
+    VirtualDesktop,
 };
 
 impl DisplayRect {
@@ -88,6 +96,7 @@ pub struct SendInputSink {
     stream: (u32, u32),
     typist: Typist,
     repeat: RepeatRate,
+    scroll: ScrollDistance,
 }
 
 impl SendInputSink {
@@ -98,7 +107,18 @@ impl SendInputSink {
             stream,
             typist: Typist::spawn(),
             repeat: keyboard_repeat(),
+            scroll: ScrollDistance::new(),
         }
+    }
+
+    /// The streamed display's device-independent pixels per stream pixel,
+    /// as it is now. `SM_CXSCREEN` and the monitor's DPI are both in this
+    /// process's view of the desktop (real pixels and the real DPI when
+    /// it is DPI-aware, as capture makes it; 96-dpi units and 96 when not),
+    /// so their quotient is the display's width in DIPs either way.
+    fn dips_per_stream_pixel(&self) -> f64 {
+        let width = DisplayRect::primary().width as f64;
+        width * 96.0 / primary_dpi() / self.stream.0.max(1) as f64
     }
 
     /// Stream pixels -> SendInput's absolute space, from the desktop as it is
@@ -128,7 +148,7 @@ impl SendInputSink {
         }
     }
 
-    fn to_inputs(&self, ev: InputEvent, out: &mut Vec<INPUT>) {
+    fn push_inputs(&mut self, ev: InputEvent, out: &mut Vec<INPUT>) {
         match ev {
             InputEvent::KeyDown(sc) => out.push(key_input(sc, false)),
             InputEvent::KeyUp(sc) => out.push(key_input(sc, true)),
@@ -157,13 +177,11 @@ impl SendInputSink {
             }
             InputEvent::ButtonDown(b) => out.push(button_input(b, false)),
             InputEvent::ButtonUp(b) => out.push(button_input(b, true)),
-            InputEvent::Wheel { dv, dh } => {
-                if dv != 0 {
-                    out.push(mouse_input(0, 0, MOUSEEVENTF_WHEEL.0, dv as i32));
-                }
-                if dh != 0 {
-                    out.push(mouse_input(0, 0, MOUSEEVENTF_HWHEEL.0, dh as i32));
-                }
+            InputEvent::Wheel { dv, dh } => wheel_inputs(dv as i32, dh as i32, out),
+            InputEvent::Scroll { dv, dh } => {
+                let scale = self.dips_per_stream_pixel();
+                let (dv, dh) = self.scroll.wheel_units(dv, dh, scale, wheel_lines());
+                wheel_inputs(dv, dh, out);
             }
             // Text: each UTF-16 unit as a Unicode keystroke (Sunshine's way),
             // so it arrives as typed whatever the host's layout.
@@ -366,6 +384,76 @@ fn mouse_input(dx: i32, dy: i32, flags: u32, data: i32) -> INPUT {
     }
 }
 
+/// Wheel units as `SendInput` takes them: as they are, parts of a notch
+/// included (Sunshine's `high_resolution_scrolling`, on by default,
+/// `input.cpp`).
+fn wheel_inputs(dv: i32, dh: i32, out: &mut Vec<INPUT>) {
+    if dv != 0 {
+        out.push(mouse_input(0, 0, MOUSEEVENTF_WHEEL.0, dv));
+    }
+    if dh != 0 {
+        out.push(mouse_input(0, 0, MOUSEEVENTF_HWHEEL.0, dh));
+    }
+}
+
+/// The primary display's DPI, as this process sees it (96 when it is not
+/// DPI-aware); 96 when Windows cannot say. The primary is the display
+/// streamed (`DisplayRect::primary`).
+fn primary_dpi() -> f64 {
+    use windows::Win32::Foundation::POINT;
+    use windows::Win32::Graphics::Gdi::{MonitorFromPoint, MONITOR_DEFAULTTOPRIMARY};
+    use windows::Win32::UI::HiDpi::{GetDpiForMonitor, MDT_EFFECTIVE_DPI};
+    let (mut x, mut y) = (0u32, 0u32);
+    // SAFETY: MonitorFromPoint takes the point by value and, with
+    // DEFAULTTOPRIMARY, always returns a monitor; GetDpiForMonitor writes
+    // two u32s through pointers to live locals.
+    let read = unsafe {
+        let monitor = MonitorFromPoint(POINT { x: 0, y: 0 }, MONITOR_DEFAULTTOPRIMARY);
+        GetDpiForMonitor(monitor, MDT_EFFECTIVE_DPI, &mut x, &mut y)
+    };
+    if read.is_err() || x == 0 {
+        96.0
+    } else {
+        x as f64
+    }
+}
+
+/// Lines a notch scrolls (vertical, horizontal), which Chromium reads too
+/// (`web_input_event_builders_win.cc`). Like the keyboard's settings, the
+/// SYSTEM account's (Windows' default, 3) for a service, the user's own for
+/// a Helio Host run in their session. A notch that scrolls a page has no
+/// distance to match: the default stands in for it.
+fn wheel_lines() -> (f64, f64) {
+    /// WinUser.h's `WHEEL_PAGESCROLL` (`UINT_MAX`), which `windows` 0.61
+    /// leaves out.
+    const WHEEL_PAGESCROLL: u32 = u32::MAX;
+    let (mut lines, mut chars) = (3u32, 3u32);
+    // SAFETY: each call writes one u32 through a pointer to a live local.
+    unsafe {
+        let none = SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS(0);
+        let _ = SystemParametersInfoW(
+            SPI_GETWHEELSCROLLLINES,
+            0,
+            Some(&mut lines as *mut u32 as *mut _),
+            none,
+        );
+        let _ = SystemParametersInfoW(
+            SPI_GETWHEELSCROLLCHARS,
+            0,
+            Some(&mut chars as *mut u32 as *mut _),
+            none,
+        );
+    }
+    let as_lines = |n: u32| {
+        if n == WHEEL_PAGESCROLL {
+            DEFAULT_LINES
+        } else {
+            n as f64
+        }
+    };
+    (as_lines(lines), as_lines(chars))
+}
+
 fn button_input(b: Button, up: bool) -> INPUT {
     let (flags, data) = match (b, up) {
         (Button::Left, false) => (MOUSEEVENTF_LEFTDOWN.0, 0),
@@ -392,12 +480,12 @@ impl InputSink for SendInputSink {
                 // What came before it first, then the character, paced.
                 result = result.and(self.send(std::mem::take(&mut inputs)));
                 let mut ch = Vec::with_capacity(4);
-                self.to_inputs(ev, &mut ch);
+                self.push_inputs(ev, &mut ch);
                 if let Some(ch) = self.typist.queue(ch, true) {
                     result = result.and(submit(&ch));
                 }
             } else {
-                self.to_inputs(ev, &mut inputs);
+                self.push_inputs(ev, &mut inputs);
             }
         }
         result.and(self.send(inputs))
@@ -406,6 +494,7 @@ impl InputSink for SendInputSink {
     fn release_all(&mut self) -> Result<(), InputError> {
         // Typing that has not gone out yet stops here.
         self.typist.cancel();
+        self.scroll.clear();
         let releases = self.held.drain_release_events();
         if releases.is_empty() {
             return Ok(());
@@ -413,7 +502,7 @@ impl InputSink for SendInputSink {
         tracing::info!(count = releases.len(), "releasing held input");
         let mut inputs = Vec::with_capacity(releases.len());
         for ev in releases {
-            self.to_inputs(ev, &mut inputs);
+            self.push_inputs(ev, &mut inputs);
         }
         submit(&inputs)
     }

@@ -10,6 +10,7 @@
 //! | `abs X Y` | absolute pointer position, in stream pixels |
 //! | `click` | left click |
 //! | `wheel N` | wheel, vertical |
+//! | `scroll DV [DH]` | a trackpad's scroll, in stream pixels (vertical, horizontal) |
 //! | `text WORDS` | type text, as a paste would |
 //! | `paste` | type this computer's clipboard (Ctrl+Alt+Shift+V) |
 //! | `fullscreen` | switch full screen and window (not on Linux) |
@@ -75,6 +76,10 @@ pub fn run_script(
             "wheel" => input.send(InputEvent::Wheel {
                 dv: num(1) as i16,
                 dh: 0,
+            }),
+            "scroll" => input.send(InputEvent::Scroll {
+                dv: num(1) as i16,
+                dh: num(2) as i16,
             }),
             // fullscreen: switch full screen <-> window, as Ctrl-Option-Shift-X.
             "fullscreen" => {

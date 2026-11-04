@@ -45,6 +45,7 @@ use super::render::{Layout, RenderShared};
 use crate::input::InputSender;
 use crate::keymap;
 pub use crate::pointer::PointerState;
+use crate::scroll::{stream_pixels_per_point, Residue};
 
 /// What the view needs, owned by the main thread.
 pub struct Handler {
@@ -66,7 +67,10 @@ pub struct Handler {
     ctrl: bool,
     alt: bool,
     shift: bool,
-    scroll_residue: (f64, f64),
+    /// A trackpad's scroll short of a whole stream pixel, and a wheel's
+    /// short of a whole unit.
+    scroll_residue: Residue,
+    wheel_residue: Residue,
     /// Keys swallowed as the last key of a hotkey chord: their key-up must not
     /// be forwarded either.
     swallowed: HashSet<u16>,
@@ -108,7 +112,8 @@ impl Handler {
             ctrl: false,
             alt: false,
             shift: false,
-            scroll_residue: (0.0, 0.0),
+            scroll_residue: Residue::default(),
+            wheel_residue: Residue::default(),
             swallowed: HashSet::new(),
             holding: false,
             hold_checked: false,
@@ -443,28 +448,34 @@ impl Handler {
         }
     }
 
-    fn scroll(&mut self, event: &NSEvent) {
+    /// `area`: the points the picture is fitted into (the view below the
+    /// notch).
+    fn scroll(&mut self, event: &NSEvent, area: (f64, f64)) {
         if !self.captured() {
             return;
         }
-        // Windows counts 120 per wheel notch. A wheel reports lines; a
-        // trackpad reports points, of which ~40 make a notch's worth.
-        let (per_unit_y, per_unit_x) = if event.hasPreciseScrollingDeltas() {
-            (3.0, 3.0)
+        // The protocol's horizontal wheel is Windows', which runs the other
+        // way.
+        let (dy, dx) = (event.scrollingDeltaY(), -event.scrollingDeltaX());
+        if event.hasPreciseScrollingDeltas() {
+            // A trackpad or a Magic Mouse: the points the content moves,
+            // glide included, sent as the stream's pixels for the host to
+            // scroll as far. Moonlight sends them as notches instead
+            // (`mouse.cpp`), which only the host can size: see
+            // `helio_input::scroll`.
+            let (sw, sh) = self.pointer.lock().stream_size();
+            let per_point = stream_pixels_per_point(area, (sw as f64, sh as f64))
+                .unwrap_or(self.pixels_per_point);
+            let (dv, dh) = self.scroll_residue.whole(dy * per_point, dx * per_point);
+            if dv != 0 || dh != 0 {
+                self.input.scroll(dv, dh);
+            }
         } else {
-            (120.0, 120.0)
-        };
-        let (rx, ry) = self.scroll_residue;
-        let fy = ry + event.scrollingDeltaY() * per_unit_y;
-        let fx = rx + event.scrollingDeltaX() * per_unit_x;
-        let (dv, dh) = (fy.trunc(), fx.trunc());
-        self.scroll_residue = (fx - dh, fy - dv);
-        if dv != 0.0 || dh != 0.0 {
-            self.input.wheel(
-                dv.clamp(i16::MIN as f64, i16::MAX as f64) as i16,
-                // Windows' horizontal wheel runs the other way.
-                (-dh).clamp(i16::MIN as f64, i16::MAX as f64) as i16,
-            );
+            // A wheel, in lines: 120 each, as Windows counts a notch.
+            let (dv, dh) = self.wheel_residue.whole(dy * 120.0, dx * 120.0);
+            if dv != 0 || dh != 0 {
+                self.input.wheel(dv, dh);
+            }
         }
     }
 }
@@ -607,7 +618,8 @@ define_class!(
 
         #[unsafe(method(scrollWheel:))]
         fn scroll_wheel(&self, event: &NSEvent) {
-            self.with(|h| h.scroll(event));
+            let area = self.picture_area();
+            self.with(|h| h.scroll(event, area));
         }
 
         #[unsafe(method(setFrameSize:))]
@@ -656,6 +668,23 @@ impl StreamView {
         self.publish_layout();
     }
 
+    /// Points kept clear at the top (the notch).
+    fn top_inset(&self) -> f64 {
+        // Below the notch: a full-screen window normally sits below it
+        // already, and says so here if it does not.
+        self.ivars()
+            .top_inset_points
+            .get()
+            .max(self.safeAreaInsets().top)
+    }
+
+    /// The points the picture is fitted into: the view below the notch.
+    fn picture_area(&self) -> (f64, f64) {
+        let size = self.bounds().size;
+        let inset = self.top_inset().min(size.height);
+        (size.width, size.height - inset)
+    }
+
     /// Tell the renderer the drawable's pixel size and the notch inset, and
     /// keep the layer's contents scale honest.
     pub fn publish_layout(&self) {
@@ -664,13 +693,7 @@ impl StreamView {
         if let Some(layer) = self.layer() {
             layer.setContentsScale(scale);
         }
-        // Below the notch: a full-screen window normally sits below it
-        // already, and says so here if it does not.
-        let inset = self
-            .ivars()
-            .top_inset_points
-            .get()
-            .max(self.safeAreaInsets().top);
+        let inset = self.top_inset();
         self.ivars().render.set_layout(Layout {
             drawable_w: (size.width * scale).round(),
             drawable_h: (size.height * scale).round(),

@@ -221,9 +221,12 @@ bytes 16-19 frame_id
 Input is sent unreliably on purpose: a retransmission would hold every later
 event back by a round trip. Keys travel as physical scancodes (the host's
 layout applies, as games expect); the mouse as relative motion, or
-absolute stream pixels when the user switches to positions. The host draws
-its pointer into the picture, as Sunshine does, so the pointer the client
-sees is the host's own.
+absolute stream pixels when the user switches to positions. A wheel turns
+in Windows' notches (120 each); a trackpad scrolls by a distance, in stream
+pixels, which the host scrolls as far in its own terms, since only it knows
+how far a notch goes at its scaling (`helio-input/src/scroll.rs`). The host
+draws its pointer into the picture, as Sunshine does, so the pointer the
+client sees is the host's own.
 
 ## Pairing and trust
 

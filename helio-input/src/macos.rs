@@ -7,6 +7,9 @@
 //! character, as it would for its own keyboard. Modifier keys go out as flag
 //! changes, and every key carries the modifiers held, as macOS expects.
 //! Absolute positions are the stream's pixels on the display being streamed.
+//! A trackpad's scroll (`InputEvent::Scroll`) is a distance in those pixels,
+//! posted as that distance in the display's points; a wheel's notches
+//! scroll 30 points each.
 //!
 //! macOS drops posted events silently unless the posting process (for a
 //! command-line Helio Host, the terminal it runs in) has the Accessibility
@@ -50,7 +53,7 @@ pub struct CgEventSink {
     flags: CGEventFlags,
     buttons_down: u8,
     last_click: Option<(Instant, Button, CGPoint, i64)>,
-    /// Scroll left over below a whole pixel.
+    /// Scroll left over below a whole point.
     wheel_rest: (f64, f64),
     /// The user's double-click speed.
     double_click: Duration,
@@ -228,12 +231,11 @@ impl CgEventSink {
         }
     }
 
-    fn wheel(&mut self, dv: i16, dh: i16) {
-        // Windows counts 120 per notch; a notch here scrolls 30 points.
-        const POINTS_PER_UNIT: f64 = 30.0 / 120.0;
-        self.wheel_rest.0 += dv as f64 * POINTS_PER_UNIT;
+    /// `dv`, `dh` in the protocol's directions, `per_unit` points each.
+    fn scroll_points(&mut self, dv: i16, dh: i16, per_unit: f64) {
+        self.wheel_rest.0 += dv as f64 * per_unit;
         // A positive horizontal wheel is "right" on Windows, "left" here.
-        self.wheel_rest.1 -= dh as f64 * POINTS_PER_UNIT;
+        self.wheel_rest.1 -= dh as f64 * per_unit;
         let (v, h) = (self.wheel_rest.0.trunc(), self.wheel_rest.1.trunc());
         if v == 0.0 && h == 0.0 {
             return;
@@ -289,7 +291,13 @@ impl InputSink for CgEventSink {
                 }
                 InputEvent::ButtonDown(b) => self.button(b, true),
                 InputEvent::ButtonUp(b) => self.button(b, false),
-                InputEvent::Wheel { dv, dh } => self.wheel(dv, dh),
+                // Windows counts 120 per notch; a notch here scrolls 30
+                // points.
+                InputEvent::Wheel { dv, dh } => self.scroll_points(dv, dh, 30.0 / 120.0),
+                InputEvent::Scroll { dv, dh } => {
+                    let points_per_pixel = self.bounds.size.width / self.stream.0;
+                    self.scroll_points(dv, dh, points_per_pixel)
+                }
                 InputEvent::Text(c) => self.text(c),
             }
         }

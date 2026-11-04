@@ -69,6 +69,7 @@ it applies), **no** (not built, with the reason), **n/a** (does not apply).
 | Relative mouse by default; "Optimize mouse for remote desktop" sends positions | Relative by default; positions with the mode toggle | done |
 | Mouse mode toggle (Ctrl-Alt-Shift-M) | Same | done |
 | Swap mouse buttons, reverse scrolling | Same, Input settings (imported from Moonlight) | done |
+| A trackpad scrolls in wheel notches; on macOS at most one an event (`mouse.cpp`) | A trackpad scrolls by the distance it moved, which the host turns into its own scrolling at its scaling: a browser on a Windows host moves as far as the fingers did ([measured](benchmarks.md#trackpad-scrolling-2026-11-04)). File Explorer moves only on whole notches, so in steps. A Mac or Linux host has not had a real trackpad | done |
 | Command as the Windows key (option) | Same; always Command on a Mac host | done |
 | Paste the clipboard (Ctrl-Alt-Shift-V) | Same, Unicode, survives 10% burst loss | done |
 | Clipboard sync (Apollo, with its Artemis client: text, when the client asks) | Both ways as you copy: text, images, files and folders; password managers' copies stay put on macOS and Windows, not on Linux ([usage.md](usage.md#sharing-the-clipboard)) | done, beyond Apollo's |

@@ -22,10 +22,9 @@ use x11rb::protocol::xproto::{self, ConnectionExt as _};
 use x11rb::protocol::xtest::ConnectionExt as _;
 use x11rb::rust_connection::RustConnection;
 
-use crate::{HeldSet, InputError, InputSink};
+use crate::scroll::{DEFAULT_LINES, NOTCH};
+use crate::{HeldSet, InputError, InputSink, ScrollDistance};
 
-/// A notch of the wheel, in the protocol's units (Windows' WHEEL_DELTA).
-const NOTCH: i32 = 120;
 /// Key codes borrowed for text, taken in turn so a client still reading the
 /// last one's mapping does not see it change under it.
 const SPARE_KEYS: usize = 4;
@@ -39,6 +38,8 @@ pub struct XTestSink {
     held: HeldSet,
     /// Wheel movement short of a notch, (vertical, horizontal).
     wheel: (i32, i32),
+    /// A trackpad's distances, as wheel units.
+    scroll: ScrollDistance,
     spare: Vec<u8>,
     next_spare: usize,
     keysyms_per_keycode: u8,
@@ -96,6 +97,7 @@ impl XTestSink {
             picture,
             held: HeldSet::new(),
             wheel: (0, 0),
+            scroll: ScrollDistance::new(),
             spare,
             next_spare: 0,
             keysyms_per_keycode: per,
@@ -216,6 +218,30 @@ impl XTestSink {
         std::thread::sleep(Duration::from_millis(4));
         Ok(())
     }
+
+    /// Wheel units as clicks of X's wheel buttons (4 up, 5 down, 6 left,
+    /// 7 right), the rest of a notch kept for the next.
+    fn wheel(&mut self, dv: i32, dh: i32) -> Result<(), InputError> {
+        self.wheel.0 += dv;
+        self.wheel.1 += dh;
+        while self.wheel.0 >= NOTCH {
+            self.click(4)?;
+            self.wheel.0 -= NOTCH;
+        }
+        while self.wheel.0 <= -NOTCH {
+            self.click(5)?;
+            self.wheel.0 += NOTCH;
+        }
+        while self.wheel.1 >= NOTCH {
+            self.click(7)?;
+            self.wheel.1 -= NOTCH;
+        }
+        while self.wheel.1 <= -NOTCH {
+            self.click(6)?;
+            self.wheel.1 += NOTCH;
+        }
+        Ok(())
+    }
 }
 
 impl InputSink for XTestSink {
@@ -234,26 +260,15 @@ impl InputSink for XTestSink {
                 }
                 InputEvent::ButtonDown(b) => self.button(b, true)?,
                 InputEvent::ButtonUp(b) => self.button(b, false)?,
-                InputEvent::Wheel { dv, dh } => {
-                    // X's wheel is buttons: 4 up, 5 down, 6 left, 7 right.
-                    self.wheel.0 += dv as i32;
-                    self.wheel.1 += dh as i32;
-                    while self.wheel.0 >= NOTCH {
-                        self.click(4)?;
-                        self.wheel.0 -= NOTCH;
-                    }
-                    while self.wheel.0 <= -NOTCH {
-                        self.click(5)?;
-                        self.wheel.0 += NOTCH;
-                    }
-                    while self.wheel.1 >= NOTCH {
-                        self.click(7)?;
-                        self.wheel.1 -= NOTCH;
-                    }
-                    while self.wheel.1 <= -NOTCH {
-                        self.click(6)?;
-                        self.wheel.1 += NOTCH;
-                    }
+                InputEvent::Wheel { dv, dh } => self.wheel(dv as i32, dh as i32)?,
+                InputEvent::Scroll { dv, dh } => {
+                    // Notches at 100 of the screen's pixels each
+                    // (`crate::scroll`): Chromium's figure for Windows, not
+                    // measured on an X desktop.
+                    let scale = self.screen.0 as f64 / self.picture.2.max(1) as f64;
+                    let lines = (DEFAULT_LINES, DEFAULT_LINES);
+                    let (v, h) = self.scroll.wheel_units(dv, dh, scale, lines);
+                    self.wheel(v, h)?;
                 }
                 InputEvent::Text(c) => self.text(c)?,
             }
@@ -264,6 +279,7 @@ impl InputSink for XTestSink {
     fn release_all(&mut self) -> Result<(), InputError> {
         let events = self.held.drain_release_events();
         self.wheel = (0, 0);
+        self.scroll.clear();
         self.inject(&events)
     }
 }

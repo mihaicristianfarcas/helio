@@ -15,6 +15,7 @@ pub mod pad;
 pub mod pair;
 pub mod pointer;
 pub mod priority;
+pub mod scroll;
 pub mod session;
 pub mod stats;
 pub mod store;

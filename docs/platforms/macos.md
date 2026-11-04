@@ -55,7 +55,9 @@ measurements here are from an M4 Pro).
   tool usually takes the release of ⌘⇧, so the stream reads the keyboard's
   state on its next event, and takes the pointer back once no other window
   is under it. Command can be forwarded as the Windows key
-  (**Settings > Input**); against a Mac host it always is.
+  (**Settings > Input**); against a Mac host it always is. A wheel goes to
+  the host in notches; a trackpad or a Magic Mouse as the distance the
+  content moved, glide included, which the host scrolls as far.
 - **Controllers.** GameController, with the Xbox button read from the pad's
   HID reports, as Moonlight does; rumble through the pad's haptics. macOS
   26 also opens its Games overlay on that button, as it does with Moonlight.
@@ -291,6 +293,9 @@ seconds and prints each channel's level.
   wrong guess costs a keyframe, as before.
 - **The pointer** is in the picture: ScreenCaptureKit draws it, in its
   real shape, and hides it when an app does.
+- **Scrolling**: a client's trackpad scrolls the Mac by the distance it
+  moved, in the display's points; a wheel notch scrolls 30 points. Not
+  verified yet: a trackpad's scrolling has not been run against a Mac host.
 - **HDR** (macOS 15 or later, Apple silicon): for a client that asks, the
   virtual display is an HDR one (a `CGVirtualDisplayMode` with a transfer
   function, measured to give the screen 5x SDR white of headroom),

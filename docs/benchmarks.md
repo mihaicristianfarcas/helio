@@ -421,3 +421,54 @@ at this load, where the GPU's clocks are up anyway (full power is for light
 scenes, which this did not measure). Fewer frames were shown than on
 2026-09-28 (116.2 of 118.5) with both versions alike: the VPN path delivers
 frames less evenly. Not measured: round trip and loss over the LAN.
+
+## Trackpad scrolling (2026-11-04)
+
+How far a Mac's trackpad scrolls a Windows host. A gesture recorded on the
+MacBook Pro (795 points in 1.09 s, fingers and glide, 108 events) was replayed
+with its timing as scripted input (`HELIO_TEST_INPUT`) through a real stream:
+3024x1890 at 60 fps, HEVC, over a VPN on Wi-Fi, to the Windows PC with that
+display at 225%, onto a page in Microsoft Edge that logged its position. A
+point is two stream pixels at this size, so as far as the fingers is 1590 stream
+pixels.
+
+| Input | Sent | Page moved, in stream pixels | Against what was sent |
+|---|---|---|---|
+| The gesture at 3 wheel units a point, as a trackpad went until this was measured | 2385 units | 4472 | 2.81× the fingers |
+| The gesture as a distance | 1590 pixels | 1590 | 1.00× |
+| Up, one event | 450 pixels | 450 | 1.00× |
+| 100 events of one pixel, 16 ms apart | 100 pixels | 99 | 0.99× |
+| Right, then left, one event each | 900 pixels each | 900 each | 1.00× |
+| Down, one event | 2250 pixels | 1697 | 0.75× |
+
+A wheel notch (120 units) moved the page 100 CSS pixels, Chromium's figure. The
+one large event falling short is not explained; the largest event in the
+recording is 45 points, 90 stream pixels.
+
+What apps do with parts of a notch, measured with wheel messages sent on the
+same PC with its own display at 100%:
+
+| App | Input | Result |
+|---|---|---|
+| Microsoft Edge | 1200 units in steps of 1 to 120 | 998 to 1002 CSS pixels, whichever the step |
+| Windows' Settings | Steps of 5 units, 170 ms apart | Moved at every step |
+| File Explorer | Steps of 5 units, 180 ms apart, 300 units in all | Moved at 120 and at 240 units, nowhere else |
+
+Recorded gestures replayed into File Explorer, in the units each path gives:
+
+| Gesture | Path | Units | Notches in them | Explorer moved, in notches |
+|---|---|---|---|---|
+| 795 points | 3 units a point | 2385 | 19.9 | 18 |
+| 795 points | Distance, display at 175% | 1090 | 9.1 | 8 |
+| 795 points | Distance, display at 225% | 848 | 7.1 | 6 |
+| 37 points, gentle, 2.9 s | 3 units a point | 111 | 0.9 | 1 |
+| 37 points, gentle, 2.9 s | Distance, display at 175% | 50 | 0.4 | 1 |
+| 37 points, gentle, 2.9 s | Distance, display at 225% | 39 | 0.3 | 0 |
+
+The gentle gestures ran one after another. Explorer appears to carry parts of a
+notch from one gesture to the next, which would be how a gesture under a notch
+moved it a whole one, and why the same small movement sometimes moves it and
+sometimes does not.
+
+Not measured: other apps that use whole notches, Explorer's horizontal
+scrolling, and a Mac or Linux host.
