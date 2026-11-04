@@ -13,15 +13,24 @@
 #
 # - macOS (this Mac): hero/macos/wall.swift shows the wallpaper as a window
 #   behind Helio, System Events places the window, screencapture -R takes the
-#   screen there. Wallpaper: macOS Tahoe's light one.
-# - Windows (a VM): hero/windows/. tools/set-resolution.ps1 then scale.ps1 for
-#   2880x1800 at 200%, wall.ps1 and theme.ps1 -Light 0, then hero.ps1 hides the
-#   taskbar and icons and takes the screen. Stop the guest agent (vdservice)
-#   first, or it fits the display to its window. With no GPU, Windows cannot
-#   draw acrylic: the backdrop falls back to a solid one, which is why Windows
-#   itself is put in dark mode. Wallpaper: Windows 11's Bloom.
-# - agent-screen.png (2560x1600), behind the agent's window on /agents: the same
-#   VM, hero/windows/agentshot.ps1, the desktop the sample session talks about.
+#   screen there, 1350x900 points with the window 115 and 80 points in.
+#   Wallpaper: macOS Tahoe's light one, the middle 16:9 of
+#   NeptuneOneWallpaper.appex's TahoeLight.heic.
+# - Windows (a PC with a GPU, which acrylic needs; with SudoVDA installed, as
+#   hosting installs it): hero/windows/, each script run in the signed-in
+#   session (tools/host-run.ps1 -Limited, from SSH), from C:\pp\hero holding
+#   a release helio-app.exe beside FFmpeg's DLLs. hero-display.rs, built as an
+#   example of helio-display, makes a 2880x1800 virtual display the whole
+#   desktop as a stream does, until C:\pp\hero\done exists; check that it
+#   says ACTIVE and that the screen is 2880x1800 before going on. Then
+#   scale.ps1 for 200%, wall.ps1 for the wallpaper, and hero.ps1 hides the
+#   taskbar and icons and takes the screen. Answer the firewall's question
+#   about the new helio-app.exe first, and leave nothing else on the screen:
+#   the picture is the screen. Then the wallpaper as it was, and the done file
+#   puts the monitors back. Wallpaper: Windows 11's light Bloom (img0.jpg).
+# - agent-screen.png (2560x1600), behind the agent's window on /agents: a
+#   Windows VM, hero/windows/agentshot.ps1, the desktop the sample session
+#   talks about.
 # - agent.png: as macos.png, with HELIO_UI_DEMO=agents=sample-ask,size=1120x740
 #   and HELIO_UI_DEMO_SCREEN=agent-screen.png, so the window shows that screen.
 set -euo pipefail
