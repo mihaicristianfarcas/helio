@@ -117,7 +117,8 @@ portal`).
   it on a wired network or a generous bitrate.
 - **Input.** XTest: keys by position, text by the layout's own keys (spare
   key codes remapped only for characters the layout lacks), the wheel as
-  buttons 4–7 (`helio-input/src/x11.rs`).
+  buttons 4–7, and a client's trackpad as those buttons too, a notch per
+  100 of the screen's pixels (`helio-input/src/x11.rs`).
 - **Sound.** The default output's monitor through libpulse-simple, which
   PipeWire serves too; stereo.
 - The screensaver and DPMS are held off during a session.
@@ -131,7 +132,9 @@ session with a screen cast in it (GNOME, KDE), or a ScreenCast session alone
 where the desktop has no RemoteDesktop portal (wlroots: sway, Hyprland — no
 input from the client there). Frames come over PipeWire with the pointer
 drawn in by the compositor; keys go as Linux key codes, text as keysyms,
-the pointer as the portal's motion and buttons.
+the pointer as the portal's motion and buttons, the wheel and a client's
+trackpad as its wheel steps (a trackpad's at a step per 100 of the
+desktop's pixels).
 
 The first time, the desktop asks whoever is at the host — Helio Host asks as it
 starts, not when a client connects. On GNOME, switch on **Allow Remote
@@ -217,6 +220,11 @@ Data and logs are in `~/.config/helio-host`.
   the window).
 - The wheel under Wayland: the nested test desktop gives X clients no wheel
   events at all, so the portal's scroll is sent but unseen.
+- How far a client's trackpad scrolls a Linux host: a notch per 100 of the
+  desktop's pixels is Chromium's figure for Windows. Scripted scrolls gave
+  that many notches on an X screen (`tools/linux/loopback-test`, in a
+  container); the Wayland path is unit-tested only, and no real trackpad or
+  Linux app has been measured.
 - wlroots desktops (Ubuntu 24.04's wlroots portal needs a GPU to share the
   screen, and the container has none).
 

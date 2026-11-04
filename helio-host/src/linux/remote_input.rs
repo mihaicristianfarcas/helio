@@ -3,9 +3,12 @@
 //! input (`kwin`) all take the same things — Linux key codes, keysyms for
 //! text, buttons, wheel notches, the pointer in the stream's coordinates —
 //! so the client's events are mapped once, here, into [`Op`]s, and each
-//! backend sends them its way.
+//! backend sends them its way. A trackpad's scroll, a distance, becomes
+//! notches at 100 of the desktop's pixels each (`helio_input::scroll`):
+//! Chromium's figure for Windows, not measured on a Linux desktop.
 
-use helio_input::{HeldSet, InputError, InputSink};
+use helio_input::scroll::{DEFAULT_LINES, NOTCH};
+use helio_input::{HeldSet, InputError, InputSink, ScrollDistance};
 use helio_proto::input::{Button, InputEvent};
 
 /// One thing to tell the desktop.
@@ -23,9 +26,6 @@ pub enum Op {
     /// Wheel notches; `true` for the vertical wheel, positive down or right.
     Scroll(bool, i32),
 }
-
-/// A notch of the wheel, in the protocol's units (Windows' WHEEL_DELTA).
-const NOTCH: i32 = 120;
 
 /// Where a backend's ops go, in order; an error once it has gone.
 pub type Deliver = Box<dyn FnMut(Vec<Op>) -> Result<(), InputError> + Send>;
@@ -53,6 +53,7 @@ impl RemoteSink {
                 picture,
                 size,
                 wheel: (0, 0),
+                scroll: ScrollDistance::new(),
             },
             held: HeldSet::new(),
         }
@@ -75,6 +76,7 @@ impl InputSink for RemoteSink {
     fn release_all(&mut self) -> Result<(), InputError> {
         let events = self.held.drain_release_events();
         self.map.wheel = (0, 0);
+        self.map.scroll.clear();
         self.inject(&events)
     }
 }
@@ -87,6 +89,8 @@ struct Mapping {
     size: (u32, u32),
     /// Wheel movement short of a notch, (vertical, horizontal).
     wheel: (i32, i32),
+    /// A trackpad's distances, as wheel units.
+    scroll: ScrollDistance,
 }
 
 impl Mapping {
@@ -118,20 +122,13 @@ impl Mapping {
                 };
                 out.push(Op::Button(code, matches!(ev, InputEvent::ButtonDown(_))));
             }
-            InputEvent::Wheel { dv, dh } => {
-                // The protocol's wheel is Windows': up is positive; the
-                // desktop's is Wayland's: down is.
-                self.wheel.0 += dv as i32;
-                self.wheel.1 += dh as i32;
-                let (v, h) = (self.wheel.0 / NOTCH, self.wheel.1 / NOTCH);
-                self.wheel.0 -= v * NOTCH;
-                self.wheel.1 -= h * NOTCH;
-                if v != 0 {
-                    out.push(Op::Scroll(true, -v));
-                }
-                if h != 0 {
-                    out.push(Op::Scroll(false, h));
-                }
+            InputEvent::Wheel { dv, dh } => self.notches(dv as i32, dh as i32, out),
+            InputEvent::Scroll { dv, dh } => {
+                // The desktop's pixels per stream pixel.
+                let scale = self.size.0 as f64 / self.picture.2.max(1) as f64;
+                let lines = (DEFAULT_LINES, DEFAULT_LINES);
+                let (v, h) = self.scroll.wheel_units(dv, dh, scale, lines);
+                self.notches(v, h, out);
             }
             InputEvent::Text(c) => {
                 if let Some(sym) = keysym(c) {
@@ -139,6 +136,23 @@ impl Mapping {
                     out.push(Op::Keysym(sym, false));
                 }
             }
+        }
+    }
+
+    /// Wheel units as whole notches, the rest kept for the next.
+    fn notches(&mut self, dv: i32, dh: i32, out: &mut Vec<Op>) {
+        // The protocol's wheel is Windows': up is positive; the desktop's is
+        // Wayland's: down is.
+        self.wheel.0 += dv;
+        self.wheel.1 += dh;
+        let (v, h) = (self.wheel.0 / NOTCH, self.wheel.1 / NOTCH);
+        self.wheel.0 -= v * NOTCH;
+        self.wheel.1 -= h * NOTCH;
+        if v != 0 {
+            out.push(Op::Scroll(true, -v));
+        }
+        if h != 0 {
+            out.push(Op::Scroll(false, h));
         }
     }
 }
@@ -165,6 +179,7 @@ mod tests {
             picture: (0, 40, 1280, 720),
             size: (1920, 1080),
             wheel: (0, 0),
+            scroll: ScrollDistance::new(),
         }
     }
 
@@ -202,5 +217,18 @@ mod tests {
                 Op::Keysym(0xE9, false),
             ]
         );
+    }
+
+    #[test]
+    fn a_trackpad_scrolls_a_notch_per_100_desktop_pixels() {
+        // 67 stream pixels are 100.5 of the 1920-wide desktop's: one notch,
+        // down, and half a pixel's worth kept.
+        let mut m = map();
+        let mut out = Vec::new();
+        m.ops(InputEvent::Scroll { dv: -67, dh: 0 }, &mut out);
+        assert_eq!(out, [Op::Scroll(true, 1)]);
+        out.clear();
+        m.ops(InputEvent::Scroll { dv: 0, dh: 66 }, &mut out);
+        assert!(out.is_empty(), "99 pixels are short of a notch");
     }
 }

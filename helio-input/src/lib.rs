@@ -24,6 +24,10 @@ pub mod macos;
 pub mod evdev;
 pub mod repeat;
 pub use repeat::{KeyRepeat, RepeatRate};
+/// A trackpad's distances as wheel notches (pure; the Windows and Linux
+/// sinks').
+pub mod scroll;
+pub use scroll::ScrollDistance;
 /// Which key types each keysym on a layout (pure; the X11 sink's and
 /// KWin's text).
 pub mod typing;
@@ -125,10 +129,11 @@ impl HeldSet {
                 }
             }
             InputEvent::ButtonUp(b) => self.buttons.retain(|&x| x != b),
-            // Motion and wheel carry no held state.
+            // Motion and scrolling carry no held state.
             InputEvent::MouseMoveRel { .. }
             | InputEvent::MouseMoveAbs { .. }
             | InputEvent::Wheel { .. }
+            | InputEvent::Scroll { .. }
             | InputEvent::Text(_) => {}
         }
     }

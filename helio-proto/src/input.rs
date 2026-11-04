@@ -29,6 +29,7 @@ const TAG_BUTTON_UP: u8 = 5;
 const TAG_WHEEL: u8 = 6;
 // Tag 7 is HeldState, reserved by v2 design §4.3 and deliberately not implemented.
 const TAG_TEXT: u8 = 8;
+const TAG_SCROLL: u8 = 9;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Button {
@@ -79,7 +80,20 @@ pub enum InputEvent {
     },
     ButtonDown(Button),
     ButtonUp(Button),
+    /// A wheel turned, in notches of 120 (Windows' `WHEEL_DELTA`, so a
+    /// Windows host takes it as it is): `dv` positive away from the user
+    /// (up), `dh` positive to the right. Less than 120 is part of a notch,
+    /// from a wheel that reports finer.
     Wheel {
+        dv: i16,
+        dh: i16,
+    },
+    /// Scrolled by a distance: the client's trackpad (or Magic Mouse) moved
+    /// the content this many stream pixels, in `Wheel`'s directions. The host
+    /// scrolls it as far, in its own terms (`helio_input::ScrollDistance`),
+    /// which only it knows: a wheel notch's reach on the host depends on its
+    /// display scaling and its lines-per-notch setting.
+    Scroll {
         dv: i16,
         dh: i16,
     },
@@ -171,6 +185,12 @@ fn encode_event(ev: InputEvent, out: &mut [u8]) -> usize {
             out[1..5].copy_from_slice(&(c as u32).to_le_bytes());
             5
         }
+        InputEvent::Scroll { dv, dh } => {
+            out[0] = TAG_SCROLL;
+            out[1..3].copy_from_slice(&dv.to_le_bytes());
+            out[3..5].copy_from_slice(&dh.to_le_bytes());
+            5
+        }
     }
 }
 
@@ -211,6 +231,13 @@ fn decode_event(body: &[u8]) -> Option<(InputEvent, usize)> {
                 u32::from_le_bytes([*body.get(1)?, *body.get(2)?, *body.get(3)?, *body.get(4)?]);
             (InputEvent::Text(char::from_u32(code)?), 5)
         }
+        TAG_SCROLL => (
+            InputEvent::Scroll {
+                dv: i16_at(1)?,
+                dh: i16_at(3)?,
+            },
+            5,
+        ),
         _ => return None,
     };
     Some(ev)
@@ -314,6 +341,14 @@ pub fn encode(
         .expect("input header is a fixed, valid shape");
     out[..HEADER_LEN].copy_from_slice(&hdr);
     n
+}
+
+/// The whole units in `v`, toward zero, where a billionth short counts as
+/// whole: a hundred pixels at 1.2 units each add up to 119.99999999999997,
+/// and the 120th unit should not wait for the next pixel. For a sender (or
+/// a host) turning fractional scrolling into the i16s events carry.
+pub fn whole_units(v: f64) -> f64 {
+    (v + v.signum() * 1e-9).trunc()
 }
 
 /// Decode the body of an already-parsed input datagram.
@@ -837,6 +872,21 @@ mod tests {
     }
 
     #[test]
+    fn a_scroll_arrives_as_a_scroll_not_a_wheel() {
+        // The same numbers mean pixels in one and parts of a notch in the
+        // other, so the host must be able to tell them apart.
+        let events = [
+            InputEvent::Scroll { dv: -37, dh: 2 },
+            InputEvent::Wheel { dv: -37, dh: 2 },
+        ];
+        let mut wire = [0u8; MAX_INPUT_LEN];
+        let n = encode(&events, 1, 0, 0, &mut wire);
+        let batch = decode(&wire[HEADER_LEN..n], 1, 0).expect("decodes");
+        assert_eq!(batch.events(), &events);
+        assert_eq!(events[0].permission(), crate::permission::MOUSE);
+    }
+
+    #[test]
     fn a_full_ring_fits_in_max_input_len() {
         // Every event at its largest encoding. If this overflows, MAX_INPUT_LEN
         // is wrong and encode() would panic on a slice bound in the field.
@@ -944,6 +994,10 @@ mod tests {
             InputEvent::Wheel {
                 dv: i16::MAX,
                 dh: i16::MIN,
+            },
+            InputEvent::Scroll {
+                dv: i16::MIN,
+                dh: i16::MAX,
             },
         ] {
             let mut buf = [0u8; 8];

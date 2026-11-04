@@ -18,6 +18,10 @@ tracing = "0.1"
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.61", features = [
     "Win32_Foundation",
+    # MonitorFromPoint and GetDpiForMonitor: a trackpad's scroll, by the
+    # streamed display's scaling.
+    "Win32_Graphics_Gdi",
+    "Win32_UI_HiDpi",
     "Win32_UI_Input_KeyboardAndMouse",
     # Only for XBUTTON1/XBUTTON2, which 0.61 keeps here rather than beside the
     # MOUSEEVENTF_* flags they pair with.
