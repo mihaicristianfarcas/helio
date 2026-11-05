@@ -141,7 +141,7 @@ hide most of it.
   ```powershell
   powershell -ExecutionPolicy Bypass -File tools\gen-nvenc-import-libs.ps1
   # then, persisted for this user already:
-  $env:NVIDIA_VIDEO_CODEC_SDK_PATH = "$env:LOCALAPPDATA\pingpong\nvenc-libs"
+  $env:NVIDIA_VIDEO_CODEC_SDK_PATH = "$env:LOCALAPPDATA\helio\nvenc-libs"
   ```
 
 ## Reproducing
@@ -150,7 +150,7 @@ Unlike the capture spikes, this one needs **no** interactive desktop session —
 NVENC does not touch the desktop, so plain SSH is fine.
 
 ```powershell
-cd C:\path\to\pingpong\spikes\nvenc-min
+cd C:\path\to\helio\spikes\nvenc-min
 cargo build --release
 .\target\release\nvenc-min.exe
 

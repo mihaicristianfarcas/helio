@@ -1,0 +1,273 @@
+//! Wayland: the client's input as a desktop's remote-input calls. The
+//! portal (`portal`), mutter's own remote desktop (`mutter`) and KWin's fake
+//! input (`kwin`) all take the same things — Linux key codes, keysyms for
+//! text, buttons, wheel notches, the pointer in the stream's coordinates —
+//! so the client's events are mapped once, here, into [`Op`]s, and each
+//! backend sends them its way. A trackpad's scroll, a distance, becomes
+//! notches at 120 of the desktop's logical pixels each
+//! (`helio_input::scroll`). KWin and the portal say the stream's size in those
+//! pixels; mutter takes its pointer in the stream's own, and its monitor's
+//! scale is settled only once the session has started, so it hands that over
+//! when it knows it ([`RemoteSink::scaled_by`]).
+
+use std::sync::{Arc, OnceLock};
+
+use helio_input::scroll::{LINUX_NOTCH_PIXELS, NOTCH};
+use helio_input::{HeldSet, InputError, InputSink, ScrollDistance};
+use helio_proto::input::{Button, InputEvent};
+
+/// One thing to tell the desktop.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Op {
+    /// A Linux key code, down or up.
+    Key(i32, bool),
+    /// A keysym (text), down or up.
+    Keysym(i32, bool),
+    Motion(f64, f64),
+    /// In the stream's own (logical) coordinates.
+    Absolute(f64, f64),
+    /// A Linux button code (BTN_*), down or up.
+    Button(i32, bool),
+    /// Wheel notches; `true` for the vertical wheel, positive down or right.
+    Scroll(bool, i32),
+}
+
+/// Where a backend's ops go, in order; an error once it has gone.
+pub type Deliver = Box<dyn FnMut(Vec<Op>) -> Result<(), InputError> + Send>;
+
+/// The client's input, as a desktop's remote-input calls.
+pub struct RemoteSink {
+    deliver: Deliver,
+    map: Mapping,
+    held: HeldSet,
+}
+
+impl RemoteSink {
+    /// `picture`: where the picture sits in the stream (x, y, w, h);
+    /// `size`: the shared screen in the desktop's coordinates, when the
+    /// desktop says (else the picture's).
+    pub fn new(
+        deliver: Deliver,
+        picture: (u32, u32, u32, u32),
+        size: Option<(u32, u32)>,
+    ) -> RemoteSink {
+        let size = size.unwrap_or((picture.2, picture.3));
+        RemoteSink {
+            deliver,
+            map: Mapping {
+                picture,
+                size,
+                monitor_scale: None,
+                wheel: (0, 0),
+                scroll: ScrollDistance::new(),
+            },
+            held: HeldSet::new(),
+        }
+    }
+
+    /// `scale`, once set, is how many stream pixels a logical pixel takes
+    /// where `size` does not say; until then, one.
+    pub fn scaled_by(mut self, scale: Arc<OnceLock<f64>>) -> RemoteSink {
+        self.map.monitor_scale = Some(scale);
+        self
+    }
+}
+
+impl InputSink for RemoteSink {
+    fn inject(&mut self, events: &[InputEvent]) -> Result<(), InputError> {
+        let mut ops = Vec::with_capacity(events.len());
+        for &ev in events {
+            self.held.observe(ev);
+            self.map.ops(ev, &mut ops);
+        }
+        if ops.is_empty() {
+            return Ok(());
+        }
+        (self.deliver)(ops)
+    }
+
+    fn release_all(&mut self) -> Result<(), InputError> {
+        let events = self.held.drain_release_events();
+        self.map.wheel = (0, 0);
+        self.map.scroll.clear();
+        self.inject(&events)
+    }
+}
+
+/// Stream pixels and scancodes to the desktop's terms. Pure, so tested.
+struct Mapping {
+    /// Where the picture sits in the stream (x, y, w, h).
+    picture: (u32, u32, u32, u32),
+    /// The shared screen in the desktop's coordinates.
+    size: (u32, u32),
+    /// The monitor's scale, where `size` is not in logical pixels.
+    monitor_scale: Option<Arc<OnceLock<f64>>>,
+    /// Wheel movement short of a notch, (vertical, horizontal).
+    wheel: (i32, i32),
+    /// A trackpad's distances, as wheel units.
+    scroll: ScrollDistance,
+}
+
+impl Mapping {
+    fn ops(&mut self, ev: InputEvent, out: &mut Vec<Op>) {
+        match ev {
+            InputEvent::KeyDown(sc) | InputEvent::KeyUp(sc) => {
+                if let Some(code) = helio_input::evdev::key_code(sc) {
+                    out.push(Op::Key(code as i32, matches!(ev, InputEvent::KeyDown(_))));
+                }
+            }
+            InputEvent::MouseMoveRel { dx, dy } => out.push(Op::Motion(dx as f64, dy as f64)),
+            InputEvent::MouseMoveAbs { x, y } => {
+                let (px, py, pw, ph) = self.picture;
+                let (sw, sh) = self.size;
+                let map = |v: u16, p: u32, len: u32, s: u32| {
+                    let v = (v as f64 - p as f64).clamp(0.0, len.max(1) as f64 - 1.0);
+                    v * s as f64 / len.max(1) as f64
+                };
+                out.push(Op::Absolute(map(x, px, pw, sw), map(y, py, ph, sh)));
+            }
+            InputEvent::ButtonDown(b) | InputEvent::ButtonUp(b) => {
+                // BTN_LEFT, BTN_RIGHT, BTN_MIDDLE, BTN_SIDE, BTN_EXTRA.
+                let code = match b {
+                    Button::Left => 0x110,
+                    Button::Right => 0x111,
+                    Button::Middle => 0x112,
+                    Button::X1 => 0x113,
+                    Button::X2 => 0x114,
+                };
+                out.push(Op::Button(code, matches!(ev, InputEvent::ButtonDown(_))));
+            }
+            InputEvent::Wheel { dv, dh } => self.notches(dv as i32, dh as i32, out),
+            InputEvent::Scroll { dv, dh } => {
+                // The desktop's logical pixels per stream pixel.
+                let monitor_scale = self.monitor_scale.as_ref().and_then(|s| s.get());
+                let scale = self.size.0 as f64
+                    / self.picture.2.max(1) as f64
+                    / monitor_scale.copied().unwrap_or(1.0);
+                let (v, h) = self.scroll.wheel_units(dv, dh, scale, LINUX_NOTCH_PIXELS);
+                self.notches(v, h, out);
+            }
+            InputEvent::Text(c) => {
+                if let Some(sym) = keysym(c) {
+                    out.push(Op::Keysym(sym, true));
+                    out.push(Op::Keysym(sym, false));
+                }
+            }
+        }
+    }
+
+    /// Wheel units as whole notches, the rest kept for the next.
+    fn notches(&mut self, dv: i32, dh: i32, out: &mut Vec<Op>) {
+        // The protocol's wheel is Windows': up is positive; the desktop's is
+        // Wayland's: down is.
+        self.wheel.0 += dv;
+        self.wheel.1 += dh;
+        let (v, h) = (self.wheel.0 / NOTCH, self.wheel.1 / NOTCH);
+        self.wheel.0 -= v * NOTCH;
+        self.wheel.1 -= h * NOTCH;
+        if v != 0 {
+            out.push(Op::Scroll(true, -v));
+        }
+        if h != 0 {
+            out.push(Op::Scroll(false, h));
+        }
+    }
+}
+
+/// The X keysym that types `c`.
+fn keysym(c: char) -> Option<i32> {
+    let cp = c as u32;
+    Some(match c {
+        '\n' | '\r' => 0xFF0D,
+        '\t' => 0xFF09,
+        _ if cp < 0x20 || cp == 0x7F => return None,
+        _ if cp <= 0x7E || (0xA0..=0xFF).contains(&cp) => cp as i32,
+        _ => (0x0100_0000 | cp) as i32,
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn map() -> Mapping {
+        // A 1920x1080 desktop, letterboxed into a 1280x800 stream.
+        Mapping {
+            picture: (0, 40, 1280, 720),
+            size: (1920, 1080),
+            monitor_scale: None,
+            wheel: (0, 0),
+            scroll: ScrollDistance::new(),
+        }
+    }
+
+    #[test]
+    fn pointer_lands_where_it_points() {
+        let mut out = Vec::new();
+        map().ops(InputEvent::MouseMoveAbs { x: 640, y: 400 }, &mut out);
+        assert_eq!(out, [Op::Absolute(960.0, 540.0)]);
+        out.clear();
+        map().ops(InputEvent::MouseMoveAbs { x: 10, y: 5 }, &mut out);
+        assert_eq!(
+            out,
+            [Op::Absolute(15.0, 0.0)],
+            "above the picture: its top edge"
+        );
+    }
+
+    #[test]
+    fn keys_buttons_wheel_and_text() {
+        let mut m = map();
+        let mut out = Vec::new();
+        m.ops(InputEvent::KeyDown(0x1E), &mut out);
+        m.ops(InputEvent::ButtonUp(Button::Right), &mut out);
+        m.ops(InputEvent::Wheel { dv: 60, dh: 0 }, &mut out);
+        m.ops(InputEvent::Wheel { dv: 60, dh: -240 }, &mut out);
+        m.ops(InputEvent::Text('é'), &mut out);
+        assert_eq!(
+            out,
+            [
+                Op::Key(30, true),
+                Op::Button(0x111, false),
+                Op::Scroll(true, -1),
+                Op::Scroll(false, -2),
+                Op::Keysym(0xE9, true),
+                Op::Keysym(0xE9, false),
+            ]
+        );
+    }
+
+    #[test]
+    fn a_trackpad_scrolls_a_notch_per_120_desktop_pixels() {
+        // 80 stream pixels are 120 of the 1920-wide desktop's: one notch, down.
+        let mut m = map();
+        let mut out = Vec::new();
+        m.ops(InputEvent::Scroll { dv: -80, dh: 0 }, &mut out);
+        assert_eq!(out, [Op::Scroll(true, 1)]);
+        out.clear();
+        m.ops(InputEvent::Scroll { dv: 0, dh: 79 }, &mut out);
+        assert!(out.is_empty(), "118.5 pixels are short of a notch");
+    }
+
+    #[test]
+    fn a_monitor_at_200_percent_takes_twice_the_stream_pixels_a_notch() {
+        // Mutter's: the stream's size is the picture's, scale settled later.
+        let scale = Arc::new(OnceLock::new());
+        let mut m = map();
+        m.size = (m.picture.2, m.picture.3);
+        m.monitor_scale = Some(scale.clone());
+        let mut out = Vec::new();
+        m.ops(InputEvent::Scroll { dv: -120, dh: 0 }, &mut out);
+        assert_eq!(
+            out,
+            [Op::Scroll(true, 1)],
+            "until it is settled, a scale of 1"
+        );
+        out.clear();
+        scale.set(2.0).unwrap();
+        m.ops(InputEvent::Scroll { dv: -239, dh: 0 }, &mut out);
+        assert!(out.is_empty(), "119.5 logical pixels are short of a notch");
+        m.ops(InputEvent::Scroll { dv: -1, dh: 0 }, &mut out);
+        assert_eq!(out, [Op::Scroll(true, 1)]);
+    }
+}

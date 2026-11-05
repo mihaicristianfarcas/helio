@@ -1,20 +1,25 @@
 ---
-//! Section navigation that hides on downward scroll and returns upward.
-//! Restoring the page resets it; menu and keyboard focus keep it visible.
+//! Section navigation, held at the top of the window.
+//! Sections live on the home page: from another page their links go there.
 import Logo from './Logo.astro';
 import { REPO } from '../lib/repo';
+
+const base = import.meta.env.BASE_URL.replace(/\/?$/, '/');
+const home = Astro.url.pathname.replace(/\/?$/, '/') === base ? '' : base;
+const agents = `${base}agents/`;
 ---
 
 <header class="nav" data-nav>
+  <canvas class="strip" data-sky-strip aria-hidden="true"></canvas>
   <div class="wrap bar">
-    <a href="#top" class="home" aria-label="pingpong, top of the page"><Logo /></a>
+    <a href={home ? base : '#top'} class="home" aria-label={home ? 'Helio, home page' : 'Helio, top of the page'}><Logo /></a>
     <button type="button" class="menu" aria-expanded="false" aria-controls="sections" data-menu>Menu</button>
     <nav id="sections" aria-label="Sections">
-      <a href="#features">Features</a>
-      <a href="#latency">Latency</a>
-      <a href="#agents">AI agents</a>
-      <a href="#platforms">Platforms</a>
-      <a href="#faq">FAQ</a>
+      <a href={`${home}#features`}>Features</a>
+      <a href={`${home}#latency`}>Latency</a>
+      <a href={agents} aria-current={home ? 'page' : undefined}>AI agents</a>
+      <a href={`${home}#platforms`}>Platforms</a>
+      <a href={`${home}#faq`}>FAQ</a>
     </nav>
     <div class="end">
       <a class="gh" href={REPO} aria-label="Source on GitHub">
@@ -24,36 +29,34 @@ import { REPO } from '../lib/repo';
           ></path></svg
         >
       </a>
-      <a class="button primary small" href="#install">Download</a>
+      <a class="button primary small" href={`${home}#install`}>Download</a>
     </div>
   </div>
 </header>
 
 <style>
   .nav {
-    position: relative;
+    position: sticky;
     top: 0;
     z-index: 50;
-    border-bottom: 1px solid var(--line);
-    background: rgb(3 5 10 / 0.85);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
+    background: var(--bg);
   }
 
-  :global(.js) .nav {
-    position: sticky;
-    transition: transform 0.18s ease;
+  /* A shadow, not a border: a border's row would stay the plain background
+     across the sky, with or without its line. */
+  .nav[data-stuck] {
+    box-shadow: 0 1px 0 var(--line);
   }
 
-  /* Keep the header's space and tab order. Focus reveals it immediately,
-     before the browser scrolls a newly focused control into view. */
-  :global(.js) .nav[data-hidden]:not(:focus-within) {
-    transform: translateY(calc(-100% - 1px));
+  /* Solid, so nothing shows through it, yet the sky runs on behind it up to
+     the top of the window: this is that part of the sky (lib/sky.js). */
+  .strip {
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    width: 100%;
+    height: 100%;
     pointer-events: none;
-  }
-
-  .nav:focus-within {
-    transition: none;
   }
 
   .bar {
@@ -178,7 +181,7 @@ import { REPO } from '../lib/repo';
       overflow-y: auto;
       padding: 8px var(--gutter) 16px;
       border-bottom: 1px solid var(--line);
-      background: rgb(3 5 10 / 0.97);
+      background: rgb(var(--bg-rgb) / 0.97);
     }
 
     :global(.js) nav[data-open] {
@@ -208,35 +211,13 @@ import { REPO } from '../lib/repo';
   const nav = header.querySelector<HTMLElement>('nav')!;
   const links = [...nav.querySelectorAll<HTMLAnchorElement>('a')];
   const compact = window.matchMedia('(max-width: 820px)');
-  let height = 0;
-  let previous = Math.max(0, window.scrollY);
-  let travel = 0;
-  const reveal = () => header.removeAttribute('data-hidden');
-  // A restored position is the new baseline, not a downward scroll. The
-  // layout can restore it after pageshow while waiting for fonts to load.
-  const reset = () => {
-    previous = Math.max(0, window.scrollY);
-    travel = 0;
-    reveal();
-  };
-  window.addEventListener('pageshow', reset);
-  window.addEventListener('pingpong:scroll-restored', reset);
-  reset();
   const open = (on: boolean) => {
     nav.toggleAttribute('data-open', on);
     button.setAttribute('aria-expanded', String(on));
-    if (on) {
-      travel = 0;
-      reveal();
-    }
   };
   button.addEventListener('click', () => open(!nav.hasAttribute('data-open')));
   nav.addEventListener('click', (e) => (e.target as Element).closest('a') && open(false));
   document.addEventListener('click', (e) => !header.contains(e.target as Node) && open(false));
-  header.addEventListener('focusin', () => {
-    travel = 0;
-    reveal();
-  });
   header.addEventListener('focusout', (e) => {
     const next = e.relatedTarget as Node | null;
     if (!next || (!button.contains(next) && !nav.contains(next))) open(false);
@@ -276,35 +257,15 @@ import { REPO } from '../lib/repo';
   // The sticky header may grow when text is enlarged. Scroll padding uses
   // its actual height so an anchored section or a focused control clears it.
   const measure = () => {
-    height = header.getBoundingClientRect().height;
+    const { height } = header.getBoundingClientRect();
     document.documentElement.style.setProperty('--nav-height', `${height}px`);
   };
   new ResizeObserver(measure).observe(header);
   measure();
 
-  // Require 12 px in one direction so small trackpad reversals do not
-  // flicker the header. Layout height comes from the observer, not scroll.
-  const scrollThreshold = 12;
-  let scheduled = false;
-  window.addEventListener('scroll', () => {
-    if (scheduled) return;
-    scheduled = true;
-    window.requestAnimationFrame(() => {
-      scheduled = false;
-      const y = Math.max(0, window.scrollY);
-      const delta = y - previous;
-      previous = y;
-      if (y <= height || nav.hasAttribute('data-open') || header.contains(document.activeElement)) {
-        travel = 0;
-        reveal();
-        return;
-      }
-      if (delta === 0) return;
-      travel = Math.sign(delta) === Math.sign(travel) ? travel + delta : delta;
-      if (Math.abs(travel) >= scrollThreshold) {
-        header.toggleAttribute('data-hidden', travel > 0);
-        travel = 0;
-      }
-    });
-  }, { passive: true });
+  // The line marks what passes under the header, and at the top nothing does.
+  // A position restored on reload arrives as a scroll too.
+  const stick = () => header.toggleAttribute('data-stuck', window.scrollY > 0);
+  window.addEventListener('scroll', stick, { passive: true });
+  stick();
 </script>

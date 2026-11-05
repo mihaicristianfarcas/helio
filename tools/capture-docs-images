@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+# The README's screenshots in docs/images/, from the app's demo mode
+# (HELIO_UI_DEMO, docs/ui.md). macOS; the window is captured as it is
+# (screencapture), so the terminal needs Screen Recording.
+#
+#   cargo build -p helio-app
+#   HELIO_UI_DEMO_SCREEN=/path/to/agent-screen.png tools/capture-docs-images
+#
+# HELIO_UI_DEMO_SCREEN is what the sample agent session shows under "What the
+# agent sees": a real screenshot of a Windows desktop holding the files the
+# session talks about (the landing-page branch keeps one in
+# site/src/assets/hero/agent-screen.webp). Without it the panel is empty, so this
+# refuses to run. HELIO_APP names the program, for a build elsewhere.
+#
+# Each window is 1200x800 points: at the default 940x620 the pictures look
+# crowded. The data folders are empty and temporary, marked as past setup, so
+# nothing of this computer's hosts or settings reaches a picture, and under
+# HELIO_UI_DEMO the window names no version, so a picture does not date with
+# the next release.
+set -euo pipefail
+REPO=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+APP=${HELIO_APP:-$REPO/target/debug/helio-app}
+: "${HELIO_UI_DEMO_SCREEN:?point it at a screenshot for the agent session (see the top of this file)}"
+export HELIO_UI_DEMO_SCREEN
+TMP=$(mktemp -d)
+trap 'rm -rf "$TMP"' EXIT
+
+shot() { # name steps
+    local data
+    data=$(mktemp -d "$TMP/data.XXXX")
+    echo 'onboarded = true' >"$data/settings.toml"
+    HELIO_DATA_DIR=$data HELIO_HOST_DATA_DIR=$data/host HELIO_APPEARANCE=light \
+        HELIO_UI_DEMO="$2,size=1200x800,snapshot=$REPO/docs/images/$1.png,quit" "$APP" >/dev/null 2>&1
+    echo "$1"
+}
+
+shot helio-host-overview "hosting=on,host-sample,host=overview"
+shot helio-agent-session "agents=sample-ask"

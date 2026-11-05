@@ -1,23 +1,23 @@
 # Contributing
 
-Thank you for helping. pingpong is a small project with a high bar for the
+Thank you for helping. Helio is a small project with a high bar for the
 data path — it is a real-time system, and most of its decisions were
 measured — so the best contributions come with a reason and a way to check
 them.
 
 ## Reporting a problem
 
-Open an issue with:
+[Open an issue](https://github.com/mihaicristianfarcas/helio/issues/new/choose)
+and choose a form:
 
-- what you did, what you expected, and what happened;
-- both systems (client and host: OS and version, GPU for the host) and how
-  they are connected (LAN, Wi-Fi, over the internet);
-- the logs from both sides around the time it happened (where they are:
-  [docs/ui.md](docs/ui.md#logs)); with the statistics on
-  (`RUST_LOG=info,ping_core::stats=debug`) for anything about smoothness or
-  latency. Logs never contain PINs, passwords or keys, but they do contain
-  host names and addresses: edit them out if you like.
+- **Bug report**: what happened, on which systems, with the logs from both
+  sides. [docs/logs.md](docs/logs.md) says where they are, and how to turn
+  on debug logging for anything about smoothness or latency.
+- **Tester report**: you tried Helio and want to say how it went. It takes
+  under two minutes, and "it worked" is as useful as "it didn't".
 
+Questions go to
+[Discussions](https://github.com/mihaicristianfarcas/helio/discussions/categories/q-a).
 Security problems go privately instead: see [SECURITY.md](SECURITY.md).
 
 ## Proposing a change
@@ -35,19 +35,21 @@ measurement is the best one.
    hooks: `git config core.hooksPath .githooks`.
 2. Follow [AGENTS.md](AGENTS.md): the rules for code, comments, docs and
    commits apply to everyone, not only to AI agents.
-3. Update the documentation in the same change.
+3. Update the documentation in the same change:
+   [AGENTS.md](AGENTS.md#what-goes-where) says which page each kind of
+   change touches, and [how it is written](AGENTS.md#how-it-is-written).
 4. Check it on every platform you can, and type-check the rest
    ([AGENTS.md, "Before you finish"](AGENTS.md#before-you-finish)).
-5. Open a pull request that says what changed, why, how you verified it, and
-   what you could not verify. `main` takes changes only through pull
-   requests, once CI passes (formatting, clippy and the tests on all three
-   systems).
+5. Open a pull request: its template asks what changed, why, how you
+   verified it, and what you could not verify, with evidence a reviewer can
+   see. `main` takes changes only through pull requests, once CI passes
+   (formatting, clippy and the tests on all three systems).
 
 Using an AI coding agent is fine; you are responsible for what it wrote, as
 if you had written it.
 
 Contributions are accepted under the project's license, the
 [GPL-3.0](LICENSE). Do not include code copied or translated from
-Moonlight, Sunshine or Apollo: pingpong follows their behaviour, not their
+Moonlight, Sunshine or Apollo: Helio follows their behaviour, not their
 source. Code from elsewhere comes only under a license compatible with the
 GPL-3.0, with its notice.

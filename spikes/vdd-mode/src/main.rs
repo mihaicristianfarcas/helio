@@ -105,7 +105,7 @@ struct ProtocolVersion {
 /// Stable across runs on purpose: ADD_VIRTUAL_DISPLAY is idempotent by GUID, so
 /// a fixed GUID means a restart re-attaches to the same monitor instead of
 /// leaking a connector slot on every run.
-const PINGPONG_MONITOR_GUID: GUID = GUID::from_values(
+const HELIO_MONITOR_GUID: GUID = GUID::from_values(
     0x7a3c1f2e,
     0x9b4d,
     0x4c8a,
@@ -432,7 +432,7 @@ fn subcommand(cmd: &str, args: &[String]) {
 
     // Always start clean: remove our monitor, put primary back on a real one.
     let remove = RemoveParams {
-        monitor_guid: PINGPONG_MONITOR_GUID,
+        monitor_guid: HELIO_MONITOR_GUID,
     };
     let rc = ioctl::<RemoveParams, u8>(h_dev, IOCTL_REMOVE_VIRTUAL_DISPLAY, Some(&remove));
     println!("cleanup REMOVE: {:?}", rc.map(|_| "ok"));
@@ -461,8 +461,8 @@ fn subcommand(cmd: &str, args: &[String]) {
         width: w,
         height: h,
         refresh: mhz,
-        monitor_guid: PINGPONG_MONITOR_GUID,
-        device_name: cstr14("pingpong"),
+        monitor_guid: HELIO_MONITOR_GUID,
+        device_name: cstr14("helio"),
         serial_number: cstr14("pp000001"),
     };
     match ioctl::<AddParams, AddOut>(h_dev, IOCTL_ADD_VIRTUAL_DISPLAY, Some(&params)) {
@@ -621,8 +621,8 @@ fn main() {
         width: w,
         height: h,
         refresh: mhz,
-        monitor_guid: PINGPONG_MONITOR_GUID,
-        device_name: cstr14("pingpong"),
+        monitor_guid: HELIO_MONITOR_GUID,
+        device_name: cstr14("helio"),
         serial_number: cstr14("pp000001"),
     };
     let added: AddOut = match ioctl(h_dev, IOCTL_ADD_VIRTUAL_DISPLAY, Some(&params)) {
@@ -768,7 +768,7 @@ fn main() {
 
     // Teardown.
     let remove = RemoveParams {
-        monitor_guid: PINGPONG_MONITOR_GUID,
+        monitor_guid: HELIO_MONITOR_GUID,
     };
     match ioctl::<RemoveParams, u8>(h_dev, IOCTL_REMOVE_VIRTUAL_DISPLAY, Some(&remove)) {
         Ok(_) => println!("\nREMOVE ok"),

@@ -1,8 +1,8 @@
 # Security
 
-pingpong gives another computer your screen, keyboard and mouse, so its
+Helio gives another computer your screen, keyboard and mouse, so its
 security matters as much as its latency. This page says how to report a
-problem, and what pingpong does and does not protect against.
+problem, and what Helio does and does not protect against.
 
 ## Reporting a vulnerability
 
@@ -13,50 +13,133 @@ vulnerability"), not in a public issue. Include what an attacker needs
 to reproduce it. You will get an answer, and credit in the fix if you want
 it.
 
-Only the latest code on the default branch is supported.
+Only the latest code on the default branch is supported. Helio has not been
+externally audited ([docs/verification.md](docs/verification.md#not-audited)).
 
 ## The model
 
-**Transport.** Every packet between Ping and Pong travels inside a
+**Transport.** Every packet between Helio and Helio Host travels inside a
 WireGuard tunnel (pq-boringtun) whose handshake combines X25519 with
 ML-KEM-768 and authenticates both peers with static keys: a recording of the
 traffic stays closed to a future quantum computer. A host accepts handshakes
-only from paired clients' keys. Keys rotate every two minutes.
+only from paired clients' keys. Keys rotate every two minutes. A peer's
+address follows only a datagram that proves its key, which is how a client
+keeps its stream when it changes networks; a cookie reply, the tunnel's answer
+to too many handshakes, proves none, and changes nothing.
 
 **Pairing.** Devices trust each other only after a PIN pairing on the local
 network: SPAKE2 over a four-digit PIN, with an ML-KEM-768 exchange beside it,
 then each side's tunnel keys sent under the result. An attacker must be in
 the middle *while* the pairing happens, and guess the PIN at the first try,
-to intervene; a recording of the pairing does not help later. The pairing
-port (TCP 47801) serves the local network only.
+to intervene; a recording of the pairing does not help later. What the
+prompt shows (the device's name, and whether it is an AI agent) is what the
+device then says under the PIN's key, or nothing is paired; the name loses
+its control and bidirectional characters first, so it cannot rearrange
+itself on the prompt. The pairing
+port (TCP 47801) serves the local network only: the host closes a
+connection from anything but a private, link-local or loopback address, or
+Tailscale's 100.64.0.0/10.
 
-**The host's web UI and API** (HTTPS on TCP 47802) use a self-signed
-certificate the host makes for itself, and require the admin account the
-first visitor creates (or, from Pong's own window, a token the host writes
-for its own user). It is meant for the local network; do not forward the
-port.
+**Finding the host across the internet.** With internet access on, the
+host publishes its public addresses on the BitTorrent Mainline DHT, and
+clients publish theirs when they connect
+([docs/networking.md](docs/networking.md#what-the-dht-sees)). Pairing gives
+each client a 32-byte secret that only it and the host hold; every record
+between the two is signed, found and sealed (ChaCha20-Poly1305) with keys
+derived from it, in slots that change every UTC day. A client cannot read
+another client's records, and a removed client's secret is deleted with it:
+it can read nothing the host publishes afterwards. The DHT's nodes see
+random-looking keys and salts that link neither devices nor days by
+themselves, but they see the addresses records are published from and
+looked up from, and when: enough to tell that two addresses talk, and to
+link one device's slots by its address, within a day and from one day to
+the next (a slot is looked up during the day after its own).
+
+**The host's API** (HTTPS on TCP 47802), which Helio's This computer pages
+and `helio host` use, answers on localhost only (127.0.0.1 and ::1):
+nothing on the network reaches it. It uses a self-signed certificate the
+host makes for itself, and every call but `/api/state` carries the token
+the host writes for its own user: on Windows, readable by SYSTEM,
+Administrators and the user who turned hosting on, whom `helio-host enable`
+records beside the engine in `C:\Program Files\Helio Host` (turning hosting
+on from another account makes that account the owner). `/api/state` says
+only the host's name, its system and whether the token sent with it is
+good. There is no account and no other token: every user of the computer
+can reach localhost, and an account made through the API would have been
+whoever asked first's.
 
 **Secrets at rest.** On macOS and Linux, each device's private keys, the
-agent's API keys and the host's tokens are written readable only by their
-owner (0600). On Windows, Ping's files are in the user's own `%APPDATA%`,
-and the host makes its data folder (`C:\ProgramData\Pong`) private when it
+rendezvous secrets (the host's in `clients.toml`, a client's in
+`hosts.toml`), the agent's API keys and the host's tokens are written
+readable only by their owner (0600). On Windows, Helio's files are in the user's own `%APPDATA%`,
+and the host makes its data folder (`C:\ProgramData\Helio Host`) private when it
 starts: only SYSTEM, Administrators and the folder's owner can read or write
-it, except `config.toml` and `web-cert.pem`, which Pong's window needs and
-every user may read; the host's tokens are closed to everyone but SYSTEM and
-Administrators. Whoever can read a device's keys can act as that device:
-unpair a device you lost.
+it, except `config.toml` and `web-cert.pem`, which Helio's This computer pages
+need and every user may read; its local token is readable by SYSTEM,
+Administrators and the user who turned hosting on, no one else. The host
+uses that folder only if SYSTEM or Administrators own it: any user may
+create it before the host first runs and put a device of their own in it,
+so a folder someone else made, or
+a link (a junction) to another folder, is moved aside (`Helio
+Host.untrusted-…`) and the host starts afresh, in one it creates owned by
+Administrators and private from the start; while it cannot be moved, the
+host does not run. Whoever can
+read a device's keys can act as that device: unpair a device you lost.
 
-**The host's privileges.** On Windows, Pong runs as SYSTEM so it can
+**The host's privileges.** On Windows, Helio Host runs as SYSTEM so it can
 capture and control the secure desktop (UAC prompts, the lock screen), as
 Sunshine does. Clipboard files are read and written as the
-signed-in user, not as SYSTEM.
+signed-in user, not as SYSTEM, by a helper whose word the host checks: only
+clipboard packets go on to the client, and copies only while it may read
+them.
+
+**The drivers hosting installs.** On Windows, turning hosting on installs
+SudoVDA and ViGEmBus where they are missing
+([docs/platforms/windows.md](docs/platforms/windows.md#the-drivers-hosting-installs)).
+SudoVDA is signed by its author's own certificate (`CN=sudovda@su.mk`), not
+by Microsoft, and Windows installs a driver signed so only from a publisher
+it trusts, so its certificate goes into the machine's Trusted Root and
+Trusted Publishers stores, as Apollo's installer puts it there. The
+certificate is for code signing only (its extended key usage), so Windows
+trusts it for nothing else, websites included; but whoever holds its key
+could sign programs and drivers this PC would trust. Turning hosting off
+takes it out again, when Helio Host put it there. The driver's files come
+inside `helio-host.exe` ([vendor/sudovda](vendor/sudovda/README.md) says
+where from, with their hashes); ViGEmBus's installer, signed by its author,
+runs only once its copy in the engine's folder, which only administrators
+can change, has the SHA-256 Helio pins. On Linux, the host's desktop entry
+asks KWin for its virtual output and fake input; KWin finds the entry by
+the program's path, so this lends nothing a program running as you could
+not ask for with an entry of its own.
 
 **The update check** asks GitHub's public API, over HTTPS (Mozilla's root
 certificates, as `webpki-roots` carries them), once a day, without an
 account, sending nothing but the request and the version in its
 `User-Agent`. Its answers are read as untrusted input, and the only
 links it passes on for opening are pages of this repository. Nothing is
-downloaded or installed. It can be turned off
+downloaded or installed until you choose **Install and Restart**. That
+downloads the release's package for your system from the repository's
+releases, and keeps it only if it is the file GitHub's SHA-256 says and
+carries the release's own signature. That is an Ed25519 key, in
+minisign's format, that only the release workflow's signing job can use
+(a secret of the `release` environment, on `main`), and whose public half
+Helio is built with (`helio-update/release-signing.pub`). The signature
+names the package's file, so an older package, or another system's,
+cannot pass for the one offered; on Linux it is the only check of who made
+the package. Then each system checks its own signature by Helio's maker:
+on macOS the same team's Developer ID as the app it replaces; on Windows,
+on the installer, Helio's Authenticode certificate
+([its publisher](docs/install.md#on-windows)). Its key stays in Certum's cloud;
+the release workflow reaches it through a TOTP seed, a secret of the `release`
+environment, on `main`. On Windows, while
+hosting is on, the host's engine in Program Files is replaced only by the
+new engine's own `enable`, which checks the signature of its copy there
+as turning hosting on does. The package is downloaded and unpacked in your
+own temporary folder on macOS and Windows. On Linux, where the temporary
+folder is shared with other users, it is `helio-update` in your cache folder
+(`$XDG_CACHE_HOME`, else `~/.cache`), which Helio closes to everyone else
+(0700), and the update stops if that is not a real folder of yours. The check
+can be turned off
 ([docs/usage.md](docs/usage.md#updates)).
 
 **The window's local socket.** On macOS and Linux each app listens on a
@@ -64,16 +147,36 @@ Unix socket in its own data folder, so a second start can ask the running
 copy to show its window; it takes that one word and nothing else. On
 Windows the same is a named event in the signed-in session.
 
+**An agent session's local endpoint.** While an agent session is open,
+Helio serves the session's tools over HTTP on 127.0.0.1, on a port the
+system picks, for Codex and Claude Code. Every request needs a token made
+when the session opens, which is never on a command line. Until a request
+shows it, Helio reads at most 16 KiB of it, and of its body only what
+arrives in the second after the refusal, up to 64 KiB, which it drops (so
+the refusal is not lost to a reset); it serves 16 connections at once:
+another program on your computer can keep the endpoint busy, but cannot
+use it.
+
 **What a device may do** is the host's to say, per device: whether it may
 see the screen, which input it may send, which way the clipboard goes,
 whether it may start apps, take over or watch agents. The host enforces it
 on what arrives, so a modified client gains nothing by ignoring it; a
 second device paired may only see until the host's owner allows more.
+Whatever a device may do, the size it asks for is checked before anything
+starts ([docs/usage.md](docs/usage.md#helios-settings)): the size goes on to the
+host's display driver and encoders.
 
 **AI agents** are clients of their own, held to rules the host enforces:
 never over a person, never on a secure screen, only with the permissions
-the host granted. [docs/ai-agents.md](docs/ai-agents.md#threat-model) has their
-threat model.
+the host granted, and held by a person's pause, take-over or stop however
+often the agent reconnects: a pause or a take-over until that person or the
+host's own Helio lets go, a stop until the host's own Helio allows it again
+(a stop is kept with the agent's pairing, in `clients.toml`; a pause and a
+take-over for as long as the host runs). A Linux host sees a locked screen only when the
+lock screen tells logind, and under Wayland does not see someone using its
+keyboard and mouse
+([docs/platforms/linux.md](docs/platforms/linux.md#ai-agents)).
+[docs/ai-agents.md](docs/ai-agents.md#threat-model) has their threat model.
 
 ## Out of scope
 

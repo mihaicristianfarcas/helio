@@ -7,7 +7,7 @@ import { defineConfig, fontProviders } from 'astro/config';
 // A normal build targets the public domain, so its canonical URL and crawl
 // files do not depend on the deployment's environment.
 export default defineConfig({
-  site: process.env.SITE_URL || 'https://pingpong.mihaicristian.dev',
+  site: process.env.SITE_URL || 'https://helio.mihaicristian.dev',
   base: process.env.BASE_PATH || '/',
   // HTML's whitespace rules rather than JSX's (Astro's default), so prose
   // can wrap in the source without losing the space before a link.
@@ -51,9 +51,8 @@ export default defineConfig({
   ],
   vite: {
     server: {
-      // The page reads the repository rather than copies of it: the
-      // screenshots in docs/images/, the UI's icons in
-      // pingpong-ui/assets/icons/ and the release in Casks/ping.rb.
+      // The page reads the repository rather than copies of it: the UI's
+      // icons in helio-ui/assets/icons/ and the release in Casks/helio.rb.
       fs: { allow: ['..'] },
     },
   },

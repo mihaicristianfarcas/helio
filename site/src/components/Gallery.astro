@@ -1,50 +1,45 @@
 ---
-//! Screenshots from the apps' demo modes (docs/ui.md), with made-up hosts
-//! and devices. Native buttons put every choice in the page's Tab order;
-//! without script all screenshots are shown and the controls are hidden.
+//! Screenshots from the app's demo mode (docs/ui.md), with made-up hosts and
+//! devices. The pages change by themselves until the reader picks one. Native
+//! buttons put every choice in the page's Tab order; without script all
+//! screenshots are shown and the buttons are hidden.
 import { Image } from 'astro:assets';
-import Icon from './Icon.astro';
-import pongDevices from '../assets/shots/pong-devices.webp';
-import pingVideo from '../assets/shots/ping-video.webp';
-import pingInput from '../assets/shots/ping-input.webp';
-import pongNetwork from '../assets/shots/pong-network.webp';
-import pongAgents from '../assets/shots/pong-agents.webp';
+import devices from '../assets/shots/devices.webp';
+import video from '../assets/shots/video.webp';
+import input from '../assets/shots/input.webp';
+import hosting from '../assets/shots/hosting.webp';
+import agents from '../assets/shots/agent-setup.webp';
 
 const tabs = [
   {
-    app: 'Pong',
     page: 'Devices',
-    text: 'Pairing requests with their PIN field, and paired devices and agents, each with its own permissions.',
-    img: pongDevices,
-    alt: 'Pong’s Devices page: a MacBook Air asking to pair, and three paired devices including an AI agent.',
+    text: 'Pairing requests, and paired devices and agents, each with its own permissions.',
+    img: devices,
+    alt: 'Helio’s Devices page: a MacBook Air asking to pair, and three paired devices including an AI agent.',
   },
   {
-    app: 'Ping',
     page: 'Video',
-    text: 'Your display’s resolution and refresh rate by default, HDR and 4:4:4 colour, and a bitrate that picks itself as Moonlight’s does.',
-    img: pingVideo,
-    alt: 'Ping’s Video settings: resolution and frame rate matching this display, the codec, display mode, HDR and YUV 4:4:4.',
+    text: 'Your display’s own mode by default, HDR and 4:4:4 colour, and a bitrate that picks itself, as in Moonlight.',
+    img: video,
+    alt: 'Helio’s Video settings: resolution and frame rate matching this display, the codec, display mode, HDR and YUV 4:4:4.',
   },
   {
-    app: 'Ping',
     page: 'Input',
-    text: 'The clipboard, a controller as a mouse, swapped buttons or reversed scrolling, and Moonlight’s shortcuts while you stream.',
-    img: pingInput,
-    alt: 'Ping’s Input settings: the Windows key, clipboard sharing, controller as a mouse, swapped mouse buttons, reverse scrolling, and the stream’s shortcuts.',
+    text: 'The clipboard, a controller as a mouse, swapped buttons, reversed scrolling and Moonlight’s shortcuts.',
+    img: input,
+    alt: 'Helio’s Input settings: the Windows key, clipboard sharing, controller as a mouse, swapped mouse buttons, reverse scrolling, and the stream’s shortcuts.',
   },
   {
-    app: 'Pong',
-    page: 'Network',
-    text: 'Streaming over the internet without forwarding a port, and asking the router for one when it can.',
-    img: pongNetwork,
-    alt: 'Pong’s Network settings: streaming over the internet, asking the router to forward the port, and the three ports.',
+    page: 'Hosting',
+    text: 'The switch that makes this computer a host, and internet streaming without forwarding a port.',
+    img: hosting,
+    alt: 'Helio’s Hosting settings: the switch that turns hosting on, what the system must allow, and the host’s name and network.',
   },
   {
-    app: 'Pong',
-    page: 'AI agents',
-    text: 'Whether agents may pair at all, and how long your own input at the host holds them.',
-    img: pongAgents,
-    alt: 'Pong’s AI agents settings: allowing paired agents, and how long local input holds an agent.',
+    page: 'Agent setup',
+    text: 'Which model your agents use, and what they may do on this host.',
+    img: agents,
+    alt: 'Helio’s Agent setup page: the provider and model an agent session uses, and what agents may do on this host.',
   },
 ];
 ---
@@ -52,35 +47,28 @@ const tabs = [
 <section class="section" id="apps">
   <div class="wrap">
     <div class="head">
-      <span class="eyebrow">The apps</span>
-      <h2 class="title">Native apps for the client and the host</h2>
+      <span class="eyebrow">The app</span>
+      <h2 class="title">One native app, on every computer</h2>
       <p class="lede">
-        Ping runs on the computer you sit at, Pong on the one you stream from. Both are native windows drawn with
-        GPUI, follow your system’s light or dark appearance, and explain every setting in a line.
+        The client on every computer you sit at and, with hosting on, the host too. A native GPUI window that follows
+        your light or dark appearance and explains every setting in a line.
       </p>
     </div>
 
     <div class="gallery" data-gallery>
-      <div class="controls">
-        <div class="tabs" role="group" aria-label="Pages of the apps">
-          {tabs.map((t, i) => (
-            <button
-              type="button"
-              class="tab"
-              id={`tab-${i}`}
-              aria-controls={`pane-${i}`}
-              aria-pressed={i === 0 ? 'true' : 'false'}
-              data-tab={i}
-            >
-              <span class="app">{t.app}</span>
-              {t.page}
-            </button>
-          ))}
-        </div>
-        <button type="button" class="toggle" data-toggle aria-label="Stop changing pages">
-          <Icon name="pause" size={16} class="when-on" />
-          <Icon name="play" size={16} class="when-off" />
-        </button>
+      <div class="tabs" role="group" aria-label="Pages of the app">
+        {tabs.map((t, i) => (
+          <button
+            type="button"
+            class="tab"
+            id={`tab-${i}`}
+            aria-controls={`pane-${i}`}
+            aria-pressed={i === 0 ? 'true' : 'false'}
+            data-tab={i}
+          >
+            {t.page}
+          </button>
+        ))}
       </div>
 
       <div class="panes">
@@ -105,15 +93,8 @@ const tabs = [
 </section>
 
 <style>
-  .gallery:not([data-ready]) .controls {
+  .gallery:not([data-ready]) .tabs {
     display: none;
-  }
-
-  .controls {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 8px 12px;
   }
 
   .tabs {
@@ -155,25 +136,15 @@ const tabs = [
     color: var(--text);
   }
 
-  .app {
-    color: var(--text-3);
-    font-size: 0.75rem;
-  }
-
-  .tab[aria-pressed='true'] .app {
-    color: var(--text-2);
-  }
-
   /* While the pages change by themselves, the chosen tab fills from left to
      right in the time it has left. A new tab starts its fill afresh; it
-     holds while the keyboard is in the gallery, and while the gallery is
-     off screen. */
+     holds while the gallery is off screen. */
   .tab::before {
     content: '';
     position: absolute;
     inset: 0;
     z-index: -1;
-    background: rgb(141 178 255 / 0.28);
+    background: rgb(var(--accent-rgb) / 0.28);
     transform: scaleX(0);
     transform-origin: left;
   }
@@ -182,7 +153,7 @@ const tabs = [
     animation: fill var(--dwell) linear forwards;
   }
 
-  .gallery[data-auto]:is(:has(:focus-visible), [data-away]) .tab[aria-pressed='true']::before {
+  .gallery[data-auto][data-away] .tab[aria-pressed='true']::before {
     animation-play-state: paused;
   }
 
@@ -190,28 +161,6 @@ const tabs = [
     to {
       transform: none;
     }
-  }
-
-  .toggle {
-    display: grid;
-    place-items: center;
-    width: 36px;
-    height: 36px;
-    border: 1px solid var(--line-2);
-    border-radius: 999px;
-    background: none;
-    color: var(--text-2);
-    cursor: pointer;
-  }
-
-  .toggle:hover {
-    border-color: rgb(255 255 255 / 0.3);
-    color: var(--text);
-  }
-
-  .gallery[data-auto] .toggle :global(.when-off),
-  .gallery:not([data-auto]) .toggle :global(.when-on) {
-    display: none;
   }
 
   /* Every page in the same cell, so the gallery keeps the tallest one's
@@ -259,6 +208,7 @@ const tabs = [
   }
 
   figcaption {
+    max-width: var(--measure);
     margin-bottom: 24px;
     color: var(--text-2);
     font-size: 0.9375rem;
@@ -278,7 +228,6 @@ const tabs = [
   for (const root of document.querySelectorAll<HTMLElement>('[data-gallery]')) {
     const tabs = [...root.querySelectorAll<HTMLButtonElement>('[data-tab]')];
     const panes = [...root.querySelectorAll<HTMLElement>('[data-pane]')];
-    const toggle = root.querySelector<HTMLButtonElement>('[data-toggle]')!;
     let current = 0;
     root.style.setProperty('--dwell', `${DWELL}ms`);
 
@@ -293,18 +242,15 @@ const tabs = [
       });
     };
 
-    const auto = (on: boolean) => {
-      root.toggleAttribute('data-auto', on);
-      toggle.setAttribute('aria-label', on ? 'Stop changing pages' : 'Change pages by themselves');
-    };
+    const auto = (on: boolean) => root.toggleAttribute('data-auto', on);
 
-    // On by themselves unless the reader asked for less motion; a page the
-    // reader picks, or the button, stops them.
+    // On by themselves unless the reader asked for less motion. Reaching a
+    // page's button stops them for good, by pointer or by keyboard, which is
+    // how the reader takes over: nothing moves under them after that.
     const still = window.matchMedia('(prefers-reduced-motion: reduce)');
     auto(!still.matches);
     still.addEventListener('change', (e) => e.matches && auto(false));
     root.addEventListener('focusin', () => auto(false));
-    toggle.addEventListener('click', () => auto(!root.hasAttribute('data-auto')));
 
     // The fill running out is the cue for the next page.
     root.addEventListener('animationend', (e) => {

@@ -1,27 +1,28 @@
 ---
-//! A compact desktop support overview, after the README's status table.
-//! Setup requirements and platform limits stay visible; the parity link has details.
-import { onGitHub } from '../lib/repo';
+//! A compact desktop support overview: the best-tested setup, then one row per
+//! system, after the README's status table; its Known limitations list is
+//! linked beside it, and the parity page has the details.
+import { LIMITATIONS, onGitHub } from '../lib/repo';
 
-type Status = 'Daily use' | 'Works';
-const systems: { os: string; versions: string; client: Status; host: [Status, string] }[] = [
+type Status = 'Best tested' | 'Works';
+const systems: { os: string; versions: string; client: [Status, string]; hosting: [Status, string] }[] = [
   {
     os: 'macOS',
     versions: '14 and later',
-    client: 'Daily use',
-    host: ['Works', 'Virtual display with HDR, streams with the lid closed; no controllers yet'],
+    client: ['Best tested', 'The client in the test setup.'],
+    hosting: ['Works', 'A virtual display, HDR, and streaming with the lid closed. Surround with a surround output; no controllers.'],
   },
   {
     os: 'Windows',
     versions: '10 and 11',
-    client: 'Works',
-    host: ['Daily use', 'Best with NVIDIA and SudoVDA'],
+    client: ['Works', 'Less tested than macOS.'],
+    hosting: ['Best tested', 'Best with an NVIDIA GPU; without one, H.264 in software. Turning hosting on installs SudoVDA, on x64 PCs.'],
   },
   {
     os: 'Linux',
     versions: 'X11 and Wayland',
-    client: 'Works',
-    host: ['Works', 'No virtual display yet; no remote input on sway or Hyprland, work in progress.'],
+    client: ['Works', 'Tested in a container. Downloads for Ubuntu 24.04 on x86_64.'],
+    hosting: ['Works', 'A virtual display on GNOME and KDE under Wayland, elsewhere the screen as it is, scaled. No controllers.'],
   },
 ];
 ---
@@ -30,32 +31,35 @@ const systems: { os: string; versions: string; client: Status; host: [Status, st
   <div class="wrap">
     <div class="head">
       <span class="eyebrow">Platforms</span>
-      <h2 class="title">A client and host on every desktop</h2>
+      <h2 class="title">One app on every desktop</h2>
+      <p class="lede">
+        <strong>Best-tested setup:</strong> a Mac as the client, streaming a Windows host with an NVIDIA GPU and SudoVDA.
+        Other setups work, but are less tested.
+      </p>
     </div>
 
     <div class="table-wrap">
-      <table aria-label="Where Ping and Pong run">
+      <table role="table" aria-label="Where Helio runs, as a client and as a host">
         <thead>
           <tr>
             <th scope="col">System</th>
-            <th scope="col">Client (Ping)</th>
-            <th scope="col">Host (Pong)</th>
+            <th scope="col">Client</th>
+            <th scope="col">Hosting</th>
           </tr>
         </thead>
-        <tbody>
+        <tbody role="rowgroup">
           {systems.map((s) => (
-            <tr>
-              <th scope="row">
+            <tr role="row">
+              <th scope="row" role="rowheader">
                 {s.os}
                 <span>{s.versions}</span>
               </th>
-              <td>
-                <span class:list={['status', s.client === 'Daily use' && 'daily']}>{s.client}</span>
-              </td>
-              <td>
-                <span class:list={['status', s.host[0] === 'Daily use' && 'daily']}>{s.host[0]}</span>
-                <p>{s.host[1]}</p>
-              </td>
+              {[['Client', s.client], ['Hosting', s.hosting]].map(([label, [status, text]]) => (
+                <td role="cell" data-label={label}>
+                  <span class:list={['status', status === 'Best tested' && 'best']}>{status}</span>
+                  <p>{text}</p>
+                </td>
+              ))}
             </tr>
           ))}
         </tbody>
@@ -63,12 +67,18 @@ const systems: { os: string; versions: string; client: Status; host: [Status, st
     </div>
     <p class="note after">
       Phones, tablets and TVs are out of scope.
+      <a href={LIMITATIONS}>Known limitations</a>
       <a href={onGitHub('docs/parity.md')}>Compare platform features</a>
     </p>
   </div>
 </section>
 
 <style>
+  .lede strong {
+    color: var(--text);
+    font-weight: 500;
+  }
+
   .table-wrap {
     overflow: hidden;
     border: 1px solid var(--line-2);
@@ -87,20 +97,15 @@ const systems: { os: string; versions: string; client: Status; host: [Status, st
     padding: 20px 24px;
     text-align: left;
     vertical-align: top;
-    overflow-wrap: anywhere;
+    overflow-wrap: break-word;
   }
 
   thead th {
     padding-block: 14px;
-    border-bottom: 1px solid var(--line);
     background: var(--surface);
     color: var(--text-3);
     font-size: 0.8125rem;
     font-weight: 500;
-  }
-
-  tbody tr + tr {
-    border-top: 1px solid var(--line);
   }
 
   tbody th {
@@ -130,8 +135,8 @@ const systems: { os: string; versions: string; client: Status; host: [Status, st
     font-size: 0.75rem;
   }
 
-  .status.daily {
-    border-color: rgb(141 178 255 / 0.4);
+  .status.best {
+    border-color: rgb(var(--accent-rgb) / 0.4);
     color: var(--accent);
   }
 
@@ -140,13 +145,56 @@ const systems: { os: string; versions: string; client: Status; host: [Status, st
   }
 
   .after {
-    margin-top: 16px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 16px;
+    margin-top: var(--gap-note);
   }
 
+  /* Three columns do not fit a phone: each system is a block of its own, with
+     its columns named inside it. Display changes drop a table's meaning, which
+     is why the markup states its roles. */
   @media (max-width: 640px) {
+    table,
+    tbody,
+    tr,
     th,
     td {
-      padding: 14px 10px;
+      display: block;
+    }
+
+    thead {
+      display: none;
+    }
+
+    tbody tr {
+      padding: 20px 16px;
+    }
+
+    tbody th {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      gap: 2px 8px;
+      width: auto;
+      padding: 0;
+      font-size: 1.0625rem;
+    }
+
+    tbody th span {
+      margin-top: 0;
+    }
+
+    td {
+      width: auto;
+      padding: 14px 0 0;
+    }
+
+    td::before {
+      content: attr(data-label);
+      margin-right: 8px;
+      color: var(--text-3);
+      font-size: 0.8125rem;
     }
   }
 </style>

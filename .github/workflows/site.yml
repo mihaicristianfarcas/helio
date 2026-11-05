@@ -1,7 +1,7 @@
 # The website, from every push to landing-page that changes what it is built
 # from: site/ itself, the release in Casks/ and the UI's icons (see "The
 # website" in docs/development.md). Astro builds it and wrangler deploys it
-# to the Cloudflare Worker that serves pingpong.mihaicristian.dev
+# to the Cloudflare Worker that serves helio.mihaicristian.dev
 # (site/wrangler.jsonc). This workflow lives on landing-page only, as the
 # site does.
 #
@@ -18,7 +18,7 @@ on:
     paths:
       - "site/**"
       - "Casks/**"
-      - "pingpong-ui/assets/icons/**"
+      - "helio-ui/assets/icons/**"
       - ".github/workflows/site.yml"
   workflow_dispatch:
 

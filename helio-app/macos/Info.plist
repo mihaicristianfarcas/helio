@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleName</key>
+	<string>Helio</string>
+	<key>CFBundleDisplayName</key>
+	<string>Helio</string>
+	<key>CFBundleIdentifier</key>
+	<string>dev.mihaicristian.helio</string>
+	<key>CFBundleExecutable</key>
+	<string>Helio</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<!-- Both versions are set to the workspace's by tools/build-helio-app. -->
+	<key>CFBundleShortVersionString</key>
+	<string>0.0.0</string>
+	<key>CFBundleVersion</key>
+	<string>0.0.0</string>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
+	<key>NSHumanReadableCopyright</key>
+	<string>© 2026 Mihai-Cristian Farcaș. GPL-3.0 License.</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>14.0</string>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+	<key>NSPrincipalClass</key>
+	<string>NSApplication</string>
+	<!-- Game Mode while streaming full screen: priority CPU/GPU, faster
+	     Bluetooth polling for controllers and AirPods. -->
+	<key>LSApplicationCategoryType</key>
+	<string>public.app-category.games</string>
+	<key>LSSupportsGameMode</key>
+	<true/>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Helio finds the PCs running Helio Host on your network and streams from them.</string>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_helio._udp</string>
+	</array>
+</dict>
+</plist>

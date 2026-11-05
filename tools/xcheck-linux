@@ -3,7 +3,7 @@
 # tools/xcheck-windows. Build scripts that compile C (ring) get clang and stub
 # libc headers: enough to check, not to link.
 #
-#   tools/xcheck-linux [ARGS]          cargo check ARGS (default: -p ping-app)
+#   tools/xcheck-linux [ARGS]          cargo check ARGS (default: -p helio-app)
 #   tools/xcheck-linux clippy [ARGS]   cargo clippy ARGS
 #
 # Crates that link system libraries through pkg-config (GPUI's fontconfig and
@@ -14,10 +14,10 @@
 # RUSTUP_HOME below).
 set -euo pipefail
 REPO=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-export RUSTUP_HOME=${RUSTUP_HOME:-$HOME/.local/share/pingpong-xcheck/rustup}
-export CARGO_HOME=${CARGO_HOME:-$HOME/.local/share/pingpong-xcheck/cargo}
+export RUSTUP_HOME=${RUSTUP_HOME:-$HOME/.local/share/helio-xcheck/rustup}
+export CARGO_HOME=${CARGO_HOME:-$HOME/.local/share/helio-xcheck/cargo}
 export CARGO_TARGET_DIR="$REPO/target/xcheck-linux"
-STUB=$HOME/.local/share/pingpong-xcheck/linux-stub-include
+STUB=$HOME/.local/share/helio-xcheck/linux-stub-include
 mkdir -p "$STUB"
 printf '#pragma once\n#define assert(x) ((void)0)\n' > "$STUB/assert.h"
 printf '#pragma once\n#include <stddef.h>\nvoid *memcpy(void *, const void *, size_t);\nvoid *memset(void *, int, size_t);\nint memcmp(const void *, const void *, size_t);\nvoid *memmove(void *, const void *, size_t);\n' > "$STUB/string.h"
@@ -27,5 +27,5 @@ export CFLAGS_x86_64_unknown_linux_gnu="-I$STUB"
 cmd=check
 [[ ${1:-} == clippy ]] && { cmd=clippy; shift; }
 args=("$@")
-[[ ${#args[@]} -eq 0 ]] && args=(-p ping-app)
+[[ ${#args[@]} -eq 0 ]] && args=(-p helio-app)
 exec "$CARGO_HOME/bin/cargo" "$cmd" --manifest-path "$REPO/Cargo.toml" --target x86_64-unknown-linux-gnu "${args[@]}"

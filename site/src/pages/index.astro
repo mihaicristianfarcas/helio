@@ -1,7 +1,6 @@
 ---
 //! The landing page answers desktop streaming and remote gaming searches.
 import Base from '../layouts/Base.astro';
-import Agents from '../components/Agents.astro';
 import Features from '../components/Features.astro';
 import FAQ from '../components/FAQ.astro';
 import Footer from '../components/Footer.astro';
@@ -10,14 +9,13 @@ import Hero from '../components/Hero.astro';
 import Install from '../components/Install.astro';
 import Latency from '../components/Latency.astro';
 import Nav from '../components/Nav.astro';
-import Performance from '../components/Performance.astro';
 import Platforms from '../components/Platforms.astro';
 import Specs from '../components/Specs.astro';
 import { onGitHub } from '../lib/repo';
 
-const title = 'pingpong: Open-source remote desktop & game streaming';
+const title = 'Helio: Open-source remote desktop & game streaming';
 const description =
-  'Free, open-source remote desktop and game streaming for macOS, Windows and Linux. Stream up to 4K at 120 fps, in HDR, over a post-quantum WireGuard tunnel.';
+  'Free, open-source remote desktop and game streaming for macOS, Windows and Linux, at 3024×1890 and 120 fps, in a post-quantum WireGuard tunnel.';
 const canonical = new URL(import.meta.env.BASE_URL.replace(/\/?$/, '/'), Astro.site);
 const structuredData = {
   '@context': 'https://schema.org',
@@ -25,14 +23,14 @@ const structuredData = {
     {
       '@type': 'WebSite',
       '@id': `${canonical.href}#website`,
-      name: 'pingpong',
+      name: 'Helio',
       url: canonical.href,
       inLanguage: 'en',
     },
     {
       '@type': 'SoftwareApplication',
       '@id': `${canonical.href}#software`,
-      name: 'pingpong',
+      name: 'Helio',
       url: canonical.href,
       description,
       applicationCategory: 'MultimediaApplication',
@@ -52,8 +50,6 @@ const structuredData = {
     <Specs />
     <Features />
     <Latency />
-    <Performance />
-    <Agents />
     <Gallery />
     <Platforms />
     <Install />

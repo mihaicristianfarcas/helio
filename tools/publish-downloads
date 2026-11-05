@@ -1,34 +1,45 @@
 #!/usr/bin/env bash
 # Publish a release's archives as the website's downloads: Cloudflare R2
-# (the bucket pingpong-downloads, served at
-# download.pingpong.mihaicristian.dev), with wrangler.
+# (the bucket helio-downloads, served at
+# download.helio.mihaicristian.dev), with wrangler.
 #
 #   tools/publish-downloads DIST_DIR
 #
 # DIST_DIR holds what tools/package-macos, tools/package-windows.ps1 and
-# tools/linux/package made (APP-VERSION-OS-ARCH.zip or .tar.gz). Each goes
-# to latest/APP-OS-ARCH.EXT, a name that stays the same from one release to
-# the next so the page can link it, and is downloaded under its own name.
-# Then latest/SHA256SUMS, and last latest.json, which says what is there
-# (version, commit, each file's size and SHA-256) for the page to show.
+# tools/linux/package made: one archive per system and architecture
+# (Helio-VERSION-OS-ARCH.zip or .tar.gz), and Windows' installer
+# (Helio-VERSION-windows-x86_64-setup.exe). Each goes to
+# latest/Helio-OS-ARCH.EXT (latest/Helio-windows-x86_64-setup.exe), a name
+# that stays the same from one release to the next so the page can link it,
+# and is downloaded under its own name. Then latest/SHA256SUMS, and
+# latest.json, which says what is there (version, commit, each file's size
+# and SHA-256) for the page to show. Last, the archives the previous
+# latest.json listed and this one does not (a system or a program no longer
+# built) are deleted, so latest/ never serves an old build as the newest.
 # Everything is stored with no-cache, so Cloudflare's edge asks R2 again at
 # each request. A browser may still keep an archive for hours (the zone's
 # Browser Cache TTL wins over no-cache for the file types the edge caches):
 # the page adds the commit to each link, which makes a new release a new URL.
 #
-# wrangler is the one on PATH, else npx's. On a runner it signs in with
+# wrangler is the one tools/wrangler locks, every dependency at the version
+# and digest in its package-lock.json, installed with `npm ci` and no
+# install scripts: this step holds the Cloudflare token, so it runs only
+# code that was reviewed, not whatever npm resolves that day. To move it,
+# change the version in tools/wrangler/package.json and run `npm install
+# --package-lock-only --ignore-scripts` there. On a runner it signs in with
 # CLOUDFLARE_API_TOKEN (an API token with Workers R2 Storage: Edit) and
 # CLOUDFLARE_ACCOUNT_ID; elsewhere, as `wrangler login` left it. The release
-# workflow (.github/workflows/release.yml) runs this for each push to main.
+# workflow (.github/workflows/release.yml) runs this for each new version.
 set -euo pipefail
 REPO=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 DIST=${1:?usage: publish-downloads DIST_DIR}
-BUCKET=${DOWNLOADS_BUCKET:-pingpong-downloads}
-BASE=${DOWNLOADS_URL:-https://download.pingpong.mihaicristian.dev}
+BUCKET=${DOWNLOADS_BUCKET:-helio-downloads}
+BASE=${DOWNLOADS_URL:-https://download.helio.mihaicristian.dev}
 VERSION=$(sed -n '/^\[workspace.package\]/,/^\[/ s/^version = "\(.*\)"/\1/p' "$REPO/Cargo.toml")
-COMMIT=${PINGPONG_COMMIT:-$(git -C "$REPO" rev-parse HEAD)}
+COMMIT=${HELIO_COMMIT:-$(git -C "$REPO" rev-parse HEAD)}
 export WRANGLER_SEND_METRICS=false
-if command -v wrangler >/dev/null; then wrangler=(wrangler); else wrangler=(npx --yes wrangler@4); fi
+npm ci --prefix "$REPO/tools/wrangler" --ignore-scripts --no-audit --no-fund >/dev/null
+wrangler=("$REPO/tools/wrangler/node_modules/.bin/wrangler")
 
 # put KEY FILE TYPE [DISPOSITION]
 put() {
@@ -41,15 +52,20 @@ put() {
 
 WORK=$(mktemp -d)
 trap 'rm -rf "$WORK"' EXIT
+# What the previous publish listed, read before latest.json is replaced.
+# None (the first publish, or no answer): nothing is deleted.
+previous=$(curl -fsS "$BASE/latest.json?before=$(date +%s)" 2>/dev/null |
+    jq -r '.files[]?.url // empty' 2>/dev/null || true)
 files='{}'
 : > "$WORK/SHA256SUMS"
 shopt -s nullglob
-for path in "$DIST"/*-"$VERSION"-*.zip "$DIST"/*-"$VERSION"-*.tar.gz; do
+for path in "$DIST"/*-"$VERSION"-*.zip "$DIST"/*-"$VERSION"-*.tar.gz "$DIST"/*-"$VERSION"-*.exe; do
     name=$(basename "$path")
-    # Ping-0.7.0-macos-arm64.zip -> Ping-macos-arm64.zip
+    # Helio-0.7.0-macos-arm64.zip -> Helio-macos-arm64.zip
     key=${name/-$VERSION-/-}
     case $name in
         *.zip) type=application/zip ext=.zip ;;
+        *.exe) type=application/vnd.microsoft.portable-executable ext=.exe ;;
         *) type=application/gzip ext=.tar.gz ;;
     esac
     put "latest/$key" "$path" "$type" "attachment; filename=\"$name\""
@@ -68,3 +84,12 @@ jq -n --arg version "$VERSION" --arg commit "$COMMIT" \
     --arg published "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --argjson files "$files" \
     '{version: $version, commit: $commit, published: $published, files: $files}' > "$WORK/latest.json"
 put latest.json "$WORK/latest.json" application/json
+
+for url in $previous; do
+    key=${url#"$BASE/"}
+    [[ $key == latest/* ]] || continue
+    if ! jq -e --arg url "$url" 'any(.[]; .url == $url)' <<< "$files" >/dev/null; then
+        "${wrangler[@]}" r2 object delete "$BUCKET/$key" --remote >/dev/null
+        echo "deleted $url"
+    fi
+done

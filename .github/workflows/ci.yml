@@ -1,11 +1,18 @@
 # What AGENTS.md asks before a change is done ("Before you finish"), on every
 # pull request and on main after each merge: the formatting cargo fmt gives,
-# clippy without warnings, and the tests, on macOS, Windows and Linux. main
-# takes changes only through pull requests, and these checks must pass for
-# one to merge.
+# no dependency with a known vulnerability (cargo audit), clippy without
+# warnings, and the tests, on macOS, Windows and Linux; then
+# the app packaged on each, as the release packages it (the host's engine
+# inside it), from a debug build: what breaks the packaging shows here, not
+# at the next release. main takes changes only through pull requests, and
+# these checks must pass for one to merge.
 #
 # workflow_dispatch: to run it by hand on a branch. Such a run does not count
 # for a pull request's checks: only the pull request's own run does.
+#
+# Actions are pinned to commits, with the version beside each: a tag can be
+# moved, a commit cannot. The repository allows only GitHub's own actions and
+# Swatinem/rust-cache (docs/verification.md).
 name: CI
 
 on:
@@ -26,56 +33,104 @@ jobs:
     name: Formatting
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
       - name: Rust
         run: rustup toolchain install stable --profile minimal --component rustfmt && rustup default stable
       - run: cargo fmt --all -- --check
+
+  # Cargo.lock against the RustSec advisory database, fetched fresh on each
+  # run. Some dependencies parse what anyone on the internet sends and no
+  # fuzz target of ours covers them (mainline, the DHT's messages). A
+  # vulnerability fails the job; unmaintained, unsound and yanked crates are
+  # listed as warnings.
+  audit:
+    name: Advisories
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - name: Rust
+        run: rustup toolchain install stable --profile minimal && rustup default stable
+      # Pinned as the actions are: one exact version, built with the lock
+      # file it was released with.
+      - name: cargo-audit
+        run: cargo install --locked cargo-audit --version 0.22.2
+      - run: cargo audit
 
   macos:
     name: macOS
     runs-on: macos-15
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
       - name: Rust
         run: rustup toolchain install stable --profile minimal --component clippy && rustup default stable
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace --no-fail-fast
+      # Helio.app with Helio Host.app inside, signed ad hoc, inside out;
+      # built, then archived from the staged zip, as the release does it on
+      # two runners.
+      - name: The app, packaged
+        run: |
+          tools/package-macos --stage-only
+          tools/package-macos --from target/stage/Helio.app.zip
+        env:
+          HELIO_PROFILE: dev
+      - name: One archive, the host and the command inside it
+        run: |
+          ls target/dist
+          [ "$(ls target/dist | wc -l)" -eq 1 ]
+          unzip -l target/dist/Helio-*-macos-arm64.zip | grep -q 'Helio.app/Contents/Helpers/Helio Host.app/Contents/MacOS/helio-host'
+          # `helio`, a link to the app's program, kept a link.
+          zipinfo target/dist/Helio-*-macos-arm64.zip 'Helio.app/Contents/Resources/bin/helio' | grep -q '^l'
 
   windows:
     name: Windows
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
       - name: Rust
         run: rustup toolchain install stable --profile minimal --component clippy && rustup default stable
-      # The client decodes with FFmpeg (docs/install.md): a shared build of
-      # the current release, and LLVM's libclang (on the runner already) for
-      # its bindings.
+      # The client decodes with FFmpeg (docs/install.md): a shared build,
+      # pinned by release and SHA-256 (tools/windows/ffmpeg-ci.ps1), and
+      # LLVM's libclang (on the runner already) for its bindings.
       - name: FFmpeg
         shell: pwsh
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          $asset = gh release view latest --repo BtbN/FFmpeg-Builds --json assets --jq '.assets[].name' |
-            Where-Object { $_ -match '^ffmpeg-n[0-9.]+-latest-win64-lgpl-shared-[0-9.]+\.zip$' } |
-            Sort-Object -Descending | Select-Object -First 1
-          if (-not $asset) { throw 'no FFmpeg build found' }
-          gh release download latest --repo BtbN/FFmpeg-Builds --pattern $asset --dir $env:RUNNER_TEMP
-          Expand-Archive (Join-Path $env:RUNNER_TEMP $asset) -DestinationPath $env:RUNNER_TEMP
-          $dir = Join-Path $env:RUNNER_TEMP ($asset -replace '\.zip$', '')
-          "FFMPEG_DIR=$dir" >> $env:GITHUB_ENV
-          "LIBCLANG_PATH=C:\Program Files\LLVM\bin" >> $env:GITHUB_ENV
-          (Join-Path $dir 'bin') >> $env:GITHUB_PATH
-      - uses: Swatinem/rust-cache@v2
+        run: ./tools/windows/ffmpeg-ci.ps1 -AddToPath
+      # A cache per FFmpeg build: the build output it holds names its folder.
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          key: ${{ env.FFMPEG_BUILD }}
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace --no-fail-fast
+      - name: The app, packaged
+        shell: pwsh
+        run: ./tools/package-windows.ps1
+        env:
+          HELIO_PROFILE: dev
+      - name: One archive and one installer, the host inside them
+        shell: pwsh
+        run: |
+          $zips = @(Get-ChildItem target\dist -Filter *.zip)
+          $setups = @(Get-ChildItem target\dist -Filter *-setup.exe)
+          $zips.Name; $setups.Name
+          if ($zips.Count -ne 1 -or $setups.Count -ne 1) { throw "$($zips.Count) archives and $($setups.Count) installers, not one of each" }
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $names = [IO.Compression.ZipFile]::OpenRead($zips[0].FullName).Entries.FullName -replace '\\', '/'
+          foreach ($file in 'Helio.exe', 'helio-host.exe', 'bin/helio.exe', 'FFmpeg LICENSE.txt') {
+            if ($names -notcontains $file) { throw "no $file in $($zips[0].Name)" }
+          }
+          if ($names -match '\.(ps1|cmd)$') { throw "an installer script in $($zips[0].Name): $($names -match '\.(ps1|cmd)$')" }
+      # The installer as a release's is checked (tools/windows/test-install.ps1),
+      # unsigned: installed, hosting on, installed again, uninstalled.
+      - name: Install, host, uninstall
+        shell: pwsh
+        run: ./tools/windows/test-install.ps1 -Setup (Get-ChildItem target\dist -Filter *-setup.exe).FullName
 
   linux:
     name: Linux
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
       - name: Rust
         run: rustup toolchain install stable --profile minimal --component clippy && rustup default stable
       # tools/linux/Dockerfile's build packages.
@@ -88,12 +143,27 @@ jobs:
             libx11-dev libx11-xcb-dev libxkbcommon-dev libxkbcommon-x11-dev libwayland-dev \
             libxcursor-dev libxrandr-dev libxi-dev libfontconfig-dev libfreetype-dev libxcb1-dev \
             libpipewire-0.3-dev libspa-0.2-dev libdbus-1-dev
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
       # The host on its own: it and the GPUI apps ask one dependency for
       # different async runtimes (docs/development.md).
-      - run: cargo clippy --workspace --exclude pong --all-targets -- -D warnings
-      - run: cargo clippy -p pong --all-targets -- -D warnings
+      - run: cargo clippy --workspace --exclude helio-host --all-targets -- -D warnings
+      - run: cargo clippy -p helio-host --all-targets -- -D warnings
+      # Outside the workspace, so nothing else builds it: a parser's signature
+      # changed once and the input target stopped compiling, unnoticed.
+      - name: The fuzz targets build
+        run: cargo check --manifest-path helio-proto/fuzz/Cargo.toml --bins
       # The GPUI apps linked two at a time at most: more can run the runner
       # out of memory.
-      - run: cargo test --workspace --exclude pong -j 2 --no-fail-fast
-      - run: cargo test -p pong --no-fail-fast
+      - run: cargo test --workspace --exclude helio-host -j 2 --no-fail-fast
+      - run: cargo test -p helio-host --no-fail-fast
+      - name: The app, packaged
+        run: tools/linux/package
+        env:
+          HELIO_PROFILE: dev
+      - name: One archive, the host inside it
+        run: |
+          ls target/dist
+          [ "$(ls target/dist | wc -l)" -eq 1 ]
+          tar -tzf target/dist/Helio-*-linux-x86_64.tar.gz | sort | tee /dev/stderr |
+            grep -c '/\(helio-app\|helio-host\|helio-host.service\|install.sh\|dev.mihaicristian.helio.desktop\|hicolor/48x48/apps/dev.mihaicristian.helio.png\|hicolor/scalable/apps/dev.mihaicristian.helio.svg\)$' |
+            grep -qx 7

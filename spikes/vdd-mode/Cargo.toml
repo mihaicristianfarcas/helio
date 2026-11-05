@@ -6,9 +6,9 @@ publish = false
 
 # NOTE (deviation from plan Task 1 Step 2): the plan pins `windows = "0.58"`.
 # The rest of the workspace is on 0.61 because windows-capture 1.5 depends on
-# `windows ^0.61.3` (see pingpong-capture/Cargo.toml). This spike's findings
-# become pingpong-display/src/windows.rs, which links into pingpong-server
-# ALONGSIDE pingpong-capture -- two `windows` majors there would mean two
+# `windows ^0.61.3` (see helio-capture/Cargo.toml). This spike's findings
+# become helio-display/src/windows.rs, which links into helio-server
+# ALONGSIDE helio-capture -- two `windows` majors there would mean two
 # different `LUID`/`HANDLE` types. Probe on the version the real code must use.
 [dependencies]
 windows = { version = "0.61", features = [

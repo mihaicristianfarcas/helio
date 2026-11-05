@@ -1,0 +1,51 @@
+[package]
+name = "helio-cli"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "Helio: the `helio` command line (streaming, pairing, the host)"
+
+[dependencies]
+helio-client = { path = "../helio-client" }
+helio-host-data = { path = "../helio-host-data" }
+helio-pairing = { path = "../helio-pairing" }
+helio-proto = { path = "../helio-proto" }
+helio-transport = { path = "../helio-transport" }
+crossbeam-channel = "0.5"
+ctrlc = { version = "3", features = ["termination"] }
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+dispatch2 = "0.3"
+objc2 = "0.6"
+objc2-app-kit = { version = "0.3", features = ["std", "NSApplication", "NSResponder", "NSRunningApplication"] }
+
+[target.'cfg(unix)'.dependencies]
+# Asking the terminal for its background (palette.rs).
+libc = "0.2"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+# The scripted `paste` step reads this computer's clipboard (script.rs).
+arboard = "3"
+
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.61", features = [
+    "Win32_Foundation",
+    # Colour in the console (style.rs).
+    "Win32_System_Console",
+    # SHELLEXECUTEINFOW (`engine::switch_elevated`) has a registry key in it.
+    "Win32_System_Registry",
+    # The user's SID for `helio-host enable --owner` (`engine::switch_args`).
+    "Win32_Security",
+    "Win32_Security_Authorization",
+    "Win32_System_Threading",
+    "Win32_UI_Shell",
+    "Win32_UI_WindowsAndMessaging",
+] }
+
+[[bin]]
+name = "helio"
+path = "src/main.rs"

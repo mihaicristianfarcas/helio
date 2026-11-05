@@ -1,9 +1,10 @@
-# pingpong's landing page
+# Helio's landing page
 
-One page, built with [Astro](https://astro.build): real screenshots of the
-apps, and a real stream recorded in the Linux container.
+Two pages, built with [Astro](https://astro.build): real screenshots of the
+app, and a real stream recorded in the Linux container. The home page, and
+`/agents` for AI agents.
 
-Builds target `https://pingpong.mihaicristian.dev` by default, including
+Builds target `https://helio.mihaicristian.dev` by default, including
 the canonical URL, link previews, software structured data, `robots.txt`
 and `sitemap.xml`. Set `SITE_URL` and `BASE_PATH` when building for
 another domain or a project path.
@@ -13,7 +14,7 @@ npm install
 npm run dev       # http://localhost:4321
 npm run build     # astro check, then site/dist/
 npm test          # build and DOM keyboard regressions
-npx wrangler deploy   # after a build: site/dist/ to pingpong.mihaicristian.dev
+npx wrangler deploy   # after a build: site/dist/ to helio.mihaicristian.dev
 ```
 
 A push to the `landing-page` branch deploys it by itself
@@ -22,7 +23,7 @@ A push to the `landing-page` branch deploys it by itself
 
 Tab and Shift+Tab visit clickable links, buttons and FAQ toggles in page
 order, from the header to the footer. Every gallery choice and download
-option has its own stop. Enter activates links; Enter or Space activates
+has its own stop. Enter activates links; Enter or Space activates
 buttons and FAQ toggles. The mobile menu also accepts arrow keys, Home
 and End; Escape closes it and returns focus to Menu. The first Tab reveals
 Skip to content, which moves focus to the first action in the main content.
@@ -37,12 +38,12 @@ On refresh, the saved scroll position is restored after the component
 scripts finish arranging the gallery and downloads and the fonts settle.
 The font wait has a 600 ms fallback after component initialization.
 
-Copy results and changed download selections are announced to screen
-readers. The stream video has native controls without JavaScript and
+Copy results are announced to screen readers. The stream video has native controls without JavaScript and
 respects reduced motion, including changes made while the page is open.
 
-Without JavaScript, all screenshots and download panels are shown. Copy
-and selection controls appear when their handlers are ready.
+Without JavaScript, all screenshots and downloads are shown. Copy controls
+appear when their handlers are ready. With it, the downloads show one button,
+for the system the browser reports, and list the others under it.
 
 The keyboard tests cover control order, focus changes and hidden content
 in a simulated DOM at desktop and phone widths. Browser rendering and

@@ -1,0 +1,646 @@
+//! Hosting on Windows: `HelioHost`, run from the engine's own copy in
+//! `C:\Program Files\Helio Host`.
+//!
+//! The service runs as LocalSystem (`service`, which says why), so what it
+//! runs must be something no user can replace. The app is installed per
+//! user, in a folder its user can write to; a service started from there
+//! would run, as SYSTEM, whatever that user (or anything running as them)
+//! put in its place. So `helio-host enable`, as an administrator:
+//!
+//! 1. copies the engine (`ENGINE_FILES`, from beside this `helio-host.exe`) into
+//!    `Program Files\Helio Host`, whose permissions it sets itself: only SYSTEM
+//!    and Administrators may change it, Users may read and run it;
+//! 2. checks the copies' Authenticode signature (`signature`): the copies,
+//!    not the originals, which their user could swap after the check;
+//! 3. stops the service if it runs, puts the copies in place, installs the
+//!    drivers the host uses that are missing (`drivers`: SudoVDA,
+//!    ViGEmBus), registers the service to run the copies, opens the
+//!    firewall to them, and starts it.
+//!
+//! `helio-host disable` stops and removes the service, its firewall rules,
+//! the drivers `enable` installed, and the copy. Without an administrator
+//! both change nothing and exit with
+//! [`NEEDS_ELEVATION`](super::NEEDS_ELEVATION).
+//!
+//! Helio's own update brings a new engine beside the app; while hosting is
+//! on, `helio-host update-engine`, run as an administrator from the copy
+//! here, has that new engine's `enable` put it in place once the update's
+//! installer is done ([`update_engine`]).
+//!
+//! The folder is found by its known-folder ID, not `%ProgramFiles%`: an
+//! elevated process keeps the environment of whoever started it, and a
+//! `ProgramFiles` pointing into a user's folder would put the service there.
+
+use std::path::{Path, PathBuf};
+use std::time::Duration;
+
+use windows::core::{w, HSTRING, PCWSTR, PWSTR};
+use windows::Win32::Foundation::{LocalFree, HLOCAL};
+use windows::Win32::Security::Authorization::{
+    ConvertStringSecurityDescriptorToSecurityDescriptorW, SDDL_REVISION_1,
+};
+use windows::Win32::Security::{
+    SetFileSecurityW, DACL_SECURITY_INFORMATION, OWNER_SECURITY_INFORMATION,
+    PROTECTED_DACL_SECURITY_INFORMATION, PSECURITY_DESCRIPTOR,
+};
+use windows::Win32::Storage::FileSystem::{MoveFileExW, MOVEFILE_DELAY_UNTIL_REBOOT};
+use windows::Win32::System::Com::CoTaskMemFree;
+use windows::Win32::UI::Shell::{
+    FOLDERID_ProgramData, FOLDERID_ProgramFiles, SHGetKnownFolderPath, KF_FLAG_DEFAULT,
+};
+
+use super::signature;
+use super::{Error, State};
+use crate::service;
+
+/// The engine: what the service's copy needs, from beside `helio-host.exe`. A
+/// DLL the host loaded from beside itself would be listed here; it loads
+/// none (NVENC and NVAPI come with the driver, in System32).
+const ENGINE_FILES: [&str; 1] = ["helio-host.exe"];
+
+/// A copy on its way in, checked before it replaces the one in place.
+const STAGED: &str = "new";
+/// A running `helio-host.exe` cannot be deleted, only renamed: `disable` run from
+/// the copy itself renames it to this, for Windows to delete at the next
+/// restart (a later `enable` deletes it sooner).
+const REMOVED: &str = "removed";
+
+/// Security descriptors, in SDDL. `O:BA`: owned by Administrators, not by
+/// the administrator who ran `enable` (an owner may always change the
+/// permissions, elevated or not). `P`: protected, nothing inherited. SY
+/// SYSTEM and BA Administrators: full control; BU Users: read and run
+/// (0x1200a9). `OICI`: inherited by what is created inside.
+pub(super) const FOLDER: PCWSTR =
+    w!("O:BAD:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;0x1200a9;;;BU)");
+pub(super) const FILE: PCWSTR = w!("O:BAD:P(A;;FA;;;SY)(A;;FA;;;BA)(A;;0x1200a9;;;BU)");
+
+/// Windows keeps a program's file busy for a moment after its process has
+/// ended, and says nothing when it lets go: a copy over it, or its
+/// deletion, is tried again this many times, this far apart: 5 s in all.
+const TRIES: u32 = 20;
+const BETWEEN_TRIES: Duration = Duration::from_millis(250);
+
+/// `C:\Program Files\Helio Host`, where the service's engine lives.
+fn install_dir() -> Result<PathBuf, String> {
+    // SAFETY: the shell allocates the path; it is copied, then freed once.
+    unsafe {
+        let path = SHGetKnownFolderPath(&FOLDERID_ProgramFiles, KF_FLAG_DEFAULT, None)
+            .map_err(|e| format!("cannot find Program Files: {}", e.message()))?;
+        let text = path.to_string();
+        CoTaskMemFree(Some(path.0 as *const _));
+        Ok(PathBuf::from(text.map_err(|e| e.to_string())?).join("Helio Host"))
+    }
+}
+
+/// The engine the service runs: `C:\Program Files\Helio Host\helio-host.exe`.
+fn engine() -> Result<PathBuf, String> {
+    Ok(install_dir()?.join(ENGINE_FILES[0]))
+}
+
+/// Whether two paths are the same file or folder (both must exist).
+fn same(a: &Path, b: &Path) -> bool {
+    match (std::fs::canonicalize(a), std::fs::canonicalize(b)) {
+        (Ok(a), Ok(b)) => a == b,
+        _ => false,
+    }
+}
+
+/// This program, when it is the engine in Program Files: the only `helio-host`
+/// the service and the host launch into the console session (the host,
+/// and the clipboard helper), so that nothing they start comes from a
+/// folder a user can write to. Anything else is refused, and says why.
+pub fn trusted_engine() -> Result<PathBuf, String> {
+    let engine = engine()?;
+    let here = std::env::current_exe().map_err(|e| e.to_string())?;
+    if same(&here, &engine) {
+        Ok(engine)
+    } else {
+        Err(format!(
+            "this helio-host runs from {}, not {}: as SYSTEM, only that copy is started \
+                (turning hosting on puts it there: helio host enable)",
+            here.display(),
+            engine.display()
+        ))
+    }
+}
+
+/// Replace `path`'s owner and access list with `sddl`.
+pub(super) fn secure(path: &Path, sddl: PCWSTR) -> Result<(), String> {
+    let mut sd = PSECURITY_DESCRIPTOR::default();
+    // SAFETY: `sddl` is a NUL-terminated constant; `sd` receives a
+    // descriptor the system allocates, used only until it is freed below.
+    unsafe {
+        ConvertStringSecurityDescriptorToSecurityDescriptorW(sddl, SDDL_REVISION_1, &mut sd, None)
+            .map_err(|e| e.message())?;
+        let set = SetFileSecurityW(
+            &HSTRING::from(path.as_os_str()),
+            OWNER_SECURITY_INFORMATION
+                | DACL_SECURITY_INFORMATION
+                | PROTECTED_DACL_SECURITY_INFORMATION,
+            sd,
+        );
+        let _ = LocalFree(Some(HLOCAL(sd.0)));
+        set.ok().map_err(|e| {
+            format!(
+                "{}: cannot set its permissions: {}",
+                path.display(),
+                e.message()
+            )
+        })
+    }
+}
+
+/// `name` with `suffix` after it: `helio-host.exe.new`.
+fn with_suffix(dir: &Path, name: &str, suffix: &str) -> PathBuf {
+    dir.join(format!("{name}.{suffix}"))
+}
+
+/// Run `op` until it works or [`TRIES`] runs out (see there).
+fn retry<T>(mut op: impl FnMut() -> std::io::Result<T>) -> std::io::Result<T> {
+    let mut tries = 1;
+    loop {
+        match op() {
+            Err(_) if tries < TRIES => {
+                tries += 1;
+                std::thread::sleep(BETWEEN_TRIES);
+            }
+            done => return done,
+        }
+    }
+}
+
+/// Copy the engine from `source` into `dir`, staged (`helio-host.exe.new`), with
+/// the folder's and the copies' permissions set.
+fn stage(source: &Path, dir: &Path) -> Result<Vec<PathBuf>, String> {
+    std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+    secure(dir, FOLDER)?;
+    let mut staged = Vec::new();
+    for name in ENGINE_FILES {
+        let from = source.join(name);
+        let to = with_suffix(dir, name, STAGED);
+        // The bytes only: a copy (CopyFile) would also take the download's
+        // mark of the web and other streams the user's file carries.
+        let copied = std::fs::File::open(&from).and_then(|mut f| {
+            let mut out = std::fs::File::create(&to)?;
+            std::io::copy(&mut f, &mut out)?;
+            out.sync_all()
+        });
+        staged.push(to.clone());
+        if let Err(e) = copied
+            .map_err(|e| format!("{}: {e}", from.display()))
+            .and_then(|()| secure(&to, FILE))
+        {
+            unstage(&staged);
+            return Err(e);
+        }
+    }
+    Ok(staged)
+}
+
+fn unstage(staged: &[PathBuf]) {
+    for f in staged {
+        let _ = std::fs::remove_file(f);
+    }
+}
+
+/// Check each engine file's signature. A failure refuses when this build
+/// requires signatures, and is printed as a warning when it does not.
+fn check(files: &[PathBuf]) -> Result<(), String> {
+    for (file, name) in files.iter().zip(ENGINE_FILES) {
+        if let Err(problem) = signature::check(file) {
+            if signature::REQUIRED {
+                return Err(format!(
+                    "Hosting stays off: {name}, as copied to {}, is refused: {problem}.",
+                    file.parent().unwrap_or(file).display()
+                ));
+            }
+            eprintln!("warning: {name}: {problem} (this build does not require a signature)");
+        }
+    }
+    Ok(())
+}
+
+/// Delete what an earlier `disable` could not (see [`REMOVED`]).
+fn sweep(dir: &Path) {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        if entry.path().extension().is_some_and(|e| e == REMOVED) {
+            let _ = std::fs::remove_file(entry.path());
+        }
+    }
+}
+
+/// Who turned hosting on, as their SID's text (`hosting::owner`): beside
+/// the engine, where only SYSTEM and Administrators may write.
+const OWNER: &str = "owner";
+
+/// The owner the last `enable --owner` recorded, while it is still a user
+/// account's SID.
+pub fn owner() -> Option<String> {
+    let text = std::fs::read_to_string(install_dir().ok()?.join(OWNER)).ok()?;
+    let sid = text.trim();
+    crate::private::is_account_sid(sid).then(|| sid.to_string())
+}
+
+/// Whether Windows knows `sid` as a user account, not a group (a domain's
+/// groups have a user's shape: `is_account_sid`).
+fn is_user(sid: &str) -> bool {
+    use windows::Win32::Security::Authorization::ConvertStringSidToSidW;
+    use windows::Win32::Security::{LookupAccountSidW, SidTypeUser, PSID, SID_NAME_USE};
+    let mut psid = PSID::default();
+    let (mut name, mut domain) = ([0u16; 256], [0u16; 256]);
+    let (mut name_len, mut domain_len) = (name.len() as u32, domain.len() as u32);
+    let mut kind = SID_NAME_USE::default();
+    // SAFETY: `psid` is allocated by ConvertStringSidToSidW and freed once
+    // below, after LookupAccountSidW read it; the name buffers are locals of
+    // the lengths given.
+    unsafe {
+        if ConvertStringSidToSidW(&HSTRING::from(sid), &mut psid).is_err() {
+            return false;
+        }
+        let found = LookupAccountSidW(
+            PCWSTR::null(),
+            psid,
+            Some(PWSTR(name.as_mut_ptr())),
+            &mut name_len,
+            Some(PWSTR(domain.as_mut_ptr())),
+            &mut domain_len,
+            &mut kind,
+        )
+        .is_ok();
+        let _ = LocalFree(Some(HLOCAL(psid.0)));
+        found && kind == SidTypeUser
+    }
+}
+
+/// `enable`, with `owner` the user turning hosting on (`--owner`), whose
+/// Helio may then read the host's local token: they become its owner, in
+/// place of whoever was. None keeps the owner there was (an update's
+/// `enable`, an installer's).
+pub fn enable(owner: Option<String>) -> Result<String, Error> {
+    if !crate::private::elevated() {
+        return Err(Error::NeedsElevation);
+    }
+    if let Some(sid) = owner.as_deref().filter(|sid| !is_user(sid)) {
+        return Err(Error::Failed(format!(
+            "{sid} is not a user account on this PC; nothing was changed"
+        )));
+    }
+    let here = std::env::current_exe().map_err(|e| e.to_string())?;
+    let source = here.parent().ok_or("helio-host.exe is in no folder")?;
+    let dir = install_dir()?;
+    // The installed copy run again (an installer's second run): nothing to
+    // copy; it is checked where it is.
+    let in_place = same(source, &dir);
+    let files: Vec<PathBuf> = if in_place {
+        ENGINE_FILES.iter().map(|f| dir.join(f)).collect()
+    } else {
+        stage(source, &dir)?
+    };
+    if let Err(e) = check(&files) {
+        if !in_place {
+            unstage(&files);
+            // The folder `stage` made, when hosting was not on: a refused
+            // engine leaves nothing in Program Files.
+            let _ = std::fs::remove_dir(&dir);
+        }
+        return Err(Error::Failed(e));
+    }
+    sweep(&dir);
+    let was_running = service::stop();
+    if !in_place {
+        for (staged, name) in files.iter().zip(ENGINE_FILES) {
+            if let Err(e) = retry(|| std::fs::rename(staged, dir.join(name))) {
+                unstage(&files);
+                // The host keeps running on the engine in place rather than
+                // stay stopped until someone notices.
+                if was_running {
+                    service::start();
+                }
+                return Err(Error::Failed(format!(
+                    "cannot put {name} in {}: {e}",
+                    dir.display()
+                )));
+            }
+        }
+    }
+    // Before the service starts, which writes the token for the owner.
+    if let Some(sid) = &owner {
+        let path = dir.join(OWNER);
+        if let Err(e) = std::fs::write(&path, sid)
+            .map_err(|e| format!("{}: {e}", path.display()))
+            .and_then(|()| secure(&path, FILE))
+        {
+            eprintln!(
+                "warning: the user who turned hosting on is not recorded ({e}): \
+                only administrators may read the host's token"
+            );
+        }
+    }
+    // Before the service starts: its first session finds them.
+    let drivers = super::drivers::install(&dir, source);
+    let engine = engine()?;
+    service::register(&engine)?;
+    Ok(said(
+        format!(
+            "Hosting is on: HelioHost runs {} from boot, before anyone signs in.",
+            engine.display()
+        ),
+        &drivers,
+    ))
+}
+
+/// What `enable` or `disable` says: `first`, then a line for each driver.
+fn said(first: String, drivers: &[String]) -> String {
+    std::iter::once(first)
+        .chain(drivers.iter().cloned())
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+pub fn disable() -> Result<String, Error> {
+    if !crate::private::elevated() {
+        return Err(Error::NeedsElevation);
+    }
+    service::unregister()?;
+    let dir = install_dir()?;
+    // Once the host has stopped: it holds SudoVDA's device open.
+    let drivers = super::drivers::remove(&dir);
+    let _ = std::fs::remove_dir_all(dir.join("drivers"));
+    let here = std::env::current_exe().map_err(|e| e.to_string())?;
+    let mut left = None;
+    for name in ENGINE_FILES {
+        let file = dir.join(name);
+        let _ = std::fs::remove_file(with_suffix(&dir, name, STAGED));
+        if !file.exists() {
+            continue;
+        }
+        if same(&file, &here) {
+            // This program: renamed out of the way, deleted at the next
+            // restart. Not under its own name, which a later `enable` will
+            // have filled again by then.
+            let away = with_suffix(&dir, &format!("{name}.{}", std::process::id()), REMOVED);
+            std::fs::rename(&file, &away).map_err(|e| format!("{}: {e}", file.display()))?;
+            // SAFETY: the path is a NUL-terminated string alive for the call.
+            let _ = unsafe {
+                MoveFileExW(
+                    &HSTRING::from(away.as_os_str()),
+                    PCWSTR::null(),
+                    MOVEFILE_DELAY_UNTIL_REBOOT,
+                )
+            };
+            left = Some(away);
+        } else {
+            retry(|| std::fs::remove_file(&file))
+                .map_err(|e| format!("cannot delete {}: {e}", file.display()))?;
+        }
+    }
+    let _ = std::fs::remove_file(dir.join(OWNER));
+    // The folder goes once nothing else is in it (an installer may keep
+    // Helio Host's window there).
+    let _ = std::fs::remove_dir(&dir);
+    let first = match left {
+        None => format!(
+            "Hosting is off: HelioHost, its firewall rules and {} are removed.",
+            engine()?.display()
+        ),
+        Some(away) => format!(
+            "Hosting is off: HelioHost and its firewall rules are removed. This helio-host.exe \
+                is the engine itself: it is now {}, and goes at the next restart.",
+            away.display()
+        ),
+    };
+    Ok(said(first, &drivers))
+}
+
+pub fn state() -> State {
+    service::state()
+}
+
+/// How long `update-engine` waits for the update's installer. It takes
+/// seconds (it unpacks some 50 MB); one that runs this long has hung, and
+/// the host keeps the engine it has.
+const INSTALLER_WAIT: Duration = Duration::from_secs(15 * 60);
+
+/// `helio-host update-engine PID ENGINE`: the host's part of Helio's own
+/// update (`helio-update/src/install/windows.rs`). Helio has Windows run it
+/// as an administrator, from the service's engine here in Program Files,
+/// while its window is in front: so the prompt opens at once, and names
+/// the engine as it was checked. It waits for process PID, the update's run
+/// of the installer as the user, and once that has ended well, runs
+/// `ENGINE enable`: the new engine beside the updated app, which checks its
+/// copy, puts it in place of this one and restarts the service on it
+/// ([`enable`]). It does not wait for that: the program it replaces is the
+/// one this runs. What happened, and what `enable` said, go to the host's
+/// `logs\update-engine.log`, not to a file the command line names: an
+/// administrator writes it.
+///
+/// Only an engine runs: ENGINE must be named `helio-host.exe` and, in a
+/// build that requires signatures, be signed by its publisher, as this copy
+/// is; it is held open, so that it cannot change between the check and its
+/// start. Elevated by a prompt that names this program, it must not start
+/// anything else.
+pub fn update_engine(args: &[String]) -> i32 {
+    if !crate::private::elevated() {
+        eprintln!("helio-host update-engine runs as an administrator (Helio's update starts it)");
+        return super::NEEDS_ELEVATION;
+    }
+    let (Some(pid), Some(engine), None) = (
+        args.get(1).and_then(|p| p.parse::<u32>().ok()),
+        args.get(2).map(PathBuf::from),
+        args.get(3),
+    ) else {
+        eprintln!("usage: helio-host update-engine PID ENGINE");
+        return 2;
+    };
+    let log = update_log();
+    let say = |line: &str| {
+        use std::io::Write;
+        if let Some(mut file) = log.as_ref() {
+            let _ = writeln!(file, "{line}");
+        }
+    };
+    match wait_for_installer(pid) {
+        Ok(0) => {}
+        // The installer's waiter said why, in the app's update log.
+        Ok(code) => {
+            say(&format!(
+                "the update's installer ended with {code}: the host keeps its engine"
+            ));
+            return 1;
+        }
+        Err(e) => {
+            say(&format!("the host keeps its engine: {e}"));
+            return 1;
+        }
+    }
+    let started = pinned_engine(&engine).and_then(|(pin, engine)| {
+        // Said first: what `enable` says comes after it, in the same file.
+        say(&format!(
+            "{} enable: the host moves onto it",
+            engine.display()
+        ));
+        let mut enable = std::process::Command::new(&engine);
+        enable.arg("enable").stdin(std::process::Stdio::null());
+        if let Some(file) = log.as_ref().and_then(|f| f.try_clone().ok()) {
+            let err = file.try_clone().ok();
+            enable.stdout(file);
+            if let Some(err) = err {
+                enable.stderr(err);
+            }
+        }
+        use std::os::windows::process::CommandExt;
+        /// `CREATE_NO_WINDOW`: a console program, started by one without a
+        /// console.
+        const NO_WINDOW: u32 = 0x0800_0000;
+        let spawned = enable.creation_flags(NO_WINDOW).spawn();
+        drop(pin);
+        spawned.map_err(|e| format!("{}: {e}", engine.display()))
+    });
+    match started {
+        Ok(_) => 0,
+        Err(e) => {
+            say(&format!("the host keeps its engine: {e}"));
+            1
+        }
+    }
+}
+
+/// `logs\update-engine.log` in the host's data folder, started anew; none
+/// when the folder is not there (it is, while hosting is on), rather than
+/// make it here.
+///
+/// The folder is the service's host's, found from the system, not from
+/// this process's environment (`HELIO_HOST_DATA_DIR`, `%ProgramData%`):
+/// elevated by consent, it has the environment of the user who approved
+/// it, which they and whatever runs as them can set. Nor through a link: a
+/// junction there would have an administrator write this file wherever it
+/// points.
+fn update_log() -> Option<std::fs::File> {
+    let host_dir = system_data_dir().ok()?;
+    let logs = host_dir.join("logs");
+    // `is_dir` of what is not followed: false for a junction.
+    let real_dir = |p: &Path| std::fs::symlink_metadata(p).is_ok_and(|m| m.is_dir());
+    (real_dir(&host_dir) && real_dir(&logs))
+        .then(|| std::fs::File::create(logs.join("update-engine.log")).ok())
+        .flatten()
+}
+
+/// `C:\ProgramData\Helio Host`, by its known-folder ID (see [`install_dir`]):
+/// where the service's host keeps its data (`helio_host_data::data_dir` as
+/// the service has it, with no `HELIO_HOST_DATA_DIR`).
+fn system_data_dir() -> Result<PathBuf, String> {
+    // SAFETY: the shell allocates the path; it is copied, then freed once.
+    unsafe {
+        let path = SHGetKnownFolderPath(&FOLDERID_ProgramData, KF_FLAG_DEFAULT, None)
+            .map_err(|e| format!("cannot find ProgramData: {}", e.message()))?;
+        let text = path.to_string();
+        CoTaskMemFree(Some(path.0 as *const _));
+        Ok(PathBuf::from(text.map_err(|e| e.to_string())?).join("Helio Host"))
+    }
+}
+
+/// Wait for process `pid` to end, at most [`INSTALLER_WAIT`]; its exit
+/// code.
+fn wait_for_installer(pid: u32) -> Result<u32, String> {
+    use windows::Win32::Foundation::{CloseHandle, WAIT_OBJECT_0};
+    use windows::Win32::System::Threading::{
+        GetExitCodeProcess, OpenProcess, WaitForSingleObject, PROCESS_QUERY_LIMITED_INFORMATION,
+        PROCESS_SYNCHRONIZE,
+    };
+    // SAFETY: the handle is opened for waiting and reading the exit code,
+    // and closed once, whatever happens.
+    unsafe {
+        let process = OpenProcess(
+            PROCESS_SYNCHRONIZE | PROCESS_QUERY_LIMITED_INFORMATION,
+            false,
+            pid,
+        )
+        .map_err(|e| {
+            format!(
+                "the update's installer (process {pid}) is gone already: {}",
+                e.message()
+            )
+        })?;
+        let ms = INSTALLER_WAIT.as_millis().min(u32::MAX as u128) as u32;
+        let waited = WaitForSingleObject(process, ms);
+        let mut code = 1u32;
+        let got = GetExitCodeProcess(process, &mut code);
+        let _ = CloseHandle(process);
+        if waited != WAIT_OBJECT_0 {
+            return Err(format!(
+                "the update's installer did not end within {} minutes",
+                INSTALLER_WAIT.as_secs() / 60
+            ));
+        }
+        got.map_err(|e| e.message())?;
+        Ok(code)
+    }
+}
+
+/// `engine` opened so that nothing can change, rename or delete it while
+/// the handle lives (others may only read it, as starting it does), once it
+/// is known to be an engine: `helio-host.exe`, and in a build that requires
+/// it, signed by the publisher (`signature`). With the path to check and
+/// start it by: the open file's own, every junction or link on the way
+/// resolved. Looks removable, is not: the handle holds the file, not the
+/// path, so a junction in `engine` could be pointed elsewhere between the
+/// check and the start; the folders on the resolved path cannot be renamed
+/// while a file in them is open.
+fn pinned_engine(engine: &Path) -> Result<(std::fs::File, PathBuf), String> {
+    use std::os::windows::fs::OpenOptionsExt;
+    /// `FILE_SHARE_READ`, and no other sharing.
+    const SHARE_READ: u32 = 0x1;
+    let named = engine
+        .file_name()
+        .is_some_and(|n| n.eq_ignore_ascii_case(ENGINE_FILES[0]));
+    if !named {
+        return Err(format!("{} is not an engine", engine.display()));
+    }
+    let pin = std::fs::OpenOptions::new()
+        .read(true)
+        .share_mode(SHARE_READ)
+        .open(engine)
+        .map_err(|e| format!("{}: {e}", engine.display()))?;
+    let engine = final_path(&pin).map_err(|e| format!("{}: {e}", engine.display()))?;
+    if let Err(problem) = signature::check(&engine) {
+        if signature::REQUIRED {
+            return Err(format!("{} is refused: {problem}", engine.display()));
+        }
+        eprintln!("warning: {problem} (this build does not require a signature)");
+    }
+    Ok((pin, engine))
+}
+
+/// The path of the file `file` has open, as Windows resolves it
+/// (`GetFinalPathNameByHandleW`: no junction or link left in it), written
+/// `C:\…` rather than `\\?\C:\…` where it is on a drive.
+fn final_path(file: &std::fs::File) -> Result<PathBuf, String> {
+    use std::os::windows::io::AsRawHandle;
+    use windows::Win32::Foundation::HANDLE;
+    use windows::Win32::Storage::FileSystem::{
+        GetFinalPathNameByHandleW, FILE_NAME_NORMALIZED, GETFINALPATHNAMEBYHANDLE_FLAGS,
+        VOLUME_NAME_DOS,
+    };
+    let mut buf = [0u16; 1024];
+    // SAFETY: the handle is `file`'s, open for the whole call; the buffer
+    // is a local of the length given.
+    let n = unsafe {
+        GetFinalPathNameByHandleW(
+            HANDLE(file.as_raw_handle()),
+            &mut buf,
+            GETFINALPATHNAMEBYHANDLE_FLAGS(FILE_NAME_NORMALIZED.0 | VOLUME_NAME_DOS.0),
+        )
+    } as usize;
+    // 0: failed; at least the buffer's length: it would not fit.
+    if n == 0 || n >= buf.len() {
+        return Err("cannot read where it is".into());
+    }
+    let path = String::from_utf16(&buf[..n]).map_err(|e| e.to_string())?;
+    let on_drive = path
+        .strip_prefix(r"\\?\")
+        .filter(|rest| rest.as_bytes().get(1) == Some(&b':'));
+    Ok(PathBuf::from(on_drive.unwrap_or(&path)))
+}

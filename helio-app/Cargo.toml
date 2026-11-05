@@ -1,0 +1,68 @@
+[package]
+name = "helio-app"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "Helio: the Helio streaming client app (host list, pairing, settings) for macOS, Windows and Linux"
+
+[[bin]]
+name = "helio-app"
+path = "src/main.rs"
+
+# `helio` on Windows: bin\helio.exe in Helio's folder (src/bin/console.rs).
+[[bin]]
+name = "helio-console"
+path = "src/bin/console.rs"
+
+[features]
+default = ["runtime-shaders"]
+# See helio-ui; the app bundles build without it when Xcode is there.
+runtime-shaders = ["helio-ui/runtime-shaders"]
+
+[dependencies]
+helio-client = { path = "../helio-client" }
+helio-cli = { path = "../helio-cli" }
+helio-agent = { path = "../helio-agent" }
+serde_json = "1"
+helio-pairing = { path = "../helio-pairing" }
+helio-proto = { path = "../helio-proto" }
+crossbeam-channel = "0.5"
+futures = "0.3"
+gpui.workspace = true
+gpui_platform.workspace = true
+helio-ui = { path = "../helio-ui", default-features = false }
+helio-update = { path = "../helio-update" }
+serde = { version = "1", features = ["derive"] }
+toml = "0.8"
+tracing = "0.1"
+ureq = { version = "3", features = ["json"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+block2 = "0.6"
+objc2 = "0.6"
+objc2-foundation = { version = "0.3", features = ["std", "NSString", "NSArray", "NSSet", "NSError", "NSBundle"] }
+objc2-user-notifications = { version = "0.3", default-features = false, features = ["std", "block2", "bitflags", "UNUserNotificationCenter", "UNNotification", "UNNotificationAction", "UNNotificationCategory", "UNNotificationContent", "UNNotificationRequest", "UNNotificationResponse", "UNNotificationSound", "UNNotificationTrigger"] }
+objc2-core-foundation = { version = "0.3", features = ["std", "CFBase", "CFString", "CFNumber", "CFPreferences", "CFPropertyList"] }
+
+[target.'cfg(windows)'.dependencies]
+# SudoVDA's presence, for the Hosting page's check.
+helio-display = { path = "../helio-display" }
+windows = { version = "0.61", features = [
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_System_Console",
+    "Win32_System_JobObjects",
+    "Win32_System_Registry",
+    "Win32_System_Threading",
+    # WM_SETTINGCHANGE, when `helio` goes on or off the PATH (command.rs).
+    "Win32_UI_WindowsAndMessaging",
+] }
+
+[dev-dependencies]
+resvg = { version = "0.46", default-features = false }
+
+[build-dependencies]
+winresource = "0.1"

@@ -1,0 +1,847 @@
+//! Sharing the clipboard between the two ends of a session: what is copied
+//! on one (text, an image, files and folders) can be pasted on the other.
+//!
+//! Each end runs a [`ClipSync`] for as long as the session does. It looks at
+//! its own clipboard a few times a second -- the system's change count on a
+//! Mac and on Windows, what is on it elsewhere -- and sends each new copy to
+//! the other end over the session's tunnel (`helio_proto::clip`: chunks,
+//! acknowledged and resent, under a rate cap so the video goes first). What
+//! arrives goes on the clipboard here: text and images as they are, files
+//! into a folder of this end's, put on the clipboard as files (a paste in
+//! Finder or Explorer copies them from there).
+//!
+//! Left alone: copies a password manager marks as concealed (on macOS and
+//! Windows; see `Board::concealed` for Linux), and copies
+//! larger than `clip::MAX_TRANSFER` (files beyond it are not sent; the text
+//! or image of the copy still is).
+//!
+//! Each way can be turned off, as a host's permissions for a device may
+//! allow one and not the other (Apollo's `clipboard_read` and
+//! `clipboard_set`): with sending off, this end's clipboard is not even
+//! looked at; with receiving off, a copy from the other end is refused at
+//! its first chunk, so the other end stops sending it.
+
+mod board;
+
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
+use std::sync::Arc;
+use std::thread::JoinHandle;
+use std::time::{Duration, Instant};
+
+use crossbeam_channel::{Receiver, Sender};
+use helio_proto::clip::{self, Incoming, Item, Msg, Outgoing};
+
+pub use board::Board;
+
+/// How often the clipboard is looked at.
+const LOOK_EVERY: Duration = Duration::from_millis(400);
+/// The worker's pace while a transfer runs.
+const TICK: Duration = Duration::from_millis(5);
+/// Looks at a changed clipboard before what is on it counts as unshareable.
+const READ_TRIES: u32 = 10;
+/// Copies done lately, whose late chunks are answered "all in".
+const DONE_KEPT: usize = 8;
+/// How long ending the sharing waits for the worker: longer than it sleeps
+/// between looks. A look can take far longer: through XWayland, reads of a
+/// selection that does not answer held a Plasma 6.6 host's worker for 54 s,
+/// and the session's end, and so the next session, with it.
+const STOP_WITHIN: Duration = Duration::from_secs(1);
+
+pub struct Options {
+    /// Where files copied on the other end land: a folder of this end's,
+    /// emptied as the sharing starts.
+    pub files_dir: PathBuf,
+    /// Bytes per second at most.
+    pub rate: u64,
+    /// Send what is on the clipboard now (files, text or an image, as a copy
+    /// made later would go) as the sharing starts: a client does, so what
+    /// was copied before the stream can be pasted in it.
+    pub offer_current: bool,
+    /// The other end, for the log.
+    pub peer: String,
+    /// Which ways copies go, as the sharing starts.
+    pub directions: Directions,
+}
+
+/// Which ways copies go.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Directions {
+    /// This end's copies go to the other end.
+    pub send: bool,
+    /// The other end's copies land on this end's clipboard.
+    pub receive: bool,
+}
+
+impl Directions {
+    pub const BOTH: Directions = Directions {
+        send: true,
+        receive: true,
+    };
+
+    /// As one byte (`helio-host clipboard-agent` passes it on).
+    pub fn to_bits(self) -> u8 {
+        self.send as u8 | (self.receive as u8) << 1
+    }
+
+    pub fn from_bits(bits: u8) -> Directions {
+        Directions {
+            send: bits & 1 != 0,
+            receive: bits & 2 != 0,
+        }
+    }
+}
+
+/// What a stream's clipboard sharing moves at most per second: half the
+/// video's bitrate, within bounds.
+pub fn rate_for(bitrate_kbps: u32) -> u64 {
+    (bitrate_kbps as u64 * 1000 / 8 / 2).clamp(2 << 20, 25 << 20)
+}
+
+/// Clipboard sharing for one session, on a thread of its own.
+pub struct ClipSync {
+    inbox: Sender<Vec<u8>>,
+    stop: Arc<AtomicBool>,
+    /// `Directions::to_bits`, read by the worker each turn.
+    directions: Arc<AtomicU8>,
+    /// Nothing is sent on it: it closes as the worker ends.
+    ended: Receiver<()>,
+    thread: Option<JoinHandle<()>>,
+}
+
+impl ClipSync {
+    /// Start sharing; `send` puts a packet (header and body) on the tunnel.
+    pub fn start(opts: Options, send: impl Fn(&[u8]) + Send + 'static) -> ClipSync {
+        let (inbox, rx) = crossbeam_channel::bounded(8192);
+        let stop = Arc::new(AtomicBool::new(false));
+        let directions = Arc::new(AtomicU8::new(opts.directions.to_bits()));
+        let (worker_ended, ended) = crossbeam_channel::bounded(0);
+        let thread = {
+            let (stop, directions) = (stop.clone(), directions.clone());
+            std::thread::Builder::new()
+                .name("clipboard".into())
+                .spawn(move || {
+                    let _ended: Sender<()> = worker_ended;
+                    Worker::new(opts, Box::new(send)).run(rx, &stop, &directions)
+                })
+                .map_err(|e| tracing::warn!(error = %e, "cannot start clipboard sharing"))
+                .ok()
+        };
+        ClipSync {
+            inbox,
+            stop,
+            directions,
+            ended,
+            thread,
+        }
+    }
+
+    /// Change which ways copies go, from now on (a copy on its way the
+    /// other way stops).
+    pub fn set_directions(&self, d: Directions) {
+        self.directions.store(d.to_bits(), Ordering::Relaxed);
+    }
+
+    /// A clipboard packet from the other end (a control body for which
+    /// `clip::is_clip`).
+    pub fn deliver(&self, body: &[u8]) {
+        let _ = self.inbox.try_send(body.to_vec());
+    }
+}
+
+impl Drop for ClipSync {
+    fn drop(&mut self) {
+        self.stop.store(true, Ordering::Relaxed);
+        if self.ended.recv_timeout(STOP_WITHIN) == Err(crossbeam_channel::RecvTimeoutError::Timeout)
+        {
+            // It ends when its read does, sending no more than a cancel.
+            tracing::info!("the clipboard is not answering; not waiting for it");
+            return;
+        }
+        if let Some(t) = self.thread.take() {
+            let _ = t.join();
+        }
+    }
+}
+
+/// Sends one message to the other end, over the session's tunnel.
+type SendFn = Box<dyn Fn(&[u8]) + Send>;
+
+struct Worker {
+    opts: Options,
+    send: SendFn,
+    board: Board,
+    outgoing: Option<Outgoing>,
+    incoming: Option<Incoming>,
+    /// Copies received lately: (id, chunks), to answer their retransmits.
+    done: std::collections::VecDeque<(u32, u32)>,
+    /// The clipboard's stamp when last looked at, and after this end last
+    /// wrote to it (not sent back).
+    seen: Option<u64>,
+    next_id: u32,
+    started: Option<Instant>,
+    /// Looks at a changed clipboard that found nothing readable yet.
+    misses: u32,
+    /// A digest of the last copy sent or received: the same copy again is
+    /// not sent (both ends on one clipboard would bounce it forever).
+    last: Option<u64>,
+    directions: Directions,
+}
+
+impl Worker {
+    fn new(opts: Options, send: SendFn) -> Worker {
+        let _ = std::fs::remove_dir_all(&opts.files_dir);
+        let next_id = rand_core::RngCore::next_u32(&mut rand_core::OsRng);
+        Worker {
+            board: Board::open(),
+            send,
+            outgoing: None,
+            incoming: None,
+            done: Default::default(),
+            seen: None,
+            next_id,
+            started: None,
+            misses: 0,
+            last: None,
+            directions: opts.directions,
+            opts,
+        }
+    }
+
+    fn run(mut self, rx: Receiver<Vec<u8>>, stop: &AtomicBool, directions: &AtomicU8) {
+        tracing::info!(peer = self.opts.peer, directions = ?self.directions, "sharing the clipboard");
+        if self.directions.send {
+            self.seen = self.board.stamp();
+            if self.opts.offer_current && !self.board.concealed() {
+                // Files too, as a copy made during the session goes: a file
+                // copied in Finder before connecting is pasted on the host
+                // as often as text is.
+                match self.board.read(true) {
+                    Some(items) => self.offer(items),
+                    None => tracing::info!(
+                        why = self.board.why_not(),
+                        "nothing on the clipboard to share as the sharing starts"
+                    ),
+                }
+            }
+        }
+        let mut last_look = Instant::now();
+        while !stop.load(Ordering::Relaxed) {
+            let busy = self.outgoing.is_some() || self.incoming.is_some();
+            let wait = if busy {
+                TICK
+            } else {
+                LOOK_EVERY.saturating_sub(last_look.elapsed()).max(TICK)
+            };
+            match rx.recv_timeout(wait) {
+                Ok(body) => {
+                    self.on_packet(&body);
+                    while let Ok(body) = rx.try_recv() {
+                        self.on_packet(&body);
+                    }
+                }
+                Err(crossbeam_channel::RecvTimeoutError::Timeout) => {}
+                Err(crossbeam_channel::RecvTimeoutError::Disconnected) => break,
+            }
+            self.follow(Directions::from_bits(directions.load(Ordering::Relaxed)));
+            let now = Instant::now();
+            self.receive_tick(now);
+            self.send_tick(now);
+            if last_look.elapsed() >= LOOK_EVERY {
+                last_look = now;
+                if self.directions.send {
+                    self.look();
+                }
+            }
+        }
+        if let Some(o) = self.outgoing.take() {
+            (self.send)(&clip::cancel_packet(o.id));
+        }
+        tracing::info!(peer = self.opts.peer, "clipboard sharing over");
+    }
+
+    /// Copies go the ways `d` says from now on.
+    fn follow(&mut self, d: Directions) {
+        if d == self.directions {
+            return;
+        }
+        tracing::info!(peer = self.opts.peer, directions = ?d, "clipboard sharing changed");
+        if !d.send {
+            if let Some(o) = self.outgoing.take() {
+                (self.send)(&clip::cancel_packet(o.id));
+            }
+        } else if !self.directions.send {
+            // What was copied while sending was off stays here.
+            self.seen = self.board.stamp();
+        }
+        if !d.receive {
+            if let Some(i) = self.incoming.take() {
+                (self.send)(&clip::cancel_packet(i.id));
+            }
+        }
+        self.directions = d;
+    }
+
+    /// Something new on this end's clipboard: send it.
+    fn look(&mut self) {
+        let stamp = self.board.stamp();
+        if stamp.is_none() || stamp == self.seen {
+            return;
+        }
+        if self.board.concealed() {
+            self.seen = stamp;
+            tracing::info!("a concealed copy (a password manager's): not shared");
+            return;
+        }
+        match self.board.read(true) {
+            Some(items) => {
+                self.seen = stamp;
+                self.misses = 0;
+                self.offer(items);
+            }
+            // The app copying may still hold the clipboard (Windows opens
+            // it to one program at a time): look again, a few times.
+            None => {
+                self.misses += 1;
+                if self.misses >= READ_TRIES {
+                    tracing::info!(
+                        why = self.board.why_not(),
+                        "the clipboard changed, but holds nothing to share"
+                    );
+                    self.seen = stamp;
+                    self.misses = 0;
+                }
+            }
+        }
+    }
+
+    fn offer(&mut self, items: Vec<Item>) {
+        let bytes = clip::encode_items(&items);
+        let digest = digest(&bytes);
+        if self.last == Some(digest) {
+            return;
+        }
+        self.last = Some(digest);
+        if bytes.len() > clip::MAX_TRANSFER {
+            tracing::info!(bytes = bytes.len(), "a copy too large to share");
+            return;
+        }
+        if let Some(old) = self.outgoing.take() {
+            (self.send)(&clip::cancel_packet(old.id));
+        }
+        self.next_id = self.next_id.wrapping_add(1);
+        tracing::info!(
+            peer = self.opts.peer,
+            what = describe(&items),
+            bytes = bytes.len(),
+            "sending a copy"
+        );
+        self.started = Some(Instant::now());
+        self.outgoing = Some(Outgoing::new(
+            self.next_id,
+            bytes,
+            self.opts.rate,
+            Instant::now(),
+        ));
+    }
+
+    fn on_packet(&mut self, body: &[u8]) {
+        let now = Instant::now();
+        match clip::decode(body) {
+            Some(Msg::Data {
+                id,
+                total,
+                offset,
+                bytes,
+            }) => {
+                if let Some(&(_, chunks)) = self.done.iter().find(|(d, _)| *d == id) {
+                    // Done here, but the sender missed the last ack.
+                    (self.send)(&clip::full_ack_packet(id, chunks));
+                    return;
+                }
+                if !self.directions.receive {
+                    // Not taken: the sender stops at this, not at a stall.
+                    (self.send)(&clip::cancel_packet(id));
+                    return;
+                }
+                if self.incoming.as_ref().is_none_or(|i| i.id != id) {
+                    // A new copy supersedes one still arriving.
+                    match Incoming::new(id, total, now) {
+                        Some(i) => self.incoming = Some(i),
+                        None => {
+                            (self.send)(&clip::cancel_packet(id));
+                            return;
+                        }
+                    }
+                }
+                if let Some(i) = self.incoming.as_mut() {
+                    i.on_data(total, offset, bytes, now);
+                }
+            }
+            Some(Msg::Ack { id, upto, bits }) => {
+                if let Some(o) = self.outgoing.as_mut().filter(|o| o.id == id) {
+                    o.on_ack(upto, bits, now);
+                }
+            }
+            Some(Msg::Cancel { id }) => {
+                if self.incoming.as_ref().is_some_and(|i| i.id == id) {
+                    self.incoming = None;
+                }
+                if self.outgoing.as_ref().is_some_and(|o| o.id == id) {
+                    tracing::info!(peer = self.opts.peer, "the other end refused the copy");
+                    self.outgoing = None;
+                }
+            }
+            None => {}
+        }
+    }
+
+    fn receive_tick(&mut self, now: Instant) {
+        let Some(i) = self.incoming.as_mut() else {
+            return;
+        };
+        if i.dirty {
+            (self.send)(&i.ack_packet());
+        }
+        if i.complete() {
+            let i = self.incoming.take().expect("there");
+            let (id, chunks) = (i.id, i.total().div_ceil(clip::CHUNK).max(1) as u32);
+            self.done.push_back((id, chunks));
+            if self.done.len() > DONE_KEPT {
+                self.done.pop_front();
+            }
+            let bytes = i.into_bytes();
+            self.last = Some(digest(&bytes));
+            match clip::decode_items(&bytes) {
+                Some(items) => {
+                    tracing::info!(
+                        peer = self.opts.peer,
+                        what = describe(&items),
+                        "a copy arrived"
+                    );
+                    if let Err(e) = self
+                        .board
+                        .write(items, &self.opts.files_dir.join(id.to_string()))
+                    {
+                        tracing::warn!(error = e, "could not put the copy on the clipboard");
+                    }
+                    // What this end wrote is not sent back.
+                    self.seen = self.board.stamp();
+                }
+                None => tracing::warn!("a copy arrived that could not be read"),
+            }
+        } else if now.duration_since(i.last) > clip::STALL {
+            tracing::info!(peer = self.opts.peer, "a copy stopped arriving");
+            self.incoming = None;
+        }
+    }
+
+    fn send_tick(&mut self, now: Instant) {
+        let Some(o) = self.outgoing.as_mut() else {
+            return;
+        };
+        for p in o.poll(now) {
+            (self.send)(&p);
+        }
+        if o.done() {
+            tracing::info!(
+                bytes = o.len(),
+                ms = self.started.map_or(0, |s| s.elapsed().as_millis() as u64),
+                "the copy arrived on the other end"
+            );
+            self.outgoing = None;
+        } else if o.stalled(now) {
+            tracing::info!(
+                acked = o.acked_bytes(),
+                bytes = o.len(),
+                "the other end stopped taking the copy"
+            );
+            self.outgoing = None;
+        }
+    }
+}
+
+fn digest(bytes: &[u8]) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    bytes.hash(&mut h);
+    h.finish()
+}
+
+/// What a copy holds, for the log (never its contents).
+fn describe(items: &[Item]) -> String {
+    let files = items
+        .iter()
+        .filter(|i| matches!(i, Item::File { .. }))
+        .count();
+    let dirs = items
+        .iter()
+        .filter(|i| matches!(i, Item::Dir { .. }))
+        .count();
+    let mut out = Vec::new();
+    for i in items {
+        match i {
+            Item::Text(t) => out.push(format!("text ({} characters)", t.chars().count())),
+            Item::Png(p) => out.push(format!("an image ({} KB)", p.len() / 1024)),
+            _ => {}
+        }
+    }
+    if files + dirs > 0 {
+        out.push(format!("{files} files, {dirs} folders"));
+    }
+    out.join(", ")
+}
+
+/// Files and folders under `paths`, as items at paths relative to where
+/// each top-level one sits; None if they total more than `max` bytes.
+pub fn gather(paths: &[PathBuf], max: usize) -> Option<Vec<Item>> {
+    let mut items = Vec::new();
+    let mut total = 0usize;
+    for p in paths {
+        let name = p.file_name()?.to_string_lossy().to_string();
+        walk(p, &name, &mut items, &mut total, max)?;
+    }
+    Some(items)
+}
+
+fn walk(p: &Path, rel: &str, items: &mut Vec<Item>, total: &mut usize, max: usize) -> Option<()> {
+    let meta = std::fs::symlink_metadata(p).ok()?;
+    if meta.file_type().is_symlink() {
+        return Some(());
+    }
+    if meta.is_dir() {
+        items.push(Item::Dir {
+            path: rel.to_string(),
+        });
+        let mut entries: Vec<_> = std::fs::read_dir(p).ok()?.flatten().collect();
+        entries.sort_by_key(|e| e.file_name());
+        for e in entries {
+            let child = format!("{rel}/{}", e.file_name().to_string_lossy());
+            walk(&e.path(), &child, items, total, max)?;
+        }
+    } else if meta.is_file() {
+        *total += meta.len() as usize;
+        if *total > max {
+            return None;
+        }
+        items.push(Item::File {
+            path: rel.to_string(),
+            data: std::fs::read(p).ok()?,
+        });
+    }
+    Some(())
+}
+
+/// Where files copied on the other end land at this end: a folder named
+/// `name` that only this user can use. Not a fixed name in a shared temporary
+/// folder: on Linux that is `/tmp`, where another user could read the files,
+/// or create the folder first and have them land in it. With a runtime
+/// folder (`XDG_RUNTIME_DIR`, which the system makes 0700 and the user's own)
+/// the folder is in it; otherwise it is in the temporary folder with the
+/// user's id in its name. macOS and Windows already give each user a
+/// temporary folder of their own. [`land`] checks the folder before it
+/// writes (see [`private_dir`]).
+pub fn files_dir(name: &str) -> PathBuf {
+    files_dir_in(
+        std::env::var_os("XDG_RUNTIME_DIR").map(PathBuf::from),
+        &std::env::temp_dir(),
+        name,
+    )
+}
+
+fn files_dir_in(runtime: Option<PathBuf>, temp: &Path, name: &str) -> PathBuf {
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        match runtime {
+            Some(r) if r.is_absolute() => r.join(name),
+            // SAFETY: geteuid has no arguments and cannot fail.
+            _ => temp.join(format!("{name} {}", unsafe { libc::geteuid() })),
+        }
+    }
+    #[cfg(not(all(unix, not(target_os = "macos"))))]
+    {
+        let _ = runtime;
+        temp.join(name)
+    }
+}
+
+/// Make sure `dir` is a real folder of this user that nobody else can enter,
+/// creating it (0700) if it is not there. It is never followed through a
+/// link: a link of this user's is replaced, any other link, file or folder
+/// of someone else's is an error, and the caller writes nothing. On Windows
+/// the user's temporary folder is already theirs alone.
+#[cfg(unix)]
+fn private_dir(dir: &Path) -> Result<(), String> {
+    use std::os::unix::fs::{DirBuilderExt, MetadataExt, PermissionsExt};
+    let fail = |why: &str| format!("{}: {why}", dir.display());
+    // SAFETY: geteuid has no arguments and cannot fail.
+    let me = unsafe { libc::geteuid() };
+    match std::fs::symlink_metadata(dir) {
+        Ok(m) if m.is_dir() && m.uid() == me => {
+            if m.mode() & 0o077 != 0 {
+                std::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o700))
+                    .map_err(|e| fail(&e.to_string()))?;
+            }
+            return Ok(());
+        }
+        // A link or file of this user's only stands in the way.
+        Ok(m) if m.uid() == me => {
+            std::fs::remove_file(dir).map_err(|e| fail(&e.to_string()))?;
+        }
+        Ok(_) => {
+            return Err(fail(
+                "belongs to another user, so the copied files are not put there",
+            ))
+        }
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+        Err(e) => return Err(fail(&e.to_string())),
+    }
+    if let Some(parent) = dir.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| fail(&e.to_string()))?;
+    }
+    // Fails if anything is there by now, so a folder made by someone else in
+    // between is never taken for ours.
+    std::fs::DirBuilder::new()
+        .mode(0o700)
+        .create(dir)
+        .map_err(|e| fail(&e.to_string()))?;
+    Ok(())
+}
+
+#[cfg(not(unix))]
+fn private_dir(dir: &Path) -> Result<(), String> {
+    std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))
+}
+
+/// Write the files and folders among `items` under `dir` (a fresh folder);
+/// the top-level ones, in order, to put on the clipboard. `dir`'s parent is
+/// the folder every copy lands in: it must be this user's own and private
+/// (see [`files_dir`]), or nothing is written.
+pub fn land(items: &[Item], dir: &Path) -> Result<Vec<PathBuf>, String> {
+    if let Some(parent) = dir.parent() {
+        private_dir(parent)?;
+    }
+    // Older copies' files go: the clipboard now holds this one.
+    if let Some(parent) = dir.parent() {
+        for e in std::fs::read_dir(parent).into_iter().flatten().flatten() {
+            if e.path() != dir {
+                let _ = std::fs::remove_dir_all(e.path());
+            }
+        }
+    }
+    std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+    let mut top: Vec<PathBuf> = Vec::new();
+    for item in items {
+        let (path, file) = match item {
+            Item::File { path, data } => (path, Some(data)),
+            Item::Dir { path } => (path, None),
+            _ => continue,
+        };
+        // Checked when decoded; checked again, as this writes to disk.
+        let Some(path) = clip::safe_path(path) else {
+            continue;
+        };
+        let full = dir.join(&path);
+        match file {
+            Some(data) => {
+                if let Some(p) = full.parent() {
+                    std::fs::create_dir_all(p).map_err(|e| e.to_string())?;
+                }
+                std::fs::write(&full, data).map_err(|e| format!("{}: {e}", full.display()))?;
+            }
+            None => std::fs::create_dir_all(&full).map_err(|e| e.to_string())?,
+        }
+        let first = dir.join(path.split('/').next().unwrap_or(&path));
+        if !top.contains(&first) {
+            top.push(first);
+        }
+    }
+    Ok(top)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn folders_are_gathered_and_landed_whole() {
+        let src = tempfile::tempdir().unwrap();
+        let a = src.path().join("notes.txt");
+        std::fs::write(&a, b"hello").unwrap();
+        let d = src.path().join("Project");
+        std::fs::create_dir_all(d.join("src/empty")).unwrap();
+        std::fs::write(d.join("src/main.rs"), b"fn main() {}").unwrap();
+        let items = gather(&[a, d.clone()], 1 << 20).unwrap();
+        assert_eq!(
+            items,
+            vec![
+                Item::File {
+                    path: "notes.txt".into(),
+                    data: b"hello".to_vec()
+                },
+                Item::Dir {
+                    path: "Project".into()
+                },
+                Item::Dir {
+                    path: "Project/src".into()
+                },
+                Item::Dir {
+                    path: "Project/src/empty".into()
+                },
+                Item::File {
+                    path: "Project/src/main.rs".into(),
+                    data: b"fn main() {}".to_vec()
+                },
+            ]
+        );
+        // Too large: nothing.
+        assert!(gather(&[d], 4).is_none());
+
+        let out = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(out.path().join("old")).unwrap();
+        let dir = out.path().join("42");
+        let top = land(&items, &dir).unwrap();
+        assert_eq!(top, vec![dir.join("notes.txt"), dir.join("Project")]);
+        assert_eq!(
+            std::fs::read(dir.join("Project/src/main.rs")).unwrap(),
+            b"fn main() {}"
+        );
+        assert!(dir.join("Project/src/empty").is_dir());
+        assert!(!out.path().join("old").exists(), "older copies go");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_planted_link_in_place_of_the_folder_is_not_followed() {
+        let root = tempfile::tempdir().unwrap();
+        let victim = root.path().join("elsewhere");
+        std::fs::create_dir_all(victim.join("keep")).unwrap();
+        let link = root.path().join("Helio Clipboard");
+        std::os::unix::fs::symlink(&victim, &link).unwrap();
+        let items = [Item::File {
+            path: "a.txt".into(),
+            data: b"x".to_vec(),
+        }];
+        let landed = land(&items, &link.join("7"));
+        // The link is this user's own, so it is replaced by a real folder;
+        // what it led to is untouched either way.
+        assert!(victim.join("keep").is_dir());
+        assert!(
+            !victim.join("7").exists(),
+            "nothing written through the link"
+        );
+        let real = std::fs::symlink_metadata(&link).unwrap();
+        assert!(real.is_dir() && !real.file_type().is_symlink());
+        assert!(landed.is_ok());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn the_folder_copies_land_in_is_private() {
+        use std::os::unix::fs::PermissionsExt;
+        let root = tempfile::tempdir().unwrap();
+        let shared = root.path().join("Helio Clipboard");
+        std::fs::create_dir(&shared).unwrap();
+        std::fs::set_permissions(&shared, std::fs::Permissions::from_mode(0o755)).unwrap();
+        land(&[Item::Dir { path: "d".into() }], &shared.join("1")).unwrap();
+        let mode = |p: &Path| std::fs::metadata(p).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode(&shared), 0o700, "an open folder is closed");
+        let fresh = root.path().join("fresh");
+        land(&[Item::Dir { path: "d".into() }], &fresh.join("1")).unwrap();
+        assert_eq!(mode(&fresh), 0o700, "a new folder is made private");
+    }
+
+    #[cfg(all(unix, not(target_os = "macos")))]
+    #[test]
+    fn the_folder_is_in_the_runtime_folder_or_named_for_the_user() {
+        let tmp = Path::new("/tmp");
+        assert_eq!(
+            files_dir_in(Some("/run/user/1000".into()), tmp, "Helio Clipboard"),
+            Path::new("/run/user/1000/Helio Clipboard")
+        );
+        for runtime in [None, Some(PathBuf::from("relative"))] {
+            let dir = files_dir_in(runtime, tmp, "Helio Clipboard");
+            assert!(dir.starts_with("/tmp"), "{dir:?}");
+            assert_ne!(dir, tmp.join("Helio Clipboard"), "not the shared name");
+        }
+    }
+
+    #[test]
+    fn a_copy_this_end_may_not_receive_is_refused_at_its_first_chunk() {
+        use helio_proto::HEADER_LEN;
+        let dir = tempfile::tempdir().unwrap();
+        let sent = Arc::new(std::sync::Mutex::new(Vec::<Vec<u8>>::new()));
+        let out = sent.clone();
+        let mut w = Worker::new(
+            Options {
+                files_dir: dir.path().join("in"),
+                rate: 1 << 20,
+                offer_current: false,
+                peer: "test".into(),
+                directions: Directions {
+                    send: true,
+                    receive: false,
+                },
+            },
+            Box::new(move |p: &[u8]| out.lock().unwrap().push(p.to_vec())),
+        );
+        let bytes = clip::encode_items(&[Item::Text("secret".into())]);
+        let mut copy = Outgoing::new(9, bytes, 1 << 20, Instant::now());
+        for p in copy.poll(Instant::now()) {
+            w.on_packet(&p[HEADER_LEN..]);
+        }
+        assert!(w.incoming.is_none(), "nothing is taken in");
+        let sent = sent.lock().unwrap();
+        assert!(!sent.is_empty());
+        assert!(sent
+            .iter()
+            .all(|p| clip::decode(&p[HEADER_LEN..]) == Some(Msg::Cancel { id: 9 })));
+        // As one byte, both ways.
+        for d in [Directions::BOTH, w.directions] {
+            assert_eq!(Directions::from_bits(d.to_bits()), d);
+        }
+    }
+
+    /// A worker held up, here in `send`, as a read of a clipboard that does
+    /// not answer holds it.
+    #[test]
+    fn ending_the_sharing_does_not_wait_for_a_worker_held_up() {
+        use helio_proto::HEADER_LEN;
+        let dir = tempfile::tempdir().unwrap();
+        let (held_up, entered) = crossbeam_channel::bounded(1);
+        let (_release, stuck) = crossbeam_channel::bounded::<()>(0);
+        let sync = ClipSync::start(
+            Options {
+                files_dir: dir.path().join("in"),
+                rate: 1 << 20,
+                offer_current: false,
+                peer: "test".into(),
+                directions: Directions {
+                    send: false,
+                    receive: false,
+                },
+            },
+            move |_: &[u8]| {
+                let _ = held_up.try_send(());
+                let _ = stuck.recv_timeout(Duration::from_secs(30));
+            },
+        );
+        // Refused, and the refusal is what holds it up.
+        let bytes = clip::encode_items(&[Item::Text("copied".into())]);
+        let mut copy = Outgoing::new(9, bytes, 1 << 20, Instant::now());
+        for p in copy.poll(Instant::now()) {
+            sync.deliver(&p[HEADER_LEN..]);
+        }
+        entered.recv_timeout(Duration::from_secs(10)).unwrap();
+        let ending = Instant::now();
+        drop(sync);
+        assert!(ending.elapsed() < STOP_WITHIN * 5);
+    }
+
+    #[test]
+    fn rates_follow_the_stream() {
+        assert_eq!(rate_for(100_000), 6_250_000);
+        assert_eq!(rate_for(1_000), 2 << 20);
+        assert_eq!(rate_for(1_000_000), 25 << 20);
+    }
+}

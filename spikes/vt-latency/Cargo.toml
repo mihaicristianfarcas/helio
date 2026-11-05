@@ -45,5 +45,5 @@ objc2-video-toolbox = { version = "0.3", features = [
 
 # Deliberately NOT a member of the root workspace: a broken spike must never
 # gate a workspace-wide `cargo test`. The empty table opts this crate out of
-# the workspace it is nested inside (same trick as pingpong-proto/fuzz).
+# the workspace it is nested inside (same trick as helio-proto/fuzz).
 [workspace]

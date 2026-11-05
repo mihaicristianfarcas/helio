@@ -1,9 +1,9 @@
 # Benchmarks
 
-What pingpong costs, measured: micro-benchmarks of its own code paths, and
+What Helio costs, measured: micro-benchmarks of its own code paths, and
 the real stream end to end, against Moonlight + Sunshine/Apollo where that
 means something. The host comparisons so far were measured against Apollo,
-the Sunshine fork whose virtual display Pong follows: its capture, NVENC
+the Sunshine fork whose virtual display Helio Host follows: its capture, NVENC
 settings, FEC and pacing are Sunshine's. Every figure says what it was
 measured on; the earliest measurements (v1, v2) are in the
 [design history](design/README.md).
@@ -24,32 +24,32 @@ Unless a section says otherwise:
 - **Micro-benchmarks** (Criterion, release profile):
 
   ```sh
-  cargo bench -p pingpong-transport   # pq-boringtun handshake and data plane
-  cargo bench -p pingpong-proto       # packetize, FEC, reassembly, audio
-  cargo bench -p pingpong-decode      # the Annex-B split before VideoToolbox
+  cargo bench -p helio-transport      # pq-boringtun handshake and data plane
+  cargo bench -p helio-proto          # packetize, FEC, reassembly, audio
+  cargo bench -p helio-decode         # the Annex-B split before VideoToolbox
   ```
 
 - **The stream**: the statistics overlay (Ctrl+Alt+Shift+S, or
-  `ping stream NAME --stats`) shows the same figures as Moonlight's, plus the
+  `helio stream NAME --stats`) shows the same figures as Moonlight's, plus the
   host's capture to the client's screen. For a log of them, one line a
-  second: `RUST_LOG=info,ping_core::stats=debug ping stream NAME ...`. The
-  host logs a line a second too (`pong.log`: frames, capture to encoded,
+  second: `RUST_LOG=info,helio_client::stats=debug helio stream NAME ...`. The
+  host logs a line a second too (`helio-host.log`: frames, capture to encoded,
   Mbit/s, recoveries).
 - **The client's presentation alone** (macOS), with no host: synthetic
   frames through the stream window and renderer, a line a second of frames
   shown and decode to glass (the options are at the top of the file):
 
   ```sh
-  cargo run --release -p ping-core --example mac-present -- --fps 120 --secs 10
+  cargo run --release -p helio-client --example mac-present -- --fps 120 --secs 10
   ```
 
 - **Host capture to the client's screen** is measured directly: the two
-  machines' clocks are related through the ping/pong exchange the stream
+  machines' clocks are related through the ping exchange the stream
   already runs (every 500 ms; as in NTP, the sample with the shortest round
   trip of the last 16 sets the offset).
 - **Impairing the link** without network tools: see
-  [development.md](development.md#test-hooks) (`PING_TEST_LOSS`,
-  `PINGPONG_TEST_WIRE_LOSS`, ...).
+  [development.md](development.md#test-hooks) (`HELIO_TEST_LOSS`,
+  `HELIO_TEST_WIRE_LOSS`, ...).
 
 Micro-benchmark numbers below: Apple M4 Pro, rustc 1.98.1, 2026-09-27.
 
@@ -79,7 +79,7 @@ brackets):
 | Reassemble, no loss | 0.08 µs (0.48) | 1.2 µs (5.6) | 25 µs (88) |
 | Reassemble, one datagram lost per FEC block | 101 µs (102) | 119 µs (126) | 675 µs (763) |
 
-`cargo bench -p pingpong-decode` measures the Annex-B split every frame
+`cargo bench -p helio-decode` measures the Annex-B split every frame
 goes through before VideoToolbox: 2.5 µs for a 120 KB frame (a SIMD
 start-code search), where the byte-at-a-time loop took 33 µs.
 
@@ -126,12 +126,12 @@ packet to complete frame 1–1.6 ms, decode 1.5–2 ms.
 
 ### Recording the screen (macOS client)
 
-Measured 2026-10-07 with `ping-core`'s `mac-present` (synthetic frames
+Measured 2026-10-07 with `helio-client`'s `mac-present` (synthetic frames
 through the stream window and renderer, no host or decoder; each frame
 handed over up to 3 ms late), on the MacBook's built-in 120 Hz display at
 3600x2338, V-Sync on, full screen. "Recorded" is `screencapture -V` running
 through the whole run; "a window over it" is a small window above the
-stream for 4 s, as a recorder's controls or a dialog would be. Before is Ping
+stream for 4 s, as a recorder's controls or a dialog would be. Before is Helio
 0.8.2, which let one frame at a time wait for the glass full screen; after,
 three while the trips to the glass say the picture is composited.
 
@@ -154,11 +154,40 @@ straight to the display again, with some frames a refresh late: 105–117 of
 streams with a recording running, through CleanShot X: 39 of 60 and 40 of
 120 shown before.
 
+### One app, with glass (macOS client)
+
+Measured 2026-10-28 with `mac-present` (frames handed over on time), on the
+MacBook's built-in 120 Hz display at 3600x2338, V-Sync on, 10 s runs.
+Before is Helio with Helio Host's window still an app of its own; after is the one
+app, in asides' glass. The stream's code (`helio-client`, `helio-decode`,
+`helio-proto`) and its dependencies' versions are the same in both, so
+this checks that nothing new reaches the stream: "glass window beside it"
+is Helio's main window open on a settings page next to the stream's.
+Figures are a run's steady seconds (seconds composited because something
+was over the stream for a moment are left out).
+
+| Case | Before: decode to glass | Before: shown | After: decode to glass | After: shown |
+|---|---|---|---|---|
+| Full screen, 60 fps | 5.8–6.6 ms | 99.2–99.8% | 5.7–7.8 ms | 100% |
+| Full screen, 120 fps | 6.0 or 13.3 ms | 99.7–100% | 7.2 or 13.6 ms | 99.8% |
+| Window, 120 fps | 26.2 ms (1 run) | 100% | 23.3–31.4 ms (5 runs) | 100% |
+| Window, 120 fps, glass window beside it | | | 25.7–28.6 ms (3 runs) | 99.8–100% |
+
+The synthetic frames come on a clock of their own, not the display's, so
+each run lands at a phase of its own against the refresh and keeps it: a
+run's figure is steady, and runs differ by up to one refresh (8.3 ms),
+before as after (full screen at 120 fps, a run sits at about 6–7 or
+13–14 ms). The glass window's blur is the WindowServer's, for that window
+alone; the stream's window stays opaque. `mac-present` does not load
+`helio-ui`; in the app, its change to GPUI's blending
+(`glass::blend_alpha_over`) acts once, as Metal makes a pipeline, and
+leaves the stream's renderer's pipelines as they are.
+
 ## Against Moonlight + Apollo
 
 Apollo streams with Sunshine's video path and adds the virtual display at
 the client's mode, which is what made it the like-for-like host to measure
-Pong against (Sunshine itself streams a physical display). Not measured
+Helio Host against (Sunshine itself streams a physical display). Not measured
 yet: Sunshine's own newer settings (split-frame NVENC on GPUs with two
 encoders), which do not apply to this host's single-encoder RTX 3070 Ti.
 
@@ -166,12 +195,12 @@ encoders), which do not apply to this host's single-encoder RTX 3070 Ti.
 100 Mbit/s, HEVC, 7.1 audio, V-Sync and frame pacing on; 60 fps noise on
 the host; the Mac on Wi-Fi to the host on the LAN (the host on Wi-Fi too).
 Moonlight 5.x against Apollo's "Virtual Display" app, its end-of-stream
-"Global video stats"; Ping against Pong, the per-second statistics
+"Global video stats"; Helio against Helio Host, the per-second statistics
 averaged over 30 s. The Mac's display was asleep, so neither side's
 presentation times are what a person watching would see; they compare
 with each other.
 
-| | Moonlight + Apollo | Ping + Pong |
+| | Moonlight + Apollo | Helio + Helio Host |
 |---|---|---|
 | Frames received / decoded | 110.9 fps | 117.6 fps |
 | Frames shown | 110.0 fps | 115.6 fps |
@@ -182,19 +211,19 @@ with each other.
 
 The round trips are not measured alike. Moonlight's is ENet's smoothed
 estimate on its control channel ("variance: 0 ms"), while the same run logs
-single control messages at 109 ms. Ping's is each second's raw ping
+single control messages at 109 ms. Helio's is each second's raw ping
 through the tunnel, queued behind the video. A second run the same evening:
 Moonlight 105.4 fps received, 0.45% of frames lost and 0.79% dropped for
-jitter, "9 ms"; Ping 108.6 fps shown, round trip 24 ms median, 58 ms p90
+jitter, "9 ms"; Helio 108.6 fps shown, round trip 24 ms median, 58 ms p90
 under 113 Mbit/s of noise and 10.6 ms with a light scene (8.5 Mbit/s).
 
 Not done: Sunshine's network priority, a qWAVE flow of type AudioVideo
-(WMM's video category on Wi-Fi). qWAVE won't take Pong's dual-stack socket
+(WMM's video category on Wi-Fi). qWAVE won't take Helio Host's dual-stack socket
 with an IPv4 client, neither IPv4-mapped (ERROR_NOT_FOUND) nor as IPv4
 (ERROR_INVALID_PARAMETER). Sunshine's sockets are IPv4-only by default.
 It would take an IPv4 socket of its own, or a system QoS policy on the host.
 
-Ping's frame pacing first ran on a `CAMetalDisplayLink`: 20.3 ms decode to
+Helio's frame pacing first ran on a `CAMetalDisplayLink`: 20.3 ms decode to
 glass here, because the link hands out its drawable a refresh or more
 ahead of the one it targets. It is now Moonlight's pacer -- a
 `CVDisplayLink` tick, on which the oldest queued frame is drawn and shown
@@ -218,7 +247,7 @@ With the display awake, presentation was slower than the asleep-display
 runs above had shown: decode to glass 28.9 ms presenting on decode, 27.7
 ms with frame pacing. At 120 fps on the 120 Hz panel, a burst filled the
 layer's three drawables and nothing drained them, so every frame was shown
-two refreshes late (at 60 fps, which the panel drains, it was 10 ms). Ping
+two refreshes late (at 60 fps, which the panel drains, it was 10 ms). Helio
 now draws a frame only when fewer than one (with pacing, two) wait for a
 refresh:
 
@@ -241,15 +270,24 @@ present on decode:
 | 60 fps: shown, decode to glass | 40 of 60 (1080p, 34 ms) | 60 of 60, 22.8 ms | 60 of 60, 21.6 ms |
 | 120 fps: shown, decode to glass | | 80 of 118, 31 ms | 118 of 119, 24-26 ms |
 
-Controller rumble, the game's XInputSetState to Ping's haptics call: ~7 ms
+Controller rumble, the game's XInputSetState to Helio's haptics call: ~7 ms
 (the two machines' clocks differ by ~207 ms, corrected with time.apple.com).
+
+## Glass to glass
+
+From a change on the host's screen to the same change on the client's
+screen, as a person sees it. It is measured from outside both computers,
+with a photodiode or a 240 fps camera on both screens, so no clock of
+Helio's is involved. Unlike [capture to glass](#capture-to-glass), it
+includes the host compositor's time from an application's present to the
+capture, and the client panel's scanout and pixel response.
 
 ## Capture to glass
 
 The overlay's last line, "Host capture to screen", measures it directly:
 from the host picking up a captured frame to Metal reporting it on the Mac's
-display. The two machines' clocks are related through the Ping/Pong exchange
-the stream already runs (every 500 ms): a Pong's header carries the host's
+display. The two machines' clocks are related through the ping exchange
+the stream already runs (every 500 ms): a ping reply's header carries the host's
 clock when it replied, and as in NTP the sample with the shortest round trip
 of the last 16 sets the offset.
 
@@ -266,7 +304,7 @@ need a photodiode or a 240 fps camera on both screens.
 
 35 minutes, 1080p60 moving scene with audio, every received datagram
 (handshakes included) dropped at 2% in bursts of 3 and handshake datagrams
-at a further 30% (`PINGPONG_TEST_WIRE_LOSS=2:3 PINGPONG_TEST_HANDSHAKE_LOSS=30`
+at a further 30% (`HELIO_TEST_WIRE_LOSS=2:3 HELIO_TEST_HANDSHAKE_LOSS=30`
 on the client), so each of the ~17 rekeys had to survive lost messages:
 
 - No session interruptions: no IDR requests, no renegotiation, no lost contact.
@@ -288,16 +326,16 @@ exactly this pattern; not yet confirmed here by turning it off
 ## Starting a stream
 
 From launching the client to the first frame, host monitor asleep, Mac on
-Wi-Fi. Ping: 15 consecutive start/stop cycles (10 at 3024×1890@120, 100 Mbps,
+Wi-Fi. Helio: 15 consecutive start/stop cycles (10 at 3024×1890@120, 100 Mbps,
 7.1 audio; 5 at 1080p60), Apollo stopped. Moonlight: one start of the Desktop
 app at the same settings.
 
 | | Launch → first frame |
 |---|---|
-| Ping → Pong | 5.6–7.0 s, typically 6.1 s; 15 of 15 started |
+| Helio → Helio Host | 5.6–7.0 s, typically 6.1 s; 15 of 15 started |
 | Moonlight → Apollo | ~5 s |
 
-Where Pong's time goes (3024×1890@120):
+Where Helio Host's time goes (3024×1890@120):
 
 | Step | ms |
 |---|---|
@@ -325,13 +363,13 @@ Asleep or switched off, the monitor is still on the cable, and Windows
 spends ~3.7 s on it whenever the arrangement changes.
 
 That wait is also why every session failed once Apollo was stopped: SudoVDA
-removes a monitor 3 s after the last ping. Pong pinged only between display
-calls, and Apollo's own pings had kept the monitor alive. The keepalive now
-starts before the monitor is added.
+removes a monitor 3 s after the last ping. Helio Host pinged only between
+display calls, and Apollo's own pings had kept the monitor alive. The
+keepalive now starts before the monitor is added.
 
 ## Optimization pass (2026-09-30)
 
-Ping (Mac, Wi-Fi) against Pong (the Windows host, Ethernet): 3024x1890 at
+Helio (Mac, Wi-Fi) against Helio Host (the Windows host, Ethernet): 3024x1890 at
 120 fps, 100 Mbit/s, HEVC, full screen, 60 fps noise on the host, about 114
 Mbit/s on the wire. Each figure is the
 average of a run's middle 24-26 seconds; A and B were run back to back.
@@ -342,7 +380,7 @@ average of a run's middle 24-26 seconds; A and B were run back to back.
 | Client: full screen asked again when macOS refuses it (a stream started just as another left its Space) | such sessions ran in a window, decode to glass 22-28 ms; now full screen, 8-10 ms |
 | Client: SIMD Annex-B split, the AVCC sample written straight into the block buffer | decode 2.36-2.51 -> 2.24-2.36 ms |
 | Client: reassembly into reused buffers (no allocation per datagram) | see the table above |
-| Host: sends batched, 16 datagrams per call (USO on Windows, GSO on Linux, `sendmsg_x` on macOS); packetizing into one reused buffer | pong.exe 24-25% of a core -> 13-18%, frame delivery unchanged (1.6 ms) |
+| Host: sends batched, 16 datagrams per call (USO on Windows, GSO on Linux, `sendmsg_x` on macOS); packetizing into one reused buffer | helio-host.exe 24-25% of a core -> 13-18%, frame delivery unchanged (1.6 ms) |
 | Host: 64 datagrams per call (a whole pacing group) | the same CPU, but frames 1 ms later: a call that large held the sender until it was all on the wire |
 | LAN-sized shards (1400-byte payloads on the local network, as Moonlight's 1392) | the client's receive thread 33% -> 31% of a core at the same rate; latency unchanged |
 | Client: user-interactive QoS on the stream's threads | no change measured (the receive thread still runs mostly on efficiency cores); real-time scheduling did no better |
@@ -358,27 +396,27 @@ what comes with waking); ChaCha20-Poly1305 1%; Metal's command submission
 datagrams saved less than their count suggests: the kernel's cost follows
 the Wi-Fi bursts more than the datagrams.
 
-Idle: Pong's session thread ticks every 100 ms between sessions (was 8 ms);
-Ping polls its host list every 30 s while in the background (every 4 s in
-front): Ping.app hidden went from about 160 wakeups a second to about 90.
+Idle: Helio Host's session thread ticks every 100 ms between sessions (was 8 ms);
+Helio polls its host list every 30 s while in the background (every 4 s in
+front): Helio.app hidden went from about 160 wakeups a second to about 90.
 
-Switches for diagnosis: `PINGPONG_SEND_BATCH=N` (0: one datagram per call),
-`PINGPONG_RECV_BATCH=N` (0: one per call), `PINGPONG_LAN_SHARDS=0` (client:
-path-sized datagrams on the LAN too), `PINGPONG_SERVICE_CLASS=0` (see
+Switches for diagnosis: `HELIO_SEND_BATCH=N` (0: one datagram per call),
+`HELIO_RECV_BATCH=N` (0: one per call), `HELIO_LAN_SHARDS=0` (client:
+path-sized datagrams on the LAN too), `HELIO_SERVICE_CLASS=0` (see
 [cli.md](cli.md#environment-variables)).
 
-## Ping 0.8.0 against 0.7.0 (2026-10-05)
+## Helio 0.8.0 against 0.7.0 (2026-10-05)
 
 Whether the renderer's HDR and 4:4:4 paths cost an SDR stream anything, and
 what the Windows host's streaming set-up (full GPU power, a 1 ms timer, DWM
-under MMCSS, Wi-Fi in media-streaming mode) does to host processing. Ping
-(Mac, Wi-Fi) against Pong 0.8.0 (the Windows host, Wi-Fi), through a VPN
+under MMCSS, Wi-Fi in media-streaming mode) does to host processing. Helio
+(Mac, Wi-Fi) against Helio Host 0.8.0 (the Windows host, Wi-Fi), through a VPN
 overlay rather than the LAN: 3024x1890 at 120 fps, 100 Mbit/s, HEVC, 7.1
 audio, frame pacing on, full screen, 60 fps noise on the host. Two pairs of
 runs, 0.7.0 then 0.8.0 and then the other way round; each figure is a run's
 62 s under load.
 
-| | Ping 0.7.0 | Ping 0.8.0 |
+| | Helio 0.7.0 | Helio 0.8.0 |
 |---|---|---|
 | Frames received | 116.8-118.4 fps | 117.3-117.7 fps |
 | Frames shown | 111.6 fps | 110.9-111.6 fps |
@@ -392,3 +430,160 @@ at this load, where the GPU's clocks are up anyway (full power is for light
 scenes, which this did not measure). Fewer frames were shown than on
 2026-09-28 (116.2 of 118.5) with both versions alike: the VPN path delivers
 frames less evenly. Not measured: round trip and loss over the LAN.
+
+## Trackpad scrolling (2026-11-04)
+
+How far a Mac's trackpad scrolls a Windows host. A gesture recorded on the
+MacBook Pro (795 points in 1.09 s, fingers and glide, 108 events) was replayed
+with its timing as scripted input (`HELIO_TEST_INPUT`) through a real stream:
+3024x1890 at 60 fps, HEVC, over a VPN on Wi-Fi, to the Windows PC with that
+display at 225%, onto a page in Microsoft Edge that logged its position. A
+point is two stream pixels at this size, so as far as the fingers is 1590 stream
+pixels.
+
+| Input | Sent | Page moved, in stream pixels | Against what was sent |
+|---|---|---|---|
+| The gesture at 3 wheel units a point, as a trackpad went until this was measured | 2385 units | 4472 | 2.81× the fingers |
+| The gesture as a distance | 1590 pixels | 1590 | 1.00× |
+| Up, one event | 450 pixels | 450 | 1.00× |
+| 100 events of one pixel, 16 ms apart | 100 pixels | 99 | 0.99× |
+| Right, then left, one event each | 900 pixels each | 900 each | 1.00× |
+| Down, one event | 2250 pixels | 1697 | 0.75× |
+
+A wheel notch (120 units) moved the page 100 CSS pixels, Chromium's figure. The
+one large event falling short is not explained; the largest event in the
+recording is 45 points, 90 stream pixels.
+
+What apps do with parts of a notch, measured with wheel messages sent on the
+same PC with its own display at 100%:
+
+| App | Input | Result |
+|---|---|---|
+| Microsoft Edge | 1200 units in steps of 1 to 120 | 998 to 1002 CSS pixels, whichever the step |
+| Windows' Settings | Steps of 5 units, 170 ms apart | Moved at every step |
+| File Explorer | Steps of 5 units, 180 ms apart, 300 units in all | Moved at 120 and at 240 units, nowhere else |
+
+Recorded gestures replayed into File Explorer, in the units each path gives:
+
+| Gesture | Path | Units | Notches in them | Explorer moved, in notches |
+|---|---|---|---|---|
+| 795 points | 3 units a point | 2385 | 19.9 | 18 |
+| 795 points | Distance, display at 175% | 1090 | 9.1 | 8 |
+| 795 points | Distance, display at 225% | 848 | 7.1 | 6 |
+| 37 points, gentle, 2.9 s | 3 units a point | 111 | 0.9 | 1 |
+| 37 points, gentle, 2.9 s | Distance, display at 175% | 50 | 0.4 | 1 |
+| 37 points, gentle, 2.9 s | Distance, display at 225% | 39 | 0.3 | 0 |
+
+The gentle gestures ran one after another. Explorer appears to carry parts of a
+notch from one gesture to the next, which would be how a gesture under a notch
+moved it a whole one, and why the same small movement sometimes moves it and
+sometimes does not.
+
+Not measured: other apps that use whole notches, Explorer's horizontal
+scrolling, and a touchpad on a Windows client.
+
+### On a Linux host
+
+How far the same 795-point gesture moves a browser on a Linux host: 1590 stream
+pixels, replayed as scripted input through a real stream at 3024x1890, 30 fps,
+H.264 in software, debug build, in a container (Ubuntu 24.04 on Arm, no GPU),
+from a Linux client on another X screen. The browsers are Chromium 156 and Firefox 157,
+on a page that logged its position.
+
+- **X11:** Xvfb with no window manager, the scale set through `xsettingsd` with
+  the values the desktops' daemons write (below).
+- **GNOME:** mutter 46.2 headless, browsers native to Wayland, on the session's
+  virtual monitor at the scale a client asks for, set for the test (a Linux
+  client does not send one). 150% takes mutter's experimental
+  `scale-monitor-framebuffer`. A CSS pixel is counted as the monitor's scale in
+  stream pixels: the page's own device pixel ratio stayed at 1 in some runs,
+  opened as the monitor changed.
+
+| Desktop | Scale | Chromium: 100 pixels a notch, scale ignored | Chromium: 120 pixels a notch at the desktop's scale | Firefox: 100 pixels a notch, scale ignored | Firefox: 120 pixels a notch at the desktop's scale |
+|---|---|---|---|---|---|
+| X11 | 100% | 1.13× | 0.98× | 1.08× | 0.93× |
+| X11 | 150% | 1.70× | 0.91× | 1.64× | 0.88× |
+| X11 | 200% | 2.26× | 0.91× | 2.15× | 0.86× |
+| GNOME | 100% | 1.13× | 0.98× | 1.08× | 0.93× |
+| GNOME | 150% | 1.70× | 0.91× | 1.75× | 0.88× |
+| GNOME | 200% | 2.26× | 0.91× | 2.15× to 3.30×, four runs | 0.86×, three runs |
+
+These desktops take whole notches only, so a gesture stops short by up to a
+notch and the rest waits for the next scroll: at 200% a notch is 240 stream
+pixels, 1590 of them are 6.6 notches, and six moved the page. Over several
+scrolls it adds up: at 200% on X11, scripted scrolls of 1000 down, 400 up and
+600 down (1200 stream pixels in all) moved Chromium 960, 240 and 480, 1200 in
+all. Firefox's run-to-run spread at 200% under GNOME is not explained: at 100
+pixels a notch it moved further than the notches sent, which X11 did not show.
+
+How far a notch goes, at the scales above (sideways under GNOME, at 100% and
+200%):
+
+| Browser | Desktop | Down, in CSS pixels | Sideways, in CSS pixels |
+|---|---|---|---|
+| Chromium | X11, GNOME | 120 | 120 |
+| Firefox | X11 | 114 to 116 | 20 to 21 |
+| Firefox | GNOME | 114 to 116 | 60 |
+
+Firefox's sideways notch is shorter than any figure that suits its vertical one:
+at 120 pixels a notch it goes about a sixth as far as the fingers on X11, and half
+as far under GNOME.
+
+Where the scale on an X desktop comes from: real settings daemons on Xvfb, wheel
+buttons clicked with `xdotool`. The DPIs are as the settings give them over 1024.
+
+| Daemon | Set to | `Xft/DPI` | `Gdk/UnscaledDPI` | `Gdk/WindowScalingFactor` | `Xft.dpi` in the X resources | Both browsers' device pixel ratio |
+|---|---|---|---|---|---|---|
+| None | `Xft.dpi: 192` with `xrdb` | none | none | none | 192 | 1 |
+| `gsd-xsettings` 46.0, under mutter on X11 | Scale 2 | 192 | 96 | 2 | 192 | 2 |
+| `gsd-xsettings` 46.0 | Text 1.25 | 120 | 120 | 1 | 120 | 1.25 |
+| `xfsettingsd` 4.18.4 | Window scale 2 | 96 | none | 2 | 96 | 2 |
+| `xfsettingsd` 4.18.4 | DPI 144 | 144 | none | 1 | 144 | 1.5 |
+| `xsettingsd` 1.0.2 | Window scale 2 alone | none | none | 2 | none | 2 |
+| `xsettingsd` 1.0.2 | `Xft/DPI` of 192 and window scale 2 | 192 | none | 2 | none | 4 |
+| `xsettingsd` 1.0.2 | `Xft/DPI` of -1 | -1, as written | none | none | none | 1 |
+
+So the ratio is the window scale times `Gdk/UnscaledDPI` (else `Xft/DPI`) over
+96. A desktop's `Xft.dpi` alone neither sets it nor always follows it.
+
+Not measured: KDE, the desktop portal's path, a real trackpad, and apps other
+than browsers.
+
+### On a Mac host
+
+How far the same 795-point gesture moves a Mac host (2026-11-05): replayed
+as scripted input from a client on the same Mac, the 14" MacBook Pro above
+(M4 Pro, macOS 26.5.2), release build, 3024x1890 at 60 fps, HEVC at 40
+Mbit/s. The virtual display ran at 200%, 1512x945 points, so a point is two
+stream pixels and the gesture is 1590 of them, and sat beside the built-in
+display (`--keep-host-displays`). The targets were a native AppKit scroll view
+(`NSScrollView`), and Playwright 1.64's builds of Chromium 156, Firefox 157
+and WebKit, on a page that logged its position. A CSS pixel was a point in
+each.
+
+| Input | Sent | Should move, in points | AppKit view | Chromium | Firefox | WebKit |
+|---|---|---|---|---|---|---|
+| A wheel notch | 120 units | 30 | 30 | 30 | 30 | 30 |
+| The gesture at 3 wheel units a point, as a trackpad went until the Windows measurement above | 2385 units | 596, 0.75× the fingers | 596 | 596 | 596 | 596 |
+| The gesture as a distance | 1590 pixels | 795 | 795 | 795 | 795 | 795 |
+| Down, one event | 2250 pixels | 1125 | 1125 | 1125 | 768 | 1125 |
+| Up, one event | 450 pixels | 225 | 224 | 224 | 224 | 224 |
+| 100 events of one pixel, 16 ms apart | 100 pixels | 50 | 49 | 49 | 49 | 49 |
+| Right, then left, one event each | 900 pixels each | 450 each | 450 each | 450 each | 450 each | 450 each |
+
+The point missing from two rows is not lost. The notches before left a
+quarter of a point over, and the host keeps what is short of a point for the
+next scroll (`helio-input/src/macos.rs`). Firefox moved the one large event
+768 points, a little under the height of its view (800 points). A trackpad's
+events are far smaller: the largest in the recording is 45 points. At 1920x1080, where the
+virtual display is not HiDPI and a stream pixel is a point, the AppKit view
+moved 1590 points for the gesture, 1.00×.
+
+The host posts its scrolls without a gesture's phases (began, changed,
+ended, momentum): the AppKit view saw none. So apps that act on the phases,
+such as the rubber band at the end of a page or swiping between pages,
+see a plain scroll. That was not tried.
+
+Not measured: a real trackpad, from a Mac client on another machine;
+the default arrangement, where the virtual display mirrors the others;
+Safari itself and browsers as installed; and other apps.

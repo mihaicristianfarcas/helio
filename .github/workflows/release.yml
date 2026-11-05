@@ -1,35 +1,64 @@
-# A release, from every push to main that changes the programs: Ping and Pong
-# built on macOS (Apple silicon and Intel), Windows and Linux, and published
-# as the website's downloads (tools/publish-downloads: Cloudflare R2, served
-# at download.pingpong.mihaicristian.dev; the website is on the landing-page
-# branch). When the workspace's version (Cargo.toml's [workspace.package])
-# has no tag yet, the same archives become the GitHub release vVERSION too,
-# and a pull request brings the Homebrew casks (Casks/) to it (main takes
-# changes only through pull requests). So releasing a version is merging the
-# change that sets it.
+# A release, from the commit that sets a new version: the workspace's version
+# (Cargo.toml's [workspace.package]) with no tag yet. The app, with the host's
+# engine inside it, is built on macOS (Apple silicon and Intel), Windows and
+# Linux, one archive per system and architecture (Helio-VERSION-OS-ARCH), and
+# on Windows its installer too (Helio-VERSION-windows-x86_64-setup.exe), each
+# the artifact of its job (dist-*). The same files are published as the
+# website's downloads (tools/publish-downloads: Cloudflare R2, served at
+# download.helio.mihaicristian.dev; the website is on the landing-page branch)
+# and as the GitHub release vVERSION, and a pull request brings the Homebrew
+# cask (Casks/helio.rb) to it (main takes changes only through pull requests).
+# So releasing a version is merging the change that sets it, and no other
+# push publishes anything: the website serves released versions only, one file
+# per system for as long as a version lasts, which is how a file gathers
+# SmartScreen's reputation (docs/platforms/windows.md).
 #
-# workflow_dispatch: to run it by hand. On main it publishes as a push does;
-# on another branch it only builds, and the archives are the run's
-# artifacts.
+# workflow_dispatch: to run it by hand. On main with a new version it releases,
+# as after a run that failed; on main without one it builds and signs
+# everything and publishes nothing, which checks the signing secrets. On
+# another branch it only builds, and the archives are the run's artifacts.
 #
 # The downloads need two settings in the repository: the secret
 # CLOUDFLARE_API_TOKEN (an API token with Workers R2 Storage: Edit) and the
-# variable CLOUDFLARE_ACCOUNT_ID. The macOS apps are signed with a Developer
-# ID and notarized, from five secrets: MACOS_CERTIFICATE_P12 (the Developer
-# ID Application certificate and its key, base64), MACOS_CERTIFICATE_PASSWORD,
-# and an App Store Connect API key: APPLE_API_KEY_P8 (the .p8 file),
-# APPLE_API_KEY_ID, APPLE_API_ISSUER. On main the release fails without them,
-# rather than publish apps macOS will not open.
+# variable CLOUDFLARE_ACCOUNT_ID. The macOS app is built on one runner and
+# signed on another, where no build has run (macos-package), with a
+# Developer ID, and notarized, helper and all, from five secrets of the
+# environment `release`, read on main only: MACOS_CERTIFICATE_P12 (the
+# Developer ID Application certificate and its key, base64),
+# MACOS_CERTIFICATE_PASSWORD, and an App Store Connect API key:
+# APPLE_API_KEY_P8 (the .p8 file), APPLE_API_KEY_ID, APPLE_API_ISSUER. On
+# main the release fails without them, rather than publish an app macOS will
+# not open.
+#
+# The Windows programs and DLLs, the installer and its uninstaller are
+# signed on main only, never on a pull request or another branch, with
+# Certum's open-source certificate in its cloud (SimplySign), through ssign:
+# the secrets CERTUM_EMAIL and CERTUM_OTP (the account's TOTP seed) of the
+# protected environment `release`, and the repository variable
+# HELIO_HOST_WINDOWS_PUBLISHER, the certificate's whole subject, which the
+# engine is then built to require (helio-host/src/hosting/signature.rs). With
+# neither, the Windows release is unsigned and says so; with only one of
+# them, it fails.
+#
+# Every package is also signed with the release key (minisign, Ed25519),
+# whose public half Helio is built with: its own update installs nothing
+# without that signature (helio-update/src/signature.rs). The job `sign`
+# does it, on main only, from the `release` environment's secrets
+# MINISIGN_SECRET_KEY (the key file, as `minisign -G` wrote it) and
+# MINISIGN_PASSWORD; without them a release publishes nothing.
+#
+# Actions are pinned to commits, with the version beside each: a tag can be
+# moved, and these jobs hold the signing secrets. A repository ruleset keeps
+# version tags from being moved or deleted once this workflow has made them.
 name: Release
 
 on:
   push:
     branches: [main]
-    # What does not change the programs does not make new ones.
-    paths-ignore:
-      - "Casks/**"
-      - "docs/**"
-      - "**/*.md"
+    # A version is set here. A push that changes this file but not the version
+    # stops at the first job.
+    paths:
+      - "Cargo.toml"
   workflow_dispatch:
 
 # One release at a time, in the order of the pushes; of those waiting, only
@@ -38,18 +67,49 @@ concurrency:
   group: release
   cancel-in-progress: false
 
+# Read only for every job; the one job that publishes asks for more. Build
+# jobs run third-party build scripts (cargo, npm), so none of them holds a
+# token that can write, and none leaves it in the checkout's .git/config.
 permissions:
-  contents: write
-  pull-requests: write
-  # To approve the casks pull request's CI run (see below).
-  actions: write
+  contents: read
 
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  # Whether this commit makes a release. Everything below hangs on the answer,
+  # which stays this run's own when a failed job is run again, after the tag
+  # may exist. A failure to ask fails the run: only "no such tag" is new.
+  version:
+    name: Is the version new
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      new: ${{ steps.version.outputs.new }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+      - name: Is the version new
+        id: version
+        run: |
+          version=$(sed -n '/^\[workspace.package\]/,/^\[/ s/^version = "\(.*\)"/\1/p' Cargo.toml)
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          git ls-remote --exit-code --tags origin "refs/tags/v$version" >/dev/null && code=0 || code=$?
+          case $code in
+            0) echo "v$version is released already: nothing to publish" ;;
+            2) echo "new=true" >> "$GITHUB_OUTPUT" ;;
+            *) echo "::error::could not ask whether the tag v$version exists (git exit code $code)"; exit 1 ;;
+          esac
+
+  # The app, the host inside it, built on each architecture's Mac and signed
+  # as a development build is (ad hoc), with no secrets
+  # (tools/package-macos --stage-only): the next job signs and archives it on
+  # a runner of its own, where no build has run.
   macos:
     name: macOS (${{ matrix.arch }})
+    needs: version
+    if: needs.version.outputs.new == 'true' || github.event_name == 'workflow_dispatch'
     strategy:
       matrix:
         include:
@@ -59,29 +119,64 @@ jobs:
             arch: x86_64
     runs-on: ${{ matrix.runner }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
       - name: Rust
         run: rustup toolchain install stable --profile minimal && rustup default stable
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           key: release
+      - name: Build
+        run: tools/package-macos --stage-only
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: macos-unsigned-${{ matrix.arch }}
+          path: target/stage/Helio.app.zip
+          if-no-files-found: error
+          retention-days: 1
+
+  # Sign the app with the Developer ID, the helper inside it first, have
+  # Apple notarize it, staple the ticket and archive it
+  # (tools/package-macos --from). No cargo and no build script runs here.
+  # Both architectures on Apple silicon: codesign, notarytool and stapler
+  # work the same on either app.
+  macos-package:
+    name: macOS (${{ matrix.arch }}, sign and package)
+    needs: macos
+    strategy:
+      matrix:
+        arch: [arm64, x86_64]
+    runs-on: macos-15
+    # The Developer ID secrets, on main only; a branch's run has none to read.
+    environment: ${{ github.ref == 'refs/heads/main' && 'release' || '' }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: macos-unsigned-${{ matrix.arch }}
+          path: target/stage
       # The certificate in a keychain of this run's own, and the API key
       # notarytool asks Apple with; tools/package-macos reads both from the
-      # environment.
+      # environment. Off main the secrets are passed empty, so another
+      # branch's scripts never see them and its app keeps the build's ad hoc
+      # signature.
       - name: Developer ID
         env:
-          CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE_P12 }}
-          CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
-          API_KEY: ${{ secrets.APPLE_API_KEY_P8 }}
-          API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
-          API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          CERTIFICATE: ${{ github.ref == 'refs/heads/main' && secrets.MACOS_CERTIFICATE_P12 || '' }}
+          CERTIFICATE_PASSWORD: ${{ github.ref == 'refs/heads/main' && secrets.MACOS_CERTIFICATE_PASSWORD || '' }}
+          API_KEY: ${{ github.ref == 'refs/heads/main' && secrets.APPLE_API_KEY_P8 || '' }}
+          API_KEY_ID: ${{ github.ref == 'refs/heads/main' && secrets.APPLE_API_KEY_ID || '' }}
+          API_ISSUER: ${{ github.ref == 'refs/heads/main' && secrets.APPLE_API_ISSUER || '' }}
         run: |
           if [[ -z $CERTIFICATE || -z $API_KEY ]]; then
             if [[ $GITHUB_REF == refs/heads/main ]]; then
-              echo "::error::no Developer ID: set the MACOS_CERTIFICATE_* and APPLE_API_* secrets"
+              echo "::error::no Developer ID: set the release environment's MACOS_CERTIFICATE_* and APPLE_API_* secrets"
               exit 1
             fi
-            echo "::warning::no Developer ID: the apps are signed ad hoc and not notarized"
+            echo "::warning::no Developer ID: the app is signed ad hoc and not notarized"
             exit 0
           fi
           keychain="$RUNNER_TEMP/signing.keychain-db"
@@ -108,64 +203,191 @@ jobs:
           fi
           printf '%s\n' "$API_KEY" > "$RUNNER_TEMP/AuthKey.p8"
           {
-            echo "PINGPONG_SIGN_IDENTITY=$identity"
+            echo "HELIO_SIGN_IDENTITY=$identity"
             echo "APPLE_API_KEY_PATH=$RUNNER_TEMP/AuthKey.p8"
             echo "APPLE_API_KEY_ID=$API_KEY_ID"
             echo "APPLE_API_ISSUER=$API_ISSUER"
           } >> "$GITHUB_ENV"
-      - name: Build and package
-        run: tools/package-macos
+      - name: Sign and package
+        run: tools/package-macos --from target/stage/Helio.app.zip
       - name: Forget the Developer ID
         if: always()
         run: |
           security delete-keychain "$RUNNER_TEMP/signing.keychain-db" 2>/dev/null || true
           rm -f "$RUNNER_TEMP/AuthKey.p8"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: macos-${{ matrix.arch }}
+          name: dist-macos-${{ matrix.arch }}
           path: target/dist/*.zip
           if-no-files-found: error
 
+  # The Windows programs, built and laid out as they ship
+  # (tools/package-windows.ps1 -StageOnly), unsigned: the next job signs and
+  # packages them on a runner of its own, where no build has run.
   windows:
     name: Windows
+    needs: version
+    if: needs.version.outputs.new == 'true' || github.event_name == 'workflow_dispatch'
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
       - name: Rust
         run: rustup toolchain install stable --profile minimal && rustup default stable
-      # As in ci.yml: FFmpeg's current shared build (its DLLs go beside
-      # Ping.exe), and LLVM's libclang (on the runner already).
+      # As in ci.yml: FFmpeg's shared build, pinned by release and SHA-256
+      # (tools/windows/ffmpeg-ci.ps1; its DLLs go beside
+      # Helio.exe), and LLVM's libclang (on the runner already).
       - name: FFmpeg
         shell: pwsh
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          $asset = gh release view latest --repo BtbN/FFmpeg-Builds --json assets --jq '.assets[].name' |
-            Where-Object { $_ -match '^ffmpeg-n[0-9.]+-latest-win64-lgpl-shared-[0-9.]+\.zip$' } |
-            Sort-Object -Descending | Select-Object -First 1
-          if (-not $asset) { throw 'no FFmpeg build found' }
-          gh release download latest --repo BtbN/FFmpeg-Builds --pattern $asset --dir $env:RUNNER_TEMP
-          Expand-Archive (Join-Path $env:RUNNER_TEMP $asset) -DestinationPath $env:RUNNER_TEMP
-          $dir = Join-Path $env:RUNNER_TEMP ($asset -replace '\.zip$', '')
-          "FFMPEG_DIR=$dir" >> $env:GITHUB_ENV
-          "LIBCLANG_PATH=C:\Program Files\LLVM\bin" >> $env:GITHUB_ENV
-      - uses: Swatinem/rust-cache@v2
+        run: ./tools/windows/ffmpeg-ci.ps1
+      # A cache per FFmpeg build, as in ci.yml.
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
-          key: release
-      - name: Build and package
+          key: release-${{ env.FFMPEG_BUILD }}
+      # On main, with the publisher set, the engine refuses to turn hosting
+      # on with a copy not signed by it (the next job signs it so).
+      - name: Build
         shell: pwsh
-        run: ./tools/package-windows.ps1
-      - uses: actions/upload-artifact@v4
+        env:
+          PUBLISHER: ${{ github.ref == 'refs/heads/main' && vars.HELIO_HOST_WINDOWS_PUBLISHER || '' }}
+        run: |
+          if ($env:PUBLISHER) {
+            $env:HELIO_HOST_WINDOWS_PUBLISHER = $env:PUBLISHER
+            ./tools/package-windows.ps1 -StageOnly -RequireSignature
+          } else {
+            ./tools/package-windows.ps1 -StageOnly
+          }
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: windows-x86_64
-          path: target/dist/*.zip
+          name: windows-unsigned
+          path: target/stage/Helio/
+          if-no-files-found: error
+          retention-days: 1
+
+  # Sign every program and DLL, then make the zip and the installer from the
+  # signed files and sign the installer and its uninstaller, so that the
+  # website and the GitHub release get the same signed files (and
+  # SHA256SUMS names them); then install, host and uninstall on this runner.
+  windows-package:
+    name: Windows (sign and package)
+    needs: windows
+    runs-on: windows-latest
+    # The signing secrets, on main only; a branch's run has none to read.
+    environment: ${{ github.ref == 'refs/heads/main' && 'release' || '' }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+      - name: Signing or not
+        id: signing
+        shell: pwsh
+        env:
+          CERTUM_EMAIL: ${{ secrets.CERTUM_EMAIL }}
+          CERTUM_OTP: ${{ secrets.CERTUM_OTP }}
+          PUBLISHER: ${{ vars.HELIO_HOST_WINDOWS_PUBLISHER }}
+          MAIN: ${{ github.ref == 'refs/heads/main' }}
+        run: |
+          $credentials = [bool]($env:CERTUM_EMAIL -and $env:CERTUM_OTP)
+          if ($env:MAIN -ne 'true') {
+            'not main: the Windows programs are not signed'
+          } elseif (-not $credentials -and -not $env:PUBLISHER) {
+            '::warning::the Windows programs are not signed: set the release environment''s CERTUM_EMAIL and CERTUM_OTP, and the variable HELIO_HOST_WINDOWS_PUBLISHER'
+          } elseif (-not $credentials) {
+            '::error::HELIO_HOST_WINDOWS_PUBLISHER is set, so the engine refuses to run unsigned, but the release environment has no CERTUM_EMAIL and CERTUM_OTP to sign it with'
+            exit 1
+          } else {
+            "sign=true" >> $env:GITHUB_OUTPUT
+          }
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: windows-unsigned
+          path: target/stage/Helio
+      # ssign at one version, from crates.io with its own lock file: the
+      # only code besides Helio's scripts that sees the signing secrets.
+      # Installed into a folder of its own and handed on by its path (SSIGN):
+      # cargo's bin folder, where `cargo install` puts it otherwise
+      # (C:\Users\runneradmin\.cargo\bin), is not on the runner's PATH, so
+      # the next step would not find it there.
+      - name: ssign
+        id: ssign
+        if: steps.signing.outputs.sign
+        shell: pwsh
+        run: |
+          rustup toolchain install stable --profile minimal && rustup default stable
+          $root = Join-Path $env:RUNNER_TEMP 'ssign'
+          cargo install ssign --version 0.1.8 --locked --root $root
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $exe = Join-Path $root 'bin\ssign.exe'
+          if (-not (Test-Path $exe)) { "::error::cargo install left no $exe"; exit 1 }
+          & $exe --version
+          "path=$exe" >> $env:GITHUB_OUTPUT
+      # The engine as built is kept aside first, for the check below that an
+      # unsigned one is refused.
+      - name: Sign and package
+        shell: pwsh
+        env:
+          SIGN: ${{ steps.signing.outputs.sign }}
+          SSIGN: ${{ steps.ssign.outputs.path }}
+          CERTUM_EMAIL: ${{ steps.signing.outputs.sign && secrets.CERTUM_EMAIL || '' }}
+          CERTUM_OTP: ${{ steps.signing.outputs.sign && secrets.CERTUM_OTP || '' }}
+        run: |
+          if ($env:SIGN) {
+            $unsigned = Join-Path $env:RUNNER_TEMP 'unsigned'
+            New-Item -ItemType Directory $unsigned | Out-Null
+            Copy-Item target/stage/Helio/helio-host.exe $unsigned
+            ./tools/package-windows.ps1 -From target/stage/Helio -Sign
+          } else {
+            ./tools/package-windows.ps1 -From target/stage/Helio
+          }
+      # The engine was built to require the publisher it is signed by: the
+      # same subject, written as Windows writes it, or hosting never turns on.
+      - name: The publisher
+        if: steps.signing.outputs.sign
+        shell: pwsh
+        env:
+          PUBLISHER: ${{ vars.HELIO_HOST_WINDOWS_PUBLISHER }}
+        run: |
+          $signer = (Get-AuthenticodeSignature target/stage/Helio/helio-host.exe).SignerCertificate.Subject
+          "signed by: $signer"
+          if (-not $env:PUBLISHER) {
+            "::error::the Windows programs are signed by $signer, and release builds must require it: set the repository variable HELIO_HOST_WINDOWS_PUBLISHER to that, exactly"
+            exit 1
+          }
+          if ($signer -cne $env:PUBLISHER) {
+            "::error::the Windows programs are signed by $signer, but HELIO_HOST_WINDOWS_PUBLISHER is $($env:PUBLISHER), and the engine would refuse itself"
+            exit 1
+          }
+      # Signed, the engine must also refuse an unsigned copy of itself and a
+      # signed one changed after signing.
+      - name: Install, host, uninstall
+        shell: pwsh
+        env:
+          SIGN: ${{ steps.signing.outputs.sign }}
+        run: |
+          $setup = (Get-ChildItem target/dist -Filter '*-windows-x86_64-setup.exe').FullName
+          if ($env:SIGN) {
+            ./tools/windows/test-install.ps1 -Setup $setup -Signed -UnsignedEngine (Join-Path $env:RUNNER_TEMP 'unsigned\helio-host.exe')
+          } else {
+            ./tools/windows/test-install.ps1 -Setup $setup
+          }
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: dist-windows-x86_64
+          path: |
+            target/dist/*-windows-x86_64.zip
+            target/dist/*-windows-x86_64-setup.exe
           if-no-files-found: error
 
   linux:
     name: Linux
+    needs: version
+    if: needs.version.outputs.new == 'true' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
       - name: Rust
         run: rustup toolchain install stable --profile minimal && rustup default stable
       # tools/linux/Dockerfile's build packages, as in ci.yml.
@@ -178,26 +400,82 @@ jobs:
             libx11-dev libx11-xcb-dev libxkbcommon-dev libxkbcommon-x11-dev libwayland-dev \
             libxcursor-dev libxrandr-dev libxi-dev libfontconfig-dev libfreetype-dev libxcb1-dev \
             libpipewire-0.3-dev libspa-0.2-dev libdbus-1-dev
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           key: release
       - name: Build and package
         run: tools/linux/package
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: linux-x86_64
+          name: dist-linux-x86_64
           path: target/dist/*.tar.gz
           if-no-files-found: error
 
+  # A job of its own: no build runs here, and the job that writes the
+  # release never holds the key. Each signature's trusted comment names its
+  # file (product, version, system), which the updater requires, so an
+  # older package cannot pass for a newer one.
+  sign:
+    name: Signatures
+    needs: [macos-package, windows-package, linux]
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    environment: release
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: dist-*
+          path: dist
+          merge-multiple: true
+      - name: minisign
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends minisign
+      - name: Sign every package
+        env:
+          KEY: ${{ secrets.MINISIGN_SECRET_KEY }}
+          PASSWORD: ${{ secrets.MINISIGN_PASSWORD }}
+        run: |
+          if [ -z "$KEY" ] || [ -z "$PASSWORD" ]; then
+            echo "::error::no release key: set the release environment's secrets MINISIGN_SECRET_KEY and MINISIGN_PASSWORD (docs/development.md, Release signing)"
+            exit 1
+          fi
+          umask 077
+          printf '%s\n' "$KEY" > "$RUNNER_TEMP/release.key"
+          mkdir signatures
+          for path in dist/*; do
+            name=$(basename "$path")
+            printf '%s\n' "$PASSWORD" |
+              minisign -S -s "$RUNNER_TEMP/release.key" -m "$path" -x "signatures/$name.minisig" -t "file:$name"
+            # Against the key Helio is built with: a secret that is not
+            # its pair fails here, not in every update.
+            minisign -V -p helio-update/release-signing.pub -m "$path" -x "signatures/$name.minisig"
+          done
+          rm -f "$RUNNER_TEMP/release.key"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: dist-signatures
+          path: signatures/*.minisig
+          if-no-files-found: error
+
+  # Before the release, whose tag is what says a version is released: until
+  # the tag exists, a run that failed can be run again from the start.
   downloads:
     name: Website downloads
-    needs: [macos, windows, linux]
-    if: github.ref == 'refs/heads/main'
+    needs: [version, macos-package, windows-package, linux, sign]
+    if: github.ref == 'refs/heads/main' && needs.version.outputs.new == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
+          persist-credentials: false
+      # The packages, not the unsigned Windows files they were made from.
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: dist-*
           path: dist
           merge-multiple: true
       - name: Publish
@@ -208,39 +486,38 @@ jobs:
 
   release:
     name: GitHub release
-    needs: [macos, windows, linux]
-    if: github.ref == 'refs/heads/main'
+    needs: [version, downloads]
+    if: github.ref == 'refs/heads/main' && needs.version.outputs.new == 'true'
     runs-on: ubuntu-latest
+    # The only job that writes: the release, the cask branch and pull
+    # request, and the approval of that pull request's CI run (below). It
+    # runs no build, only tools/update-casks and gh, so the checkout keeps
+    # its token for git push.
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: write
     steps:
-      - uses: actions/checkout@v5
-      - name: Is the version new
-        id: version
-        run: |
-          version=$(sed -n '/^\[workspace.package\]/,/^\[/ s/^version = "\(.*\)"/\1/p' Cargo.toml)
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-          if git ls-remote --exit-code --tags origin "refs/tags/v$version" >/dev/null; then
-            echo "v$version is released already: no GitHub release"
-          else
-            echo "new=true" >> "$GITHUB_OUTPUT"
-          fi
-      - uses: actions/download-artifact@v4
-        if: steps.version.outputs.new
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
+          pattern: dist-*
           path: dist
           merge-multiple: true
+      # The packages and their signatures (dist-signatures).
+      # Run again after the cask step failed, the release is there already.
       - name: The release, with the apps
-        if: steps.version.outputs.new
         env:
           GH_TOKEN: ${{ github.token }}
-          VERSION: ${{ steps.version.outputs.version }}
+          VERSION: ${{ needs.version.outputs.version }}
         run: |
-          gh release create "v$VERSION" dist/* --target "$GITHUB_SHA" \
-            --title "pingpong $VERSION" --generate-notes
-      - name: The casks, at the new version, as a pull request
-        if: steps.version.outputs.new
+          gh release view "v$VERSION" >/dev/null 2>&1 ||
+            gh release create "v$VERSION" dist/* --target "$GITHUB_SHA" \
+              --title "Helio $VERSION" --generate-notes
+      - name: The cask, at the new version, as a pull request
         env:
           GH_TOKEN: ${{ github.token }}
-          VERSION: ${{ steps.version.outputs.version }}
+          VERSION: ${{ needs.version.outputs.version }}
         run: |
           branch="casks-$VERSION"
           tools/update-casks "$VERSION" dist
@@ -248,20 +525,23 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git switch -c "$branch"
           git add Casks
-          git commit -m "Casks: Ping and Pong $VERSION" \
+          git commit -m "Casks: Helio $VERSION" \
             -m "The release's archives and their checksums, from the release workflow."
           git push origin "$branch"
-          gh pr create --base main --head "$branch" --title "Casks: Ping and Pong $VERSION" \
-            --body "The Homebrew casks at release v$VERSION: its archives and their checksums. Merging this is what makes \`brew upgrade\` see the release."
+          sha=$(git rev-parse HEAD)
+          gh pr create --base main --head "$branch" --title "Casks: Helio $VERSION" \
+            --body "The Homebrew cask at release v$VERSION: its archives and their checksums. Merging this is what makes \`brew upgrade\` see the release."
           # GitHub holds the CI run of a pull request a workflow opened until
           # someone approves it, and main merges only on that run's checks
           # (a run started by hand on the branch does not count). Approve it
           # here; if this token may not, the pull request says so and it is
           # approved by hand (Actions, or
           # gh api -X POST repos/OWNER/REPO/actions/runs/ID/approve).
+          # The run is the one for the commit just pushed: a fork can name
+          # its branch casks-VERSION too, but cannot have this commit's SHA.
           for _ in $(seq 1 20); do
-            run=$(gh run list --branch "$branch" --event pull_request --json databaseId,conclusion \
-              --jq '.[] | select(.conclusion == "action_required") | .databaseId' | head -n 1)
+            run=$(gh run list --branch "$branch" --event pull_request --json databaseId,conclusion,headSha \
+              --jq ".[] | select(.conclusion == \"action_required\" and .headSha == \"$sha\") | .databaseId" | head -n 1)
             [ -n "$run" ] && break
             sleep 6
           done

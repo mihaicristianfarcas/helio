@@ -129,7 +129,7 @@ t=2.0s countdown=0 display_alive=false
 VERIFIED: watchdog reaped the display after 2s without a ping
 ```
 
-`pingpong-server` **must** run its own keepalive thread pinging at ≤1 s. Relying
+`helio-server` **must** run its own keepalive thread pinging at ≤1 s. Relying
 on Apollo being installed and running would be a silent dependency that fails
 the moment the user stops it — and the failure mode is the streamed display
 vanishing mid-session.
@@ -212,9 +212,9 @@ identity cannot be confused with the outgoing one.
 Must run in the interactive desktop session:
 
 ```bash
-COPYFILE_DISABLE=1 tar czf - spikes/vdd-mode | ssh user@windows-host 'cd C:\path\to\pingpong; tar xzf -'
-ssh user@windows-host 'cd C:\path\to\pingpong\spikes\vdd-mode; cargo build --release'
-ssh user@windows-host 'powershell -ExecutionPolicy Bypass -File C:\path\to\pingpong\spikes\run-interactive.ps1 -WorkDir C:\path\to\pingpong\spikes\vdd-mode -Exe .\target\release\vdd-mode.exe -TimeoutSec 150'
+COPYFILE_DISABLE=1 tar czf - spikes/vdd-mode | ssh user@windows-host 'cd C:\path\to\helio; tar xzf -'
+ssh user@windows-host 'cd C:\path\to\helio\spikes\vdd-mode; cargo build --release'
+ssh user@windows-host 'powershell -ExecutionPolicy Bypass -File C:\path\to\helio\spikes\run-interactive.ps1 -WorkDir C:\path\to\helio\spikes\vdd-mode -Exe .\target\release\vdd-mode.exe -TimeoutSec 150'
 ```
 
 Optional args: `width height refresh_mhz` (default `2560 1440 120000`).
