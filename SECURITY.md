@@ -30,7 +30,9 @@ then each side's tunnel keys sent under the result. An attacker must be in
 the middle *while* the pairing happens, and guess the PIN at the first try,
 to intervene; a recording of the pairing does not help later. What the
 prompt shows (the device's name, and whether it is an AI agent) is what the
-device then says under the PIN's key, or nothing is paired. The pairing
+device then says under the PIN's key, or nothing is paired; the name loses
+its control and bidirectional characters first, so it cannot rearrange
+itself on the prompt. The pairing
 port (TCP 47801) serves the local network only: the host closes a
 connection from anything but a private, link-local or loopback address, or
 Tailscale's 100.64.0.0/10.

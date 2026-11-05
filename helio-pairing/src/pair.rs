@@ -301,10 +301,31 @@ fn public_of(s: &Sealed) -> Result<PublicIdentity, PairError> {
     PublicIdentity::from_b64(&s.x25519, &s.mlkem).map_err(|e| PairError::Protocol(e.to_string()))
 }
 
-/// A device's name as the host's prompt shows it: no control characters,
-/// 64 at most.
+/// A device's name as the host's prompt shows it: nothing that rearranges
+/// or breaks the text around it, 64 at most.
 fn shown_name(name: &str) -> String {
-    name.chars().filter(|c| !c.is_control()).take(64).collect()
+    name.chars()
+        .filter(|&c| !c.is_control() && !rearranges_text(c))
+        .take(64)
+        .collect()
+}
+
+/// The bidirectional controls (Unicode's UAX #9) and the line and paragraph
+/// separators, which are not in Unicode's control category and which
+/// `char::is_control` leaves in: unseen, they make a name read otherwise
+/// than its characters run. The joiners stay: emoji and several scripts
+/// need them, and they reorder nothing.
+fn rearranges_text(c: char) -> bool {
+    matches!(
+        c,
+        '\u{061c}'
+            | '\u{200e}'
+            | '\u{200f}'
+            | '\u{2028}'
+            | '\u{2029}'
+            | '\u{202a}'..='\u{202e}'
+            | '\u{2066}'..='\u{2069}'
+    )
 }
 
 /// A random 4-digit PIN, as Moonlight shows.
@@ -697,6 +718,45 @@ mod tests {
     use super::*;
     use helio_transport::Identity as Keys2;
     use std::net::TcpListener;
+
+    #[test]
+    fn a_name_cannot_rearrange_itself_at_the_prompt() {
+        for c in [
+            '\u{061c}', '\u{200e}', '\u{200f}', '\u{2028}', '\u{2029}', '\u{202a}', '\u{202b}',
+            '\u{202c}', '\u{202d}', '\u{202e}', '\u{2066}', '\u{2067}', '\u{2068}', '\u{2069}',
+        ] {
+            assert_eq!(
+                shown_name(&format!("Ana{c}'s laptop")),
+                "Ana's laptop",
+                "U+{:04X}",
+                c as u32
+            );
+        }
+    }
+
+    #[test]
+    fn a_name_keeps_its_own_writing_and_emoji() {
+        for name in [
+            "Ana's laptop",
+            "\u{05d3}\u{05e0}\u{05d4}", // Hebrew: right to left by itself
+            "\u{0645}\u{0646}\u{0649}", // Arabic
+            "\u{0645}\u{06cc}\u{200c}\u{062e}", // Persian, with its zero-width non-joiner
+            "\u{1f469}\u{200d}\u{1f4bb} laptop", // An emoji joined by a zero-width joiner
+        ] {
+            assert_eq!(shown_name(name), name);
+        }
+    }
+
+    #[test]
+    fn a_name_loses_its_control_characters_and_stops_at_64() {
+        assert_eq!(shown_name("Ana\n\u{1b}[2J"), "Ana[2J");
+        assert_eq!(shown_name(&"a".repeat(65)).chars().count(), 64);
+        // Counted after: what is removed takes up none of the 64.
+        assert_eq!(
+            shown_name(&format!("{}{}", "\u{202e}".repeat(10), "a".repeat(64))),
+            "a".repeat(64)
+        );
+    }
 
     type HostResult = Result<(String, PublicIdentity, Extras), PairError>;
 
