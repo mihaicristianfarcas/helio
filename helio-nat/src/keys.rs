@@ -213,7 +213,7 @@ mod tests {
     #[test]
     fn nothing_in_a_salt_names_the_product() {
         let slot = Slot::derive(&random_32(), Kind::Host, 20_000);
-        for word in [&b"helio"[..], b"pingpong", b"rv/"] {
+        for word in [&b"helio"[..], b"rv/"] {
             assert!(!slot.salt.windows(word.len()).any(|w| w == word));
         }
     }

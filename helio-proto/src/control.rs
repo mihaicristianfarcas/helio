@@ -22,7 +22,6 @@ pub mod codec {
 
 /// `SessionStart::flags`.
 pub mod flags {
-    // 1 is retired: sessions always stream a virtual display.
     /// Keep the host's own monitors on during the session (by default they
     /// are turned off, so the virtual display is the whole desktop, as
     /// Sunshine's `ensure_only_display` makes the streamed display the only one).
@@ -50,8 +49,6 @@ pub mod features {
     /// Video comes in `LAN_PAYLOAD_LEN` shards while the client is on the
     /// host's local network.
     pub const LAN_SHARDS: u8 = 2;
-    // 4 said the host draws the pointer into the picture, which every host
-    // does: retired, never reused.
 }
 
 /// Client -> host: start (or re-describe) the session.
@@ -458,8 +455,6 @@ pub mod host_warning {
 const OP_SESSION_START: u8 = 2;
 const OP_SESSION_ACK: u8 = 3;
 const OP_SESSION_END: u8 = 4;
-// 5 was the pointer's state, for clients that drew the host's pointer:
-// retired, never reused.
 const OP_REQUEST_IDR: u8 = 6;
 const OP_INVALIDATE: u8 = 7;
 const OP_LOSS_REPORT: u8 = 8;
@@ -467,9 +462,6 @@ const OP_PING: u8 = 9;
 const OP_PING_REPLY: u8 = 10;
 const OP_GAMEPAD: u8 = 11;
 const OP_RUMBLE: u8 = 12;
-// 13 and 14 were the offer of a host-wide rendezvous secret (and its key)
-// and the client's answer: retired, never reused, so a host and a client
-// of different releases drop each other's message rather than misread it.
 const OP_HOST_WARNING: u8 = 15;
 const OP_PROGRESS: u8 = 16;
 const OP_AGENT_CONTROL: u8 = 17;

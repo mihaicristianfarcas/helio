@@ -108,7 +108,6 @@ pub enum Msg {
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         agent: bool,
         /// The client's fresh ML-KEM-768 encapsulation key (base64).
-        #[serde(default)]
         kem: String,
     },
     /// Host → client: the PIN prompt is up; waiting for the user.
@@ -117,7 +116,6 @@ pub enum Msg {
     Challenge {
         spake: String,
         confirm: String,
-        #[serde(default)]
         kem: String,
     },
     Proof {
@@ -567,10 +565,8 @@ pub fn accept(mut stream: TcpStream, me: &HostDescription) -> Result<Incoming, P
             kem,
         } => {
             if version != VERSION {
-                // Version 1 (SPAKE2 alone) is not offered even to an old
-                // client: an attacker could otherwise force it.
                 let reason = if version < VERSION {
-                    "This host pairs with a newer, post-quantum exchange: update Helio (or \
+                    "This host is newer than the device pairing with it: update Helio (or \
                         the agent) to pair with it."
                 } else {
                     "This host is older than the device pairing with it: update Helio Host to pair."
@@ -873,19 +869,19 @@ mod tests {
             accept(s, &me).map(|_| ())
         });
         let mut s = TcpStream::connect(addr).unwrap();
-        let old = Msg::Hello {
-            version: 1,
-            name: "old".into(),
+        let older = Msg::Hello {
+            version: VERSION - 1,
+            name: "older".into(),
             spake: b64().encode([0u8; 33]),
             agent: false,
             kem: String::new(),
         };
-        write_msg(&mut s, &old).unwrap();
+        write_msg(&mut s, &older).unwrap();
         match read_msg(&mut s).unwrap() {
             Msg::Refused { reason } => assert!(reason.contains("update Helio"), "{reason}"),
             other => panic!("expected a refusal, got {other:?}"),
         }
-        assert!(host.join().unwrap().is_err(), "no fallback to SPAKE2 alone");
+        assert!(host.join().unwrap().is_err(), "the host goes no further");
     }
 
     /// Between client and host, changing the ML-KEM ciphertext on its way:

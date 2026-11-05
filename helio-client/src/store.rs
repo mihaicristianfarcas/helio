@@ -146,7 +146,6 @@ pub struct KnownHost {
     pub wake: Vec<String>,
     pub x25519: String,
     pub mlkem: String,
-    #[serde(default)]
     pub paired_at: u64,
 }
 
