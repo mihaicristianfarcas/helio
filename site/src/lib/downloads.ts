@@ -1,7 +1,7 @@
-// The downloads: the files the release workflow publishes for each push to
-// main (tools/publish-downloads), on Cloudflare R2. Their names stay the
+// The downloads: the files the release workflow publishes for each new
+// version (tools/publish-downloads), on Cloudflare R2. Their names stay the
 // same from one release to the next, so the page links them as they are;
-// latest.json says which build they are, and the page reads it as it loads.
+// latest.json says which version they are, and the page reads it as it loads.
 
 export const DOWNLOADS = 'https://download.helio.mihaicristian.dev';
 

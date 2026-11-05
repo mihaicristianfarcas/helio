@@ -49,7 +49,7 @@ const panels: Panel[] = [
     ],
     commands: [],
     caveat:
-      'SmartScreen may say it prevented an unrecognized app from starting: choose More info, check the publisher, then Run anyway.',
+      'SmartScreen will probably say it prevented an unrecognized app from starting: choose More info, check that the publisher ends in Open Source Developer Farcaș Mihai-Cristian, then Run anyway.',
   },
   {
     system: 'linux',
@@ -136,7 +136,7 @@ const panelId = (system: System) => `download-${system}`;
       </p>
 
       <p class="build note">
-        <span data-build>The newest build of the main branch.</span>
+        <span data-build>The newest released version.</span>
         <a href={CHECKSUMS}>SHA-256 checksums</a>
         <a href={`${REPO}/releases`}>All releases</a>
       </p>
@@ -379,13 +379,13 @@ const panelId = (system: System) => `download-${system}`;
       }
       const date = new Date(m.published).toLocaleDateString('en', { dateStyle: 'long' });
       const build = picker.querySelector('[data-build]')!;
-      build.textContent = 'Built from ';
+      build.textContent = `Version ${m.version}, built from `;
       const link = document.createElement('a');
       link.href = `${picker.dataset.repo}/commit/${m.commit}`;
       link.textContent = commit;
       build.append(link, ` on ${date}.`);
     })
     .catch(() => {
-      // No answer: the links still point at the newest build.
+      // No answer: the links still point at the newest version.
     });
 </script>
