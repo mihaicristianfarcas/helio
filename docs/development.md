@@ -400,7 +400,7 @@ cargo +nightly fuzz run depacketize   # also: control, input
 (Node 22.12 or newer). It reads the repository rather than copies of it
 where it can: the UI's icons in `helio-ui/assets/icons/` and the
 release in `Casks/helio.rb`, so a new release shows on its next build. Its
-downloads are the newest build of `main` ([Releases](#releases)): the page
+downloads are the newest released version ([Releases](#releases)): the page
 links their fixed names (`src/lib/downloads.ts`) and, as it loads, reads
 `latest.json` for the version and the sizes. The page lives on the
 `landing-page` branch only, rebased on `main` and never merged into it.
