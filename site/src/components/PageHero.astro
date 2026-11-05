@@ -123,5 +123,7 @@ const { id, badge, title, actions, shots } = Astro.props;
     border: 1px solid rgb(255 255 255 / 0.16);
     border-radius: 14px;
     box-shadow: 0 30px 80px -24px rgb(0 0 0 / 0.75);
+    /* To look at only: not dragged, selected or opened on their own. */
+    pointer-events: none;
   }
 </style>

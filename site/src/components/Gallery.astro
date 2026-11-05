@@ -197,6 +197,8 @@ const tabs = [
 
   .capture :global(img) {
     border-radius: var(--corner);
+    /* To look at only: not dragged, selected or opened on their own. */
+    pointer-events: none;
   }
 
   /* The new page is there at once, its words with it; only the old
