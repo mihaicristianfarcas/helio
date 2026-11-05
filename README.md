@@ -134,7 +134,9 @@ post-quantum fork of Cloudflare's boringtun; the windows are drawn with
 of vendored code keep their own licenses: the NVENC type bindings in
 `helio-encode/src/nvenc_sys/` (MIT, from NVIDIA's header and the
 `nvidia-video-codec-sdk` crate; see the `LICENSE` there) and the no-op
-profiling shims in `vendor/` (Apache-2.0). The libraries Helio depends
-on are under their own licenses, all compatible with the GPL-3.0
-(`cargo tree` lists them); FFmpeg, where it is used, is linked
+profiling shims in `vendor/` (Apache-2.0). The crates built into Helio
+are under their own licenses, compatible with the GPL-3.0; every package
+holds them with their texts, in `THIRD-PARTY-NOTICES.txt`. The fonts the
+Linux client bundles go with it under their font licenses (OFL-1.1 and the
+Ubuntu Font License), in the same file. FFmpeg, where it is used, is linked
 dynamically.

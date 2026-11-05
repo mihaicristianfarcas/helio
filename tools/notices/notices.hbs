@@ -1,0 +1,22 @@
+Third-party software in Helio
+
+Helio is free software under the GNU General Public License, version 3
+(LICENSE, https://github.com/mihaicristianfarcas/helio). It is built with
+the open-source crates below, each under its own license. This file gives
+each license's text, and the crates it covers, as each crate ships it.
+
+{{#each overview}}
+  {{count}} x {{{name}}}
+{{/each}}
+{{#each licenses}}
+
+================================================================================
+{{{name}}}
+
+Used by:
+{{#each used_by}}
+  {{crate.name}} {{crate.version}}
+{{/each}}
+
+{{{text}}}
+{{/each}}
