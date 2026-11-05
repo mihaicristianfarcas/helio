@@ -87,7 +87,9 @@ read a device's keys can act as that device: unpair a device you lost.
 **The host's privileges.** On Windows, Helio Host runs as SYSTEM so it can
 capture and control the secure desktop (UAC prompts, the lock screen), as
 Sunshine does. Clipboard files are read and written as the
-signed-in user, not as SYSTEM.
+signed-in user, not as SYSTEM, by a helper whose word the host checks: only
+clipboard packets go on to the client, and copies only while it may read
+them.
 
 **The drivers hosting installs.** On Windows, turning hosting on installs
 SudoVDA and ViGEmBus where they are missing
