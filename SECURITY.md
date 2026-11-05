@@ -128,8 +128,7 @@ names the package's file, so an older package, or another system's,
 cannot pass for the one offered; on Linux it is the only check of who made
 the package. Then each system checks its own signature by Helio's maker:
 on macOS the same team's Developer ID as the app it replaces; on Windows,
-on the installer, Helio's Authenticode certificate (required by releases
-built once Helio had one). On Windows, while
+on the installer, Helio's Authenticode certificate. On Windows, while
 hosting is on, the host's engine in Program Files is replaced only by the
 new engine's own `enable`, which checks the signature of its copy there
 as turning hosting on does. The package is downloaded and unpacked in your
