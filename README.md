@@ -93,6 +93,10 @@ Moonlight + Sunshine: [docs/parity.md](docs/parity.md).
 - **No controllers on a macOS or Linux host.** Only Windows hosts take them
   ([macOS](docs/platforms/macos.md#limits),
   [Linux](docs/platforms/linux.md#not-built-yet)).
+- **SmartScreen may stop the Windows installer.** Helio is signed, but
+  SmartScreen also asks for a reputation, which a signature does not give:
+  choose **More info**, check the publisher, then **Run anyway**
+  ([what it should say](docs/install.md#on-windows)).
 - **No relay.** When both sides are behind symmetric NAT, punching through
   fails and nothing relays the stream: forward UDP 47800 to the host on its
   router ([networking](docs/networking.md#limits)).
