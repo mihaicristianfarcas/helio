@@ -15,7 +15,9 @@ line of its standard output. That process is `helio_client::linux`:
 - **Window and input.** A winit window (X11 or Wayland). Keys go as
   scancodes through the shared keyboard handling (Moonlight's
   Ctrl+Alt+Shift chords); the pointer is captured by locking or confining
-  the cursor.
+  the cursor. A wheel goes in notches. A touchpad goes as the distance it
+  moved under Wayland, and as wheel units under X11, where winit gives
+  XInput 2's smooth scrolling as parts of a line.
 - **Decode.** FFmpeg, with VA-API where the machine has it, else four slice
   threads in software. `HELIO_SOFTWARE_DECODE=1` skips VA-API. A 4:4:4
   stream (**YUV 4:4:4**, which a Linux client asks for when set) decodes in
@@ -233,6 +235,8 @@ Data and logs are in `~/.config/helio-host`.
   GNOME's virtual monitor, with scripted input in a container. KDE and the
   portal are unit-tested only, and what KDE writes for its scale on X11 was read
   from its source. No real trackpad has run against a Linux host.
+- A touchpad on a Linux client, under X11 or Wayland: no real one has
+  scrolled a host.
 - wlroots desktops (Ubuntu 24.04's wlroots portal needs a GPU to share the
   screen, and the container has none).
 

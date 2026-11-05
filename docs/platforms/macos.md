@@ -294,8 +294,13 @@ seconds and prints each channel's level.
 - **The pointer** is in the picture: ScreenCaptureKit draws it, in its
   real shape, and hides it when an app does.
 - **Scrolling**: a client's trackpad scrolls the Mac by the distance it
-  moved, in the display's points; a wheel notch scrolls 30 points. Not
-  verified yet: a trackpad's scrolling has not been run against a Mac host.
+  moved, in the display's points; a wheel notch scrolls 30 points. With
+  scripted input from a client on the same Mac, an AppKit view and Chromium,
+  Firefox and WebKit moved as far as the fingers
+  ([measured](../benchmarks.md#on-a-mac-host)). The scrolls carry no
+  gesture phases. Not verified yet: a real trackpad on another Mac, and
+  what apps that act on the phases do (the rubber band at the end of a page,
+  swiping between pages).
 - **HDR** (macOS 15 or later, Apple silicon): for a client that asks, the
   virtual display is an HDR one (a `CGVirtualDisplayMode` with a transfer
   function, measured to give the screen 5x SDR white of headroom),

@@ -471,7 +471,7 @@ moved it a whole one, and why the same small movement sometimes moves it and
 sometimes does not.
 
 Not measured: other apps that use whole notches, Explorer's horizontal
-scrolling, and a Mac host.
+scrolling, and a touchpad on a Windows client.
 
 ### On a Linux host
 
@@ -539,3 +539,42 @@ So the ratio is the window scale times `Gdk/UnscaledDPI` (else `Xft/DPI`) over
 
 Not measured: KDE, the desktop portal's path, a real trackpad, and apps other
 than browsers.
+
+### On a Mac host
+
+How far the same 795-point gesture moves a Mac host (2026-11-05): replayed
+as scripted input from a client on the same Mac, the 14" MacBook Pro above
+(M4 Pro, macOS 26.5.2), release build, 3024x1890 at 60 fps, HEVC at 40
+Mbit/s. The virtual display ran at 200%, 1512x945 points, so a point is two
+stream pixels and the gesture is 1590 of them, and sat beside the built-in
+display (`--keep-host-displays`). The targets were a native AppKit scroll view
+(`NSScrollView`), and Playwright 1.64's builds of Chromium 156, Firefox 157
+and WebKit, on a page that logged its position. A CSS pixel was a point in
+each.
+
+| Input | Sent | Should move, in points | AppKit view | Chromium | Firefox | WebKit |
+|---|---|---|---|---|---|---|
+| A wheel notch | 120 units | 30 | 30 | 30 | 30 | 30 |
+| The gesture at 3 wheel units a point, as a trackpad went until the Windows measurement above | 2385 units | 596, 0.75× the fingers | 596 | 596 | 596 | 596 |
+| The gesture as a distance | 1590 pixels | 795 | 795 | 795 | 795 | 795 |
+| Down, one event | 2250 pixels | 1125 | 1125 | 1125 | 768 | 1125 |
+| Up, one event | 450 pixels | 225 | 224 | 224 | 224 | 224 |
+| 100 events of one pixel, 16 ms apart | 100 pixels | 50 | 49 | 49 | 49 | 49 |
+| Right, then left, one event each | 900 pixels each | 450 each | 450 each | 450 each | 450 each | 450 each |
+
+The point missing from two rows is not lost. The notches before left a
+quarter of a point over, and the host keeps what is short of a point for the
+next scroll (`helio-input/src/macos.rs`). Firefox moved the one large event
+768 points, a little under the height of its view (800 points). A trackpad's
+events are far smaller: the largest in the recording is 45 points. At 1920x1080, where the
+virtual display is not HiDPI and a stream pixel is a point, the AppKit view
+moved 1590 points for the gesture, 1.00×.
+
+The host posts its scrolls without a gesture's phases (began, changed,
+ended, momentum): the AppKit view saw none. So apps that act on the phases,
+such as the rubber band at the end of a page or swiping between pages,
+see a plain scroll. That was not tried.
+
+Not measured: a real trackpad, from a Mac client on another machine;
+the default arrangement, where the virtual display mirrors the others;
+Safari itself and browsers as installed; and other apps.

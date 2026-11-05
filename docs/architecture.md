@@ -224,7 +224,10 @@ layout applies, as games expect); the mouse as relative motion, or
 absolute stream pixels when the user switches to positions. A wheel turns
 in Windows' notches (120 each); a trackpad scrolls by a distance, in stream
 pixels, which the host scrolls as far in its own terms, since only it knows
-how far a notch goes at its scaling (`helio-input/src/scroll.rs`). The host
+how far a notch goes at its scaling (`helio-input/src/scroll.rs`). That
+takes a client whose system gives the distance: a Mac, and Linux under
+Wayland. Windows, and Linux under X11, give a touchpad as wheel units, and
+it goes as those. The host
 draws its pointer into the picture, as Sunshine does, so the pointer the
 client sees is the host's own.
 
