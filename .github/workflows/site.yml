@@ -1,6 +1,6 @@
 # The website, from every push to landing-page that changes what it is built
-# from: site/ itself, the release in Casks/ and the UI's icons (see "The
-# website" in docs/development.md). Astro builds it and wrangler deploys it
+# from: site/ itself and the UI's icons (see "The website" in
+# docs/development.md). Astro builds it and wrangler deploys it
 # to the Cloudflare Worker that serves helio.mihaicristian.dev
 # (site/wrangler.jsonc). This workflow lives on landing-page only, as the
 # site does.
@@ -17,7 +17,6 @@ on:
     branches: [landing-page]
     paths:
       - "site/**"
-      - "Casks/**"
       - "helio-ui/assets/icons/**"
       - ".github/workflows/site.yml"
   workflow_dispatch:

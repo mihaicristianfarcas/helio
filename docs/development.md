@@ -487,13 +487,12 @@ what they do not.
 
 `site/` is Helio's landing page, built with [Astro](https://astro.build)
 (Node 22.12 or newer). It reads the repository rather than copies of it
-where it can: the UI's icons in `helio-ui/assets/icons/` and the
-release in `Casks/helio.rb`, so a new release shows on its next build. Its
+where it can: the UI's icons in `helio-ui/assets/icons/`. Its
 downloads are the newest released version ([Releases](#releases)): the page
 links their fixed names (`src/lib/downloads.ts`) and, as it loads, reads
 `latest.json` for the version and the sizes. The page lives on the
 `landing-page` branch only, rebased on `main` and never merged into it.
-Each push to that branch that changes `site/`, `Casks/` or the icons runs
+Each push to that branch that changes `site/` or the icons runs
 `.github/workflows/site.yml`, which builds the page and deploys it with
 wrangler to the Cloudflare Worker `helio-site` (`site/wrangler.jsonc`):
 static assets only, at
@@ -526,13 +525,14 @@ What it shows is made from the app, by scripts in `site/scripts/`:
 
 | Script | Makes |
 |---|---|
-| `capture-apps.sh` (macOS) | The window's screenshots in `src/assets/shots/`, from the demo mode in its dark appearance, at 1200x800 points, with empty temporary data folders and a home folder of their own. Each is the screen where the window is, over a night blue (`hero/macos/wall.swift`), since the demo's `snapshot` step shows dark pages lighter than they are. Needs Screen Recording and Accessibility for the terminal. |
+| `capture-apps.sh` (macOS) | The window's screenshots in `src/assets/shots/`, from the demo mode in its dark appearance, at 1200x800 points, with empty temporary data folders and a home folder of their own. Each is the screen where the window is, over the page's own ink, `--bg` (`hero/macos/wall.swift`), since the demo's `snapshot` step shows dark pages lighter than they are. Needs Screen Recording and Accessibility for the terminal. |
 | `capture-hero.sh` | The hero's pictures in `src/assets/hero/`: the Hosts page (`hosts-sample`) on macOS's and Windows' default wallpapers, 2700x1800, as each desktop composites it. The script's header says how each is made; `hero/` holds what runs there. |
 | `record-stream.sh` | The stream video in `public/media/`: a Linux host and client in the container (`tools/linux-dev`), the host showing a running clock (`clock-scene.py`), both screens read at the same instants from Xvfb's framebuffers (`grab-screens.py`) and set side by side; and the averages of the client's statistics, for `src/lib/facts.ts`. A run whose slowest second fell below 55 fps (the VM starved, both sides at once) is refused and made again. |
 
 The pictures name no version: under `HELIO_UI_DEMO` the window leaves it out,
-and the hero's badge is the one place the site says it. The hero of `/agents`
-shares the home page's layout (`PageHero.astro`): behind the sample agent
+and the install card is the one place the site says it, from `latest.json`.
+The hero of `/agents` shares the home page's layout (`PageHero.astro`):
+behind the sample agent
 session is `src/assets/hero/agent-screen.webp`, the screen that session shows,
 a real screenshot of a Windows desktop holding the files it talks about
 (`hero/windows/agentshot.ps1`). `og-card.html` is the link preview

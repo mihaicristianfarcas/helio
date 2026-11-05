@@ -52,7 +52,7 @@ export default defineConfig({
   vite: {
     server: {
       // The page reads the repository rather than copies of it: the UI's
-      // icons in helio-ui/assets/icons/ and the release in Casks/helio.rb.
+      // icons in helio-ui/assets/icons/.
       fs: { allow: ['..'] },
     },
   },
