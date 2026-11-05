@@ -11,8 +11,9 @@
 #
 # Each window is 1200x800 points, which the page shows at about its own size:
 # at the app's default 940x620, shrunk to fit the page, the pictures look
-# crowded. Each is the screen where the window is, over a night blue
-# (scripts/hero/macos/wall.swift): the demo's snapshot step is the window with
+# crowded. Each is the screen where the window is, over the page's own ink,
+# --bg in global.css (scripts/hero/macos/wall.swift), so the glass shows the
+# colour the picture sits on: the demo's snapshot step is the window with
 # nothing behind its glass, and dark pages come out lighter that way. The
 # corners are then cut, so the page shows through them.
 #
@@ -29,19 +30,19 @@ WALL=
 trap '[[ -n $WALL ]] && kill "$WALL" 2>/dev/null; rm -rf "$TMP"' EXIT
 mkdir -p "$SHOTS"
 
-# Where the window goes, in points from the screen's top left, and the night
+# Where the window goes, in points from the screen's top left, and the ink
 # around it.
 X=156 Y=91 W=1200 H=800
 SHARP=$SITE/node_modules/sharp
 swiftc -O "$SITE/scripts/hero/macos/wall.swift" -o "$TMP/wall"
-node -e 'require(process.argv[1])({ create: { width: 64, height: 64, channels: 3, background: "#111a2e" } }).png().toFile(process.argv[2])' \
-    "$SHARP" "$TMP/night.png"
+node -e 'require(process.argv[1])({ create: { width: 64, height: 64, channels: 3, background: "#16213a" } }).png().toFile(process.argv[2])' \
+    "$SHARP" "$TMP/ink.png"
 
 shot() { # name steps
     local data out=$TMP/$1.png app
     # Afresh for each shot: when an app quits, whatever was in front before
     # it (the terminal) comes back above this, and would show in the glass.
-    "$TMP/wall" "$TMP/night.png" $((X - 50)) $((Y - 30)) $((W + 100)) $((H + 60)) 30 &
+    "$TMP/wall" "$TMP/ink.png" $((X - 50)) $((Y - 30)) $((W + 100)) $((H + 60)) 30 &
     WALL=$!
     sleep 1.5
     data=$(mktemp -d "$TMP/data.XXXX")
