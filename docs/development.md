@@ -328,6 +328,24 @@ once:
    prints the subject to copy; a run with it but without the secrets fails
    too, since its engine would refuse itself.
 
+The certificate, from Certum Code Signing 2021 CA, is valid until 5 November
+2027, and its subject is
+`CN=Open Source Developer Farcaș Mihai-Cristian, O=Open Source Developer, L=Alba Iulia, S=Alba, C=RO`.
+Its `ș` is U+0219: typed by hand it easily becomes `ş`, U+015F, a different
+subject, so copy it from the certificate or from the run. Certum's rules for
+this kind of certificate
+([required documents](https://www.support.certum.eu/en/required-documents/)):
+it is issued to a person only, "Open Source Developer" goes into its name and
+organization, and it is revoked if it signs software distributed commercially.
+
+Replacing it needs care. The signatures already made stay valid, by their
+timestamps. But each build compares the whole subject, so every installed copy
+refuses an update signed under another one, a different town included, and the
+people using them have to install the next version by hand. Keep the subject
+when renewing, and say in the release if it could not be kept. Changing the
+certificate also affects the publisher's reputation with SmartScreen
+([Windows](platforms/windows.md#limits-and-known-issues)).
+
 With neither the secrets nor the variable, the Windows release is unsigned
 and its run says so. Signed, the run checks with `signtool verify /pa /v`
 every signature and its timestamp, and that the engine refuses an

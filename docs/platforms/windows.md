@@ -291,10 +291,24 @@ at the median, 69 ms p95. Motion at a full 30 fps was not measured.
   previous session's display is still kept (for a minute after it ends).
 - **SmartScreen and a new certificate.** The installer and every program
   and DLL in it are signed (Authenticode, timestamped), so Smart App
-  Control lets them run, but SmartScreen judges a publisher by its
-  reputation, which a code-signing certificate gathers only as people
-  download and run what it signed: until then it may ask before the
-  installer runs ([../install.md](../install.md#on-windows)).
+  Control lets them run, but SmartScreen stops the installer a browser
+  downloaded until its file or its publisher has a reputation
+  ([what you see and do](../install.md#on-windows)). A signature does not
+  buy that: Microsoft says "there is no exact threshold, but it can take
+  several weeks and hundreds of clean installs from a wide audience", that
+  EV certificates "no longer bypass SmartScreen", and that there is "no need
+  (or mechanism)" to submit a file for review
+  ([SmartScreen reputation](https://learn.microsoft.com/windows/apps/package-and-deploy/smartscreen-reputation)).
+  The same page says Store apps never meet the warning; Helio is not in
+  the Microsoft Store. Each version is one new file, so a release leans on
+  the publisher's reputation, and the website keeps one file per system for
+  as long as a version lasts ([releases](../development.md#releases)).
+- **The publisher SmartScreen prints.** It writes the certificate's whole
+  subject, town and county first (`RO, Alba, Alba Iulia, Open Source
+  Developer, Open Source Developer Farcaș Mihai-Cristian`), and nothing in
+  the signing changes that. UAC shows only the name. All of it comes from
+  the certificate: Certum adds "Open Source Developer" to the name and the
+  organization of every open-source certificate.
 - **The client's firewall prompt.** Helio installs per user, without an
   administrator, so it cannot add a firewall rule for itself: Windows
   asks once, the first time Helio listens. The host's rules are added by
@@ -358,7 +372,8 @@ key
 `HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\dev.mihaicristian.helio_is1`),
 whose **Uninstall** runs `unins000.exe`. A Helio that runs is closed
 first (Restart Manager). Installed over a Helio whose hosting is on, it
-runs `helio-host enable` again from the new files (Windows asks), so the
+runs `helio-host enable` again from the new files (Windows asks, naming
+Helio Host, the description signed into that program), so the
 service runs the new engine. Uninstalling turns hosting off first, while
 it is on (`helio-host disable`, as an administrator: Windows asks, and a
 refusal leaves Helio installed), then takes `bin` off the user's `PATH`
@@ -368,6 +383,21 @@ General → Command line** puts `bin` on the `PATH` (`HKCU\Environment`,
 written as the `REG_EXPAND_SZ` Windows keeps it as, then
 `WM_SETTINGCHANGE` so that what Explorer starts has it); no installer
 does.
+
+The first build signed with Helio's certificate was checked on a real PC
+(Windows 11 Pro 25H2, build 26200; commit 9277930, [release run
+41999985792](https://github.com/mihaicristianfarcas/helio/actions/runs/41999985792),
+5 November 2026). The installer, marked by hand as a browser's download
+(`Zone.Identifier`, zone 3) and opened from Explorer over an unsigned Helio
+with hosting on: SmartScreen stopped it, **More info** named the publisher and
+**Run anyway** ran it; near the end UAC named Helio Host and its verified
+publisher, and after **Yes**, every program and DLL of Helio's had a valid,
+timestamped signature, the engine in Program Files was the installer's,
+`HelioHost` ran it
+and the paired device was still paired. On GitHub's x64 runner, the same run
+verified each signature with `signtool verify /pa /v` and had the engine
+refuse an unsigned copy of itself and a signed copy changed after signing
+(`tools/windows/test-install.ps1 -Signed`).
 
 Helio's own update (**Install and Restart**,
 `helio-update/src/install/windows.rs`) is that installer, run again:
@@ -405,4 +435,8 @@ bindings): see [../install.md](../install.md#helio-on-windows).
 Not verified yet: keyboard, mouse and controllers streaming another machine
 (tests so far streamed the same PC, which feeds input back into itself),
 on-glass timing on a real monitor, and how far a touchpad on this client
-scrolls a host.
+scrolls a host. Of signing: Helio's own update from one signed version to the
+next, with hosting on and on a PC that does not host; whether SmartScreen
+stays out of that update, as its download carries no mark of the web; a
+browser's own warning about the download (Edge's, say); and Smart App Control
+turned on.
