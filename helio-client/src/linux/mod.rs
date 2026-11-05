@@ -750,15 +750,19 @@ impl ApplicationHandler<UserEvent> for StreamApp {
                 }
                 match delta {
                     // A wheel, in lines: 120 each, as Windows counts a notch.
+                    // On X11 a touchpad comes this way too, in parts of a
+                    // line (winit reads XInput 2's scroll valuators as
+                    // lines), so there it goes as wheel units, not as a
+                    // distance.
                     MouseScrollDelta::LineDelta(x, y) => {
                         let (dv, dh) = r.wheel_residue.whole(y as f64 * 120.0, x as f64 * 120.0);
                         if dv != 0 || dh != 0 {
                             input.wheel(dv, dh);
                         }
                     }
-                    // A touchpad: this window's pixels the content moves,
-                    // sent as the stream's for the host to scroll as far
-                    // (`crate::scroll`).
+                    // A touchpad under Wayland: this window's pixels the
+                    // content moves, sent as the stream's for the host to
+                    // scroll as far (`crate::scroll`).
                     MouseScrollDelta::PixelDelta(p) => {
                         let per_pixel = r
                             .render
