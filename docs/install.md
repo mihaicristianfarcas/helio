@@ -23,11 +23,13 @@ Uninstalling Helio takes it away again.
 ## From the website
 
 [helio.mihaicristian.dev](https://helio.mihaicristian.dev/#install)
-asks what your computer runs and gives you its download: the newest build
-of the `main` branch, made by the release workflow
-([development.md](development.md#releases)). Each is the whole app, the
-host included. The files keep their addresses from one build to the next,
-for scripts, under `https://download.helio.mihaicristian.dev/latest/`:
+asks what your computer runs and gives you its download: the newest released
+version, the same files as its
+[GitHub release](https://github.com/mihaicristianfarcas/helio/releases), made
+by the release workflow ([development.md](development.md#releases)). Each is
+the whole app, the host included. The files keep their addresses from one
+version to the next, for scripts, under
+`https://download.helio.mihaicristian.dev/latest/`:
 
 | macOS, Apple silicon | macOS, Intel | Windows, x86_64 | Linux, x86_64 |
 |---|---|---|---|
