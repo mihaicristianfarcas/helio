@@ -348,7 +348,8 @@ kbd {
   background: var(--surface-2);
 }
 
-/* The app captures carry their windows' own rounded corners and edges. */
+/* The app captures carry their windows' own rounded corners and edges; the
+   gallery gives them their shadow. */
 .capture {
   margin: 0;
 }
@@ -356,7 +357,6 @@ kbd {
 .capture img {
   width: 100%;
   height: auto;
-  filter: drop-shadow(0 24px 48px rgb(0 0 0 / 0.6));
 }
 
 .visually-hidden {
