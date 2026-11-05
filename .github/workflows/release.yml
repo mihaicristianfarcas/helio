@@ -274,17 +274,30 @@ jobs:
           path: target/stage/Helio
       # ssign at one version, from crates.io with its own lock file: the
       # only code besides Helio's scripts that sees the signing secrets.
+      # Installed into a folder of its own and handed on by its path (SSIGN):
+      # cargo's bin folder, where `cargo install` puts it otherwise
+      # (C:\Users\runneradmin\.cargo\bin), is not on the runner's PATH, so
+      # the next step would not find it there.
       - name: ssign
+        id: ssign
         if: steps.signing.outputs.sign
+        shell: pwsh
         run: |
           rustup toolchain install stable --profile minimal && rustup default stable
-          cargo install ssign --version 0.1.8 --locked
+          $root = Join-Path $env:RUNNER_TEMP 'ssign'
+          cargo install ssign --version 0.1.8 --locked --root $root
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $exe = Join-Path $root 'bin\ssign.exe'
+          if (-not (Test-Path $exe)) { "::error::cargo install left no $exe"; exit 1 }
+          & $exe --version
+          "path=$exe" >> $env:GITHUB_OUTPUT
       # The engine as built is kept aside first, for the check below that an
       # unsigned one is refused.
       - name: Sign and package
         shell: pwsh
         env:
           SIGN: ${{ steps.signing.outputs.sign }}
+          SSIGN: ${{ steps.ssign.outputs.path }}
           CERTUM_EMAIL: ${{ steps.signing.outputs.sign && secrets.CERTUM_EMAIL || '' }}
           CERTUM_OTP: ${{ steps.signing.outputs.sign && secrets.CERTUM_OTP || '' }}
         run: |
