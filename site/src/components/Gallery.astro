@@ -163,18 +163,47 @@ const tabs = [
     }
   }
 
-  /* Every page in the same cell, so the gallery keeps the tallest one's
-     height and nothing below it moves when the page changes. */
+  /* Every page in the same two rows, its words and its picture, each row as
+     tall as the tallest page's: a caption a line longer than the last moves
+     neither its picture nor anything below the gallery. */
   .panes {
     display: grid;
+    grid-template-rows: auto auto;
     margin-top: 24px;
+    isolation: isolate;
+    /* The captures' corners, 44 px of 2400 x 1600 (scripts/capture-apps.sh),
+       at any size. */
+    --corner: calc(100% * 44 / 2400) / calc(100% * 44 / 1600);
+    --shadow: 0 24px 48px rgb(0 0 0 / 0.6);
+  }
+
+  .pane,
+  .capture {
+    display: grid;
+    grid-row: 1 / 3;
+    grid-template-rows: subgrid;
+  }
+
+  /* One shadow, under whichever picture shows. A shadow on each picture
+     ended in Safari at its fading page's box, a hard band under a page
+     with a shorter caption, and two darkened as the pages crossed. */
+  .panes::before {
+    content: '';
+    grid-area: 2 / 1;
+    z-index: -1;
+    border-radius: var(--corner);
+    box-shadow: var(--shadow);
+  }
+
+  .capture :global(img) {
+    border-radius: var(--corner);
   }
 
   /* The new page is there at once, its words with it; only the old
      picture fades away, above the new one. */
   .pane {
     z-index: 1;
-    grid-area: 1 / 1;
+    grid-column: 1;
     opacity: 0;
     visibility: hidden;
     transition:
@@ -197,6 +226,10 @@ const tabs = [
     display: block;
   }
 
+  .gallery:not([data-ready]) .panes::before {
+    content: none;
+  }
+
   .gallery:not([data-ready]) .pane {
     margin-top: 24px;
     opacity: 1;
@@ -205,6 +238,10 @@ const tabs = [
 
   .gallery:not([data-ready]) .pane figcaption {
     visibility: visible;
+  }
+
+  .gallery:not([data-ready]) .capture :global(img) {
+    box-shadow: var(--shadow);
   }
 
   figcaption {
