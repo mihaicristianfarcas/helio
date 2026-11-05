@@ -330,11 +330,11 @@ test('without JavaScript static content has no Tab stops and every download stay
   } finally { await close(); }
 });
 
-test('the hero badge is the one place the site says the version', () => {
+test('the hero badge names the license, and no page writes a version into itself', () => {
   const pages = ['dist/index.html', 'dist/agents/index.html'].map((file) => readFileSync(join(site, file), 'utf8'));
   const text = pages.map((page) => page.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '').replace(/<[^>]+>/g, ' '));
-  assert.equal(text.join(' ').match(/Version\s+\d/g)?.length ?? 0, 1);
-  assert.match(pages[0], /class="badge"[^>]*>Version \d/);
+  assert.equal(text.join(' ').match(/Version\s+\d/g)?.length ?? 0, 0);
+  assert.match(pages[0], /class="badge" href="[^"]*\/blob\/main\/LICENSE"[^>]*>GPL-3\.0</);
 });
 
 test('the agents page reaches the home page from its header and footer', () => {
