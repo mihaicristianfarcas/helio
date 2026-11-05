@@ -17,6 +17,10 @@
 //!
 //! With `HELIO_DATA_DIR` set (a check, or a second copy of the app), the
 //! logs go in its `logs` folder, never among the user's own.
+//!
+//! They name hosts and addresses, and are kept for weeks, so on macOS and
+//! Linux only the user can enter their folder: a home folder others may
+//! enter is common on Linux.
 
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
@@ -75,7 +79,7 @@ pub fn init() {
     static ONCE: OnceLock<()> = OnceLock::new();
     ONCE.get_or_init(|| {
         let logs = logs_dir();
-        let _ = std::fs::create_dir_all(&logs);
+        let private = helio_transport::identity::private_dir(&logs);
         let filter = || {
             tracing_subscriber::EnvFilter::try_from_default_env()
                 .unwrap_or_else(|_| DEFAULT_FILTER.into())
@@ -112,6 +116,9 @@ pub fn init() {
         );
         if removed > 0 {
             tracing::debug!(removed, "old launches' logs removed");
+        }
+        if let Err(e) = private {
+            tracing::warn!(error = %e, "the logs' folder is not private");
         }
     });
 }

@@ -6,7 +6,8 @@ Host on the computer you stream. This page says where they are, and how to
 get more out of them.
 
 Logs never contain a PIN, password, key or token. They do contain host
-names and addresses: edit them out if you like.
+names and addresses: edit them out if you like. On macOS and Linux, only
+your user can enter either program's log folder.
 
 ## Where the logs are
 
