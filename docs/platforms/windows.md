@@ -337,7 +337,10 @@ As Moonlight does it on Windows:
   The pointer is confined to the window
   and hidden (the host draws its own into the picture); raw input's
   relative motion goes to the host, or the pointer's position after
-  Ctrl+Alt+Shift+M.
+  Ctrl+Alt+Shift+M. The wheel and a touchpad both go as Windows' wheel units
+  (`WM_MOUSEWHEEL`, `WM_MOUSEHWHEEL`), which the host scrolls as its own
+  notches: a touchpad does not go as the distance it moved, as a Mac's
+  does.
 - **Controllers.** XInput, slot for slot; the Guide button through
   `XInputGetStateEx`; rumble through `XInputSetState`.
 - **Sound.** WASAPI shared mode on the default device, following it when it
@@ -401,4 +404,5 @@ bindings): see [../install.md](../install.md#helio-on-windows).
 
 Not verified yet: keyboard, mouse and controllers streaming another machine
 (tests so far streamed the same PC, which feeds input back into itself),
-and on-glass timing on a real monitor.
+on-glass timing on a real monitor, and how far a touchpad on this client
+scrolls a host.
