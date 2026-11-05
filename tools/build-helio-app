@@ -4,6 +4,8 @@
 #
 #   Helio.app/Contents/MacOS/Helio                      the app
 #   Helio.app/Contents/Resources/bin/helio              the command line
+#   Helio.app/Contents/Resources/THIRD-PARTY-NOTICES.txt  the crates' licenses,
+#       when HELIO_NOTICES names the file (tools/package-macos makes it)
 #   Helio.app/Contents/Helpers/Helio Host.app           the host
 #       Contents/MacOS/helio-host
 #
@@ -82,6 +84,10 @@ bundle "$APP" "$REPO/helio-app/macos/Info.plist" "$OUT/helio-app" Helio "$REPO/t
 bundle "$HELPER" "$REPO/helio-host/macos/Info.plist" "$OUT/helio-host" helio-host "$REPO/target/AppIcon.icns"
 mkdir -p "$APP/Contents/Resources/bin"
 ln -s ../../MacOS/Helio "$APP/Contents/Resources/bin/helio"
+# Before the signature, which seals it with the rest.
+if [[ -n ${HELIO_NOTICES:-} ]]; then
+    cp "$HELIO_NOTICES" "$APP/Contents/Resources/THIRD-PARTY-NOTICES.txt"
+fi
 
 "$REPO/tools/sign-helio-app" "$APP"
 echo "built $APP ($VERSION, $PROFILE)"

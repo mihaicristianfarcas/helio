@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+# THIRD-PARTY-NOTICES.txt: every crate built into Helio's programs for one
+# target, under the license it is used under, with that license's text as
+# the crate ships it. Every package carries the file (tools/package-macos,
+# tools/package-windows.ps1, tools/linux/package): the MIT, BSD and Apache
+# licenses ask for their notices to go with each copy of the programs.
+#
+#   tools/third-party-notices OUT [TARGET]   TARGET: this machine's by default
+#
+# cargo-about reads Cargo.lock and each crate's own license files
+# (tools/notices/about.toml: which licenses are accepted, and why; and
+# notices.hbs, the file's layout). A license the list does not hold fails the
+# run, so a new dependency under one stops the package, in CI too, until
+# someone has read it. tools/package-windows.ps1 runs the same command.
+set -euo pipefail
+REPO=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+# Pinned as CI's tools are: one exact version, built with its lock file.
+# CI, the release and tools/package-windows.ps1 read the same file.
+ABOUT=$(<"$REPO/tools/notices/cargo-about.version")
+OUT=${1:?usage: tools/third-party-notices OUT [TARGET]}
+TARGET=${2:-$(rustc -vV | sed -n 's/^host: //p')}
+
+have=$(cargo about --version 2>/dev/null | awk '{ print $2 }' || true)
+if [[ $have != "$ABOUT" ]]; then
+    echo "tools/third-party-notices needs cargo-about $ABOUT${have:+, not $have}:" >&2
+    echo "  cargo install --locked cargo-about --version $ABOUT --features cli" >&2
+    exit 1
+fi
+mkdir -p "$(dirname "$OUT")"
+cargo about generate --manifest-path "$REPO/Cargo.toml" --workspace --locked --fail \
+    -c "$REPO/tools/notices/about.toml" --target "$TARGET" \
+    "$REPO/tools/notices/notices.hbs" -o "$OUT"

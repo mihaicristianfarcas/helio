@@ -127,6 +127,9 @@ jobs:
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           key: release
+      # tools/third-party-notices needs it; one version, in that file.
+      - name: cargo-about
+        run: cargo install --locked cargo-about --version "$(cat tools/notices/cargo-about.version)" --features cli
       - name: Build
         run: tools/package-macos --stage-only
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -245,6 +248,9 @@ jobs:
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           key: release-${{ env.FFMPEG_BUILD }}
+      # tools/third-party-notices needs it; one version, in that file.
+      - name: cargo-about
+        run: cargo install --locked cargo-about --version "$(cat tools/notices/cargo-about.version)" --features cli
       # On main, with the publisher set, the engine refuses to turn hosting
       # on with a copy not signed by it (the next job signs it so).
       - name: Build
@@ -403,6 +409,9 @@ jobs:
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           key: release
+      # tools/third-party-notices needs it; one version, in that file.
+      - name: cargo-about
+        run: cargo install --locked cargo-about --version "$(cat tools/notices/cargo-about.version)" --features cli
       - name: Build and package
         run: tools/linux/package
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

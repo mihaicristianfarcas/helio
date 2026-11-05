@@ -110,6 +110,8 @@ Source: "{#Source}\avutil-*.dll"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#Source}\swresample-*.dll"; DestDir: "{app}"; Flags: ignoreversion
 ; FFmpeg is LGPL: its license goes with its DLLs.
 Source: "{#Source}\FFmpeg LICENSE.txt"; DestDir: "{app}"; Flags: ignoreversion
+; The licenses of the crates built into the programs (tools/third-party-notices).
+Source: "{#Source}\THIRD-PARTY-NOTICES.txt"; DestDir: "{app}"; Flags: ignoreversion
 ; The ViGEmBus installer that turning hosting on runs, and the drivers'
 ; notices (helio-host/src/hosting/drivers.rs; SudoVDA is inside
 ; helio-host.exe).

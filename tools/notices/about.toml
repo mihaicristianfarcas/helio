@@ -1,0 +1,55 @@
+# cargo-about's settings for THIRD-PARTY-NOTICES.txt (tools/third-party-notices).
+#
+# Where a crate offers a choice ("MIT OR Apache-2.0"), the first license in
+# this list that it offers is the one listed, so the permissive ones come
+# first and every choice made is one the GPL-3.0 can combine with. A license
+# missing from the list fails the run: a new dependency under a license
+# nobody has looked at stops the package from being made.
+accepted = [
+    "Apache-2.0",
+    "MIT",
+    "Unicode-3.0",
+    "BSD-3-Clause",
+    "BSD-2-Clause",
+    "ISC",
+    "Zlib",
+    "BSL-1.0",
+    "CC0-1.0",
+    "CDLA-Permissive-2.0",
+    "MPL-2.0",
+    "bzip2-1.0.6",
+    "WTFPL",
+    # The fonts the Linux client bundles as data (epaint_default_fonts): they
+    # go with the program under their own licenses, whose texts are in the file.
+    "OFL-1.1",
+    "Ubuntu-font-1.0",
+]
+# What is built into the programs: no tests' or build scripts' crates.
+ignore-dev-dependencies = true
+ignore-build-dependencies = true
+# Helio's own crates (publish = false in the workspace): they are Helio,
+# under the GPL-3.0 (LICENSE), not third-party software.
+private = { ignore = true }
+
+# schemars's LICENSE is its license; cargo-about also takes regex_syntax.rs,
+# code it copied under the same MIT license, for a second text.
+[schemars.clarify]
+license = "MIT"
+[[schemars.clarify.files]]
+path = "LICENSE"
+checksum = "1954992a2b32e8a2af24a4c11b726902e344c1934b947a77f04d404908f8db30"
+
+# ring is "Apache-2.0 AND ISC": BoringSSL's code under the one
+# (LICENSE-BoringSSL), its own under the other (LICENSE-other-bits), as its
+# LICENSE says. Without this, cargo-about gives the ISC header of each of
+# its source files as a text of its own.
+[ring.clarify]
+license = "Apache-2.0 AND ISC"
+[[ring.clarify.files]]
+path = "LICENSE-BoringSSL"
+license = "Apache-2.0"
+checksum = "005fc765ddc5115da796cca915baa9557abae13ff35e0a47c47affc56f6c414d"
+[[ring.clarify.files]]
+path = "LICENSE-other-bits"
+license = "ISC"
+checksum = "f025ccfb7dfb6bdfedc75ca0f67acc69e6fb4998143d834f7c2f38a29989680f"
