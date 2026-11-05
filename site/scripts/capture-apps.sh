@@ -18,7 +18,7 @@
 #
 # The data folders are empty and temporary, marked as past setup, so nothing
 # of this computer's hosts or settings reaches a picture. The window names no
-# version under HELIO_UI_DEMO: the page's badge is the one place that says it.
+# version under HELIO_UI_DEMO: the install card is the one place that says it.
 set -euo pipefail
 SITE=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 REPO=$(cd "$SITE/.." && pwd)
