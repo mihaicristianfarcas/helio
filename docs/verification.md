@@ -52,9 +52,11 @@ CI runs on every pull request and on `main` after each merge
 | Windows | `windows-latest`, x64 | The same, and the installer run for real: install, turn hosting on, install again, uninstall, each step checked. The drivers must be as they were afterwards; a driver the runner refuses is reported in the log, not a failure |
 | Linux | `ubuntu-24.04`, x86_64 | The same as macOS, the host's crate on its own, and the fuzz targets built |
 
-The release workflow ([release.yml](../.github/workflows/release.yml)) also
-builds for Intel Macs. It signs and notarizes the macOS apps, signs the
-Windows programs, and runs the same installer test on each Windows package.
+The release workflow ([release.yml](../.github/workflows/release.yml)) runs
+for each new version, not for each merge. It also builds for Intel Macs. It
+signs and notarizes the macOS apps, signs the Windows programs, and runs the
+same installer test on each Windows package. Run by hand on `main` with no new
+version, it does all of that and publishes nothing.
 
 ### The tests
 

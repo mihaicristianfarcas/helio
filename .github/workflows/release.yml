@@ -1,19 +1,22 @@
-# A release, from every push to main that changes the programs: the app, with
-# the host's engine inside it, built on macOS (Apple silicon and Intel),
-# Windows and Linux, one archive per system and architecture (Helio-VERSION-
-# OS-ARCH), and on Windows its installer too (Helio-VERSION-windows-x86_64-
-# setup.exe), each the artifact of its job (dist-*), and published as the website's
-# downloads (tools/publish-downloads: Cloudflare R2, served at
-# download.helio.mihaicristian.dev; the website is on the landing-page
-# branch). When the workspace's version (Cargo.toml's [workspace.package])
-# has no tag yet, the same archives become the GitHub release vVERSION too,
-# and a pull request brings the Homebrew cask (Casks/helio.rb) to it (main
-# takes changes only through pull requests). So releasing a version is
-# merging the change that sets it.
+# A release, from the commit that sets a new version: the workspace's version
+# (Cargo.toml's [workspace.package]) with no tag yet. The app, with the host's
+# engine inside it, is built on macOS (Apple silicon and Intel), Windows and
+# Linux, one archive per system and architecture (Helio-VERSION-OS-ARCH), and
+# on Windows its installer too (Helio-VERSION-windows-x86_64-setup.exe), each
+# the artifact of its job (dist-*). The same files are published as the
+# website's downloads (tools/publish-downloads: Cloudflare R2, served at
+# download.helio.mihaicristian.dev; the website is on the landing-page branch)
+# and as the GitHub release vVERSION, and a pull request brings the Homebrew
+# cask (Casks/helio.rb) to it (main takes changes only through pull requests).
+# So releasing a version is merging the change that sets it, and no other
+# push publishes anything: the website serves released versions only, one file
+# per system for as long as a version lasts, which is how a file gathers
+# SmartScreen's reputation (docs/platforms/windows.md).
 #
-# workflow_dispatch: to run it by hand. On main it publishes as a push does;
-# on another branch it only builds, and the archives are the run's
-# artifacts.
+# workflow_dispatch: to run it by hand. On main with a new version it releases,
+# as after a run that failed; on main without one it builds and signs
+# everything and publishes nothing, which checks the signing secrets. On
+# another branch it only builds, and the archives are the run's artifacts.
 #
 # The downloads need two settings in the repository: the secret
 # CLOUDFLARE_API_TOKEN (an API token with Workers R2 Storage: Edit) and the
@@ -42,7 +45,7 @@
 # without that signature (helio-update/src/signature.rs). The job `sign`
 # does it, on main only, from the `release` environment's secrets
 # MINISIGN_SECRET_KEY (the key file, as `minisign -G` wrote it) and
-# MINISIGN_PASSWORD; without them a push to main publishes nothing.
+# MINISIGN_PASSWORD; without them a release publishes nothing.
 #
 # Actions are pinned to commits, with the version beside each: a tag can be
 # moved, and these jobs hold the signing secrets. A repository ruleset keeps
@@ -52,11 +55,10 @@ name: Release
 on:
   push:
     branches: [main]
-    # What does not change the programs does not make new ones.
-    paths-ignore:
-      - "Casks/**"
-      - "docs/**"
-      - "**/*.md"
+    # A version is set here. A push that changes this file but not the version
+    # stops at the first job.
+    paths:
+      - "Cargo.toml"
   workflow_dispatch:
 
 # One release at a time, in the order of the pushes; of those waiting, only
@@ -75,12 +77,39 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  # Whether this commit makes a release. Everything below hangs on the answer,
+  # which stays this run's own when a failed job is run again, after the tag
+  # may exist. A failure to ask fails the run: only "no such tag" is new.
+  version:
+    name: Is the version new
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      new: ${{ steps.version.outputs.new }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+      - name: Is the version new
+        id: version
+        run: |
+          version=$(sed -n '/^\[workspace.package\]/,/^\[/ s/^version = "\(.*\)"/\1/p' Cargo.toml)
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          git ls-remote --exit-code --tags origin "refs/tags/v$version" >/dev/null && code=0 || code=$?
+          case $code in
+            0) echo "v$version is released already: nothing to publish" ;;
+            2) echo "new=true" >> "$GITHUB_OUTPUT" ;;
+            *) echo "::error::could not ask whether the tag v$version exists (git exit code $code)"; exit 1 ;;
+          esac
+
   # The app, the host inside it, built on each architecture's Mac and signed
   # as a development build is (ad hoc), with no secrets
   # (tools/package-macos --stage-only): the next job signs and archives it on
   # a runner of its own, where no build has run.
   macos:
     name: macOS (${{ matrix.arch }})
+    needs: version
+    if: needs.version.outputs.new == 'true' || github.event_name == 'workflow_dispatch'
     strategy:
       matrix:
         include:
@@ -197,6 +226,8 @@ jobs:
   # packages them on a runner of its own, where no build has run.
   windows:
     name: Windows
+    needs: version
+    if: needs.version.outputs.new == 'true' || github.event_name == 'workflow_dispatch'
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
@@ -350,6 +381,8 @@ jobs:
 
   linux:
     name: Linux
+    needs: version
+    if: needs.version.outputs.new == 'true' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
@@ -428,10 +461,12 @@ jobs:
           path: signatures/*.minisig
           if-no-files-found: error
 
+  # Before the release, whose tag is what says a version is released: until
+  # the tag exists, a run that failed can be run again from the start.
   downloads:
     name: Website downloads
-    needs: [macos-package, windows-package, linux, sign]
-    if: github.ref == 'refs/heads/main'
+    needs: [version, macos-package, windows-package, linux, sign]
+    if: github.ref == 'refs/heads/main' && needs.version.outputs.new == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
@@ -451,8 +486,8 @@ jobs:
 
   release:
     name: GitHub release
-    needs: [macos-package, windows-package, linux, sign]
-    if: github.ref == 'refs/heads/main'
+    needs: [version, downloads]
+    if: github.ref == 'refs/heads/main' && needs.version.outputs.new == 'true'
     runs-on: ubuntu-latest
     # The only job that writes: the release, the cask branch and pull
     # request, and the approval of that pull request's CI run (below). It
@@ -464,36 +499,25 @@ jobs:
       actions: write
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
-      - name: Is the version new
-        id: version
-        run: |
-          version=$(sed -n '/^\[workspace.package\]/,/^\[/ s/^version = "\(.*\)"/\1/p' Cargo.toml)
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-          if git ls-remote --exit-code --tags origin "refs/tags/v$version" >/dev/null; then
-            echo "v$version is released already: no GitHub release"
-          else
-            echo "new=true" >> "$GITHUB_OUTPUT"
-          fi
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
-        if: steps.version.outputs.new
         with:
           pattern: dist-*
           path: dist
           merge-multiple: true
       # The packages and their signatures (dist-signatures).
+      # Run again after the cask step failed, the release is there already.
       - name: The release, with the apps
-        if: steps.version.outputs.new
         env:
           GH_TOKEN: ${{ github.token }}
-          VERSION: ${{ steps.version.outputs.version }}
+          VERSION: ${{ needs.version.outputs.version }}
         run: |
-          gh release create "v$VERSION" dist/* --target "$GITHUB_SHA" \
-            --title "Helio $VERSION" --generate-notes
+          gh release view "v$VERSION" >/dev/null 2>&1 ||
+            gh release create "v$VERSION" dist/* --target "$GITHUB_SHA" \
+              --title "Helio $VERSION" --generate-notes
       - name: The cask, at the new version, as a pull request
-        if: steps.version.outputs.new
         env:
           GH_TOKEN: ${{ github.token }}
-          VERSION: ${{ steps.version.outputs.version }}
+          VERSION: ${{ needs.version.outputs.version }}
         run: |
           branch="casks-$VERSION"
           tools/update-casks "$VERSION" dist

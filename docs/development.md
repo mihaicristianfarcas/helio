@@ -189,13 +189,31 @@ Per-second statistics: `RUST_LOG=info,helio_client::stats=debug` on the client
 
 ## Releases
 
-Every push to `main` that changes the programs is built and published:
-`.github/workflows/release.yml` builds the app, with the host's engine
+A **version** is released by merging the change that sets it: the
+workspace's version in `Cargo.toml` (`[workspace.package]`), which every
+program has. When a push to `main` has a version with no `vVERSION` tag
+yet, `.github/workflows/release.yml` builds the app, with the host's engine
 inside it, on an Apple silicon and an Intel Mac, on Windows and on Linux:
-one archive for each system and architecture, and Windows' installer,
-published as the website's downloads. Pushes that change only `docs/`, `Casks/` or
-Markdown files build nothing. The website,
-[helio.mihaicristian.dev](https://helio.mihaicristian.dev), is not on
+one archive for each system and architecture, and Windows' installer. Once
+they are signed, the same files become the website's downloads, then the
+GitHub release `vVERSION`, and the workflow opens a pull request that brings
+the Homebrew cask, `Casks/helio.rb`, to it (`tools/update-casks`); `brew
+upgrade` sees the release once that is merged. GitHub holds CI on a pull
+request a workflow opened until it is approved: the workflow approves it, or
+says on the pull request that it needs approving by hand.
+
+No other push publishes anything. The website's downloads are the newest
+released version, never `main`: one file per system stays up for as long as
+a version lasts, which is how a file gathers SmartScreen's reputation
+([Windows](platforms/windows.md#limits-and-known-issues)). A push that
+changes `Cargo.toml` but not the version stops at the workflow's first job;
+any other push starts no run.
+
+The tag is made last, after the downloads. Until it exists, a release that
+failed can be run again, by hand on `main`
+(`gh workflow run release.yml --ref main`).
+
+The website, [helio.mihaicristian.dev](https://helio.mihaicristian.dev), is not on
 `main`: it lives on the `landing-page` branch, which is rebased on `main`
 when it needs to be and never merged into it.
 
@@ -210,7 +228,7 @@ when it needs to be and never merged into it.
 All of them build with `HELIO_RELEASE=1`, so the programs follow
 releases, not `main`. With `HELIO_PROFILE=dev` the three packaging
 scripts build the debug profile instead, which is how CI checks on every
-pull request that the app still packages, the host inside it. The downloads keep their names from one build to the
+pull request that the app still packages, the host inside it. The downloads keep their names from one version to the
 next, so the website links them as they are and reads `latest.json` for
 what they are. The workflow signs in to Cloudflare with the repository's
 secret `CLOUDFLARE_API_TOKEN` (an API token with **Workers R2 Storage:
@@ -235,19 +253,11 @@ beside it, which matters when `helio-host enable` runs elevated from a folder it
 user can write to. A MinGW cross-build (`tools/xcheck-windows`) cannot set
 this; use one for checks, not for an install.
 
-A **version** is released by merging the change that sets it: the
-workspace's version in `Cargo.toml` (`[workspace.package]`), which every
-program has. When a push to `main` has a version with no `vVERSION` tag
-yet, the same archives become the GitHub release `vVERSION`, and the
-workflow opens a pull request that brings the Homebrew cask,
-`Casks/helio.rb`, to it (`tools/update-casks`); `brew upgrade` sees the release once that is
-merged. GitHub holds CI on a pull request a workflow opened until it is
-approved: the workflow approves it, or says on the pull request that it
-needs approving by hand.
-
 To build the archives of a branch without publishing them, run the
 workflow on it (`gh workflow run release.yml --ref BRANCH`): they are the
-run's artifacts. To try the cask before a release, write it against the
+run's artifacts. Run on `main` with no new version, it also signs them all,
+with the `release` environment's secrets, and publishes nothing: that checks
+the secrets before a release needs them. To try the cask before a release, write it against the
 local archives
 (`CASKS_DIR=DIR tools/update-casks VERSION target/dist file://$PWD/target/dist`),
 put it in a local tap (`brew tap-new`), and `brew install --cask
