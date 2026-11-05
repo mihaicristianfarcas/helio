@@ -79,3 +79,6 @@ png = "0.18"
 pollster = "1"
 wgpu = "30"
 winit = "0.30"
+
+[dev-dependencies]
+tempfile = "3"

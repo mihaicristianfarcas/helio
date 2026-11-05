@@ -184,6 +184,19 @@ impl PublicIdentity {
     }
 }
 
+/// Make a folder only its owner can enter, and close one others could
+/// enter, along with whatever is already in it. On Windows, where the folder's
+/// place decides who reads it, only makes it.
+pub fn private_dir(dir: &Path) -> std::io::Result<()> {
+    std::fs::create_dir_all(dir)?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o700))?;
+    }
+    Ok(())
+}
+
 /// Write a file readable only by its owner.
 pub fn write_private(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
     let tmp = path.with_extension("tmp");
@@ -209,6 +222,38 @@ pub fn write_private(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(unix)]
+    fn mode(path: &Path) -> u32 {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::metadata(path).unwrap().permissions().mode() & 0o777
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_private_folder_is_made_for_its_owner_alone() {
+        let dir = tempfile::tempdir().unwrap();
+        let logs = dir.path().join("deep").join("logs");
+        private_dir(&logs).unwrap();
+        assert_eq!(mode(&logs), 0o700);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_folder_others_could_enter_is_closed_and_keeps_its_files() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        let logs = dir.path().join("logs");
+        std::fs::create_dir(&logs).unwrap();
+        std::fs::set_permissions(&logs, std::fs::Permissions::from_mode(0o755)).unwrap();
+        std::fs::write(logs.join("helio.log"), "kept").unwrap();
+        private_dir(&logs).unwrap();
+        assert_eq!(mode(&logs), 0o700);
+        assert_eq!(
+            std::fs::read_to_string(logs.join("helio.log")).unwrap(),
+            "kept"
+        );
+    }
 
     #[test]
     fn identity_round_trips_through_its_file() {

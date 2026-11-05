@@ -136,7 +136,9 @@ fn init_logging_named(
 ) -> tracing_appender::non_blocking::WorkerGuard {
     use tracing_subscriber::prelude::*;
     let logs = dir.join("logs");
-    let _ = std::fs::create_dir_all(&logs);
+    // The folder, not each file: the appender makes those with the default
+    // mode. They name devices and addresses.
+    let private = helio_transport::identity::private_dir(&logs);
     let file = tracing_appender::rolling::daily(&logs, name);
     let (file, guard) = tracing_appender::non_blocking(file);
     let filter = || {
@@ -159,6 +161,9 @@ fn init_logging_named(
                 .with_filter(filter()),
         )
         .init();
+    if let Err(e) = private {
+        tracing::warn!(error = %e, "the logs' folder is not private");
+    }
     guard
 }
 
