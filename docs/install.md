@@ -67,18 +67,36 @@ for you, with no administrator needed: Helio and the host's engine
 command line, in its `bin` folder; Helio in the Start menu and in
 **Settings > Apps > Installed apps**, which uninstalls it. Hosting stays
 off until you turn it on. Installed again over Helio, the installer
-updates it in place.
+updates it in place. While hosting is on, it also brings the host up to date,
+so Windows asks for an administrator near the end, as it does for the switch
+below. If you say no, Helio is updated and the host is not, and the installer
+says so: turn hosting off and on in Helio to bring it up to date.
 
 The installer, its uninstaller and every program and DLL it installs are
 signed with Helio's code-signing certificate (a Certum open-source
 certificate), and each signature is timestamped, so it stays valid after
-the certificate expires. **SmartScreen** may still say that it "prevented
-an unrecognized app from starting" for a while: it trusts a publisher by
-its reputation, which a certificate gathers as people download and run
-what it signed. Choose **More info**: it names the publisher, and then
-**Run anyway** runs the installer. If it says **Unknown publisher**, the
-file is not one Helio released: delete it. **Smart App Control**, on a PC
-where it is on, lets Helio run: it allows programs with a valid signature.
+the certificate expires. **Smart App Control**, on a PC where it is on, lets
+Helio run: it allows programs with a valid signature.
+
+**SmartScreen** will probably still stop the installer the first time you
+open it: "Windows protected your PC", because it "prevented an unrecognized
+app from starting". It says this of a signed program too, until enough people
+have downloaded and run what its publisher signed
+([why](platforms/windows.md#limits-and-known-issues)). To go on:
+
+1. Choose **More info**. It shows the publisher, written as the whole of the
+   certificate's subject:
+
+   ```text
+   RO, Alba, Alba Iulia, Open Source Developer, Open Source Developer Farcaș Mihai-Cristian
+   ```
+
+   The certificate is issued to Helio's maintainer, in their own name and
+   town; Certum adds "Open Source Developer" to every certificate of this
+   kind.
+2. If that is what it says, choose **Run anyway**. If it says **Unknown
+   publisher**, or names anyone else, the file is not one Helio released:
+   choose **Don't run**, and delete it.
 
 The first time Helio looks for hosts or connects, **Windows Firewall** asks
 whether to let Helio on the network. Allow private networks. Windows asks
@@ -88,7 +106,9 @@ turning hosting on.
 
 To host, turn hosting on in Helio ([Hosting on Windows](#hosting-on-windows)
 says what the host uses): Windows asks whether Helio may make changes as an
-administrator, once to turn it on and once to turn it off. Turning it on
+administrator, once to turn it on and once to turn it off. The prompt names
+**Helio Host** and, as **Verified publisher**, `Open Source Developer Farcaș Mihai-Cristian`; if
+it names no publisher or another one, say no. Turning it on
 also installs the drivers the host uses that the PC lacks, SudoVDA and
 ViGEmBus; turning it off removes them again.
 
@@ -101,8 +121,10 @@ Get-FileHash $HOME\Downloads\Helio-*windows-x86_64-setup.exe -Algorithm SHA256
 (Get-AuthenticodeSignature $HOME\Downloads\Helio-*windows-x86_64-setup.exe).SignerCertificate.Subject
 ```
 
-The second line names who signed it; `Status` (without the
-`.SignerCertificate…`) is `Valid` for a signature Windows trusts.
+The second line names who signed it, and should print
+`CN=Open Source Developer Farcaș Mihai-Cristian, O=Open Source Developer, L=Alba Iulia, S=Alba, C=RO`
+(a console that cannot show `ș` prints `?`). `Status` (in place of
+`.SignerCertificate.Subject`) is `Valid` for a signature Windows trusts.
 
 ### On Linux
 
