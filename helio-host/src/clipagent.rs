@@ -15,6 +15,13 @@
 //!
 //! The ways copies go at the start are on its command line.
 //!
+//! The helper runs as the user, so anything else running as them can write
+//! what it says; Helio Host, as SYSTEM, is what puts it on the tunnel. So
+//! the helper's word is checked here: only clipboard packets go to the
+//! client, and copies only while the client may read them, whether or not
+//! the helper has heard ([`for_client`]). A permission change goes to the
+//! helper ahead of everything queued for it ([`write_frames`]).
+//!
 //! The agent ends when its input closes (the session ended).
 //!
 //! It is the engine in `C:\Program Files\Helio Host` (`hosting`), started as the
@@ -24,10 +31,11 @@
 use std::io::{Read, Write};
 use std::os::windows::io::{FromRawHandle, RawHandle};
 use std::process::ExitCode;
+use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use crossbeam_channel::Sender;
+use crossbeam_channel::{Receiver, Sender};
 use parking_lot::Mutex;
 use windows::core::{PCWSTR, PWSTR};
 use windows::Win32::Foundation::{
@@ -74,14 +82,67 @@ fn read_frame(r: &mut impl Read) -> Option<(u8, Vec<u8>)> {
     Some((head[0], body))
 }
 
+/// What is queued for the helper.
+enum ToHelper {
+    /// A clipboard control body from the client.
+    Packet(Vec<u8>),
+    /// Nothing to write: wakes the writer to look at the directions.
+    DirectionsChanged,
+}
+
+/// Pass what is queued to the helper, until the session or the helper ends.
+/// The directions are read before each frame, so a change overtakes every
+/// packet still queued and none of those lands against it. `told`: the ones
+/// the helper already has.
+fn write_frames(
+    rx: Receiver<ToHelper>,
+    directions: &AtomicU8,
+    mut told: u8,
+    to_child: &mut impl Write,
+) {
+    for next in rx {
+        let now = directions.load(Ordering::Acquire);
+        if now != told {
+            if write_frame(to_child, DIRECTIONS, &[now]).is_err() {
+                return;
+            }
+            told = now;
+        }
+        if let ToHelper::Packet(body) = next {
+            if write_frame(to_child, PACKET, &body).is_err() {
+                return;
+            }
+        }
+    }
+}
+
+/// The ways copies go, from now on. Takes no time, so it holds up no session,
+/// and cannot be lost: with the queue full the writer is not waiting for the
+/// wake-up, and reads the directions before its next frame anyway.
+fn tell_directions(tx: &Sender<ToHelper>, directions: &AtomicU8, bits: u8) {
+    directions.store(bits, Ordering::Release);
+    let _ = tx.try_send(ToHelper::DirectionsChanged);
+}
+
+/// Whether a packet from the helper goes on to the client.
+fn for_client(packet: &[u8], directions: helio_clipboard::Directions) -> bool {
+    match helio_proto::clip::from_packet(packet) {
+        // A copy of the host's. Its acks and cancels carry none.
+        Some(helio_proto::clip::Msg::Data { .. }) => directions.send,
+        Some(_) => true,
+        None => false,
+    }
+}
+
 struct Process(HANDLE);
 
 unsafe impl Send for Process {}
 
 /// The session's clipboard helper, as Helio Host holds it.
 pub struct ClipAgent {
-    /// Frames for the helper: (kind, body).
-    tx: Option<Sender<(u8, Vec<u8>)>>,
+    tx: Option<Sender<ToHelper>>,
+    /// The ways copies go now, as `Directions::to_bits`.
+    directions: Arc<AtomicU8>,
     process: Process,
     writer: Option<std::thread::JoinHandle<()>>,
     reader: Option<std::thread::JoinHandle<()>>,
@@ -102,25 +163,33 @@ impl ClipAgent {
             directions.to_bits()
         );
         let (process, to_child, from_child) = unsafe { spawn_as_user(&cmdline)? };
-        let (tx, rx) = crossbeam_channel::bounded::<(u8, Vec<u8>)>(8192);
+        let (tx, rx) = crossbeam_channel::bounded::<ToHelper>(8192);
+        let told = directions.to_bits();
+        let directions = Arc::new(AtomicU8::new(told));
+        let now = directions.clone();
         let writer = std::thread::Builder::new()
             .name("clip-agent-in".into())
             .spawn(move || {
                 let mut to_child = to_child;
-                for (kind, body) in rx {
-                    if write_frame(&mut to_child, kind, &body).is_err() {
-                        break;
-                    }
-                }
+                write_frames(rx, &now, told, &mut to_child);
             })
             .map_err(|e| e.to_string())?;
+        let now = directions.clone();
         let reader = std::thread::Builder::new()
             .name("clip-agent-out".into())
             .spawn(move || {
                 let mut from_child = std::io::BufReader::new(from_child);
                 while let Some((kind, bytes)) = read_frame(&mut from_child) {
                     match kind {
-                        PACKET => send(&bytes),
+                        PACKET => {
+                            let d =
+                                helio_clipboard::Directions::from_bits(now.load(Ordering::Acquire));
+                            if for_client(&bytes, d) {
+                                send(&bytes);
+                            } else {
+                                tracing::debug!("a packet from the clipboard agent held back");
+                            }
+                        }
                         LOG => tracing::info!(
                             "clipboard agent: {}",
                             String::from_utf8_lossy(&bytes).trim_end()
@@ -132,6 +201,7 @@ impl ClipAgent {
             .map_err(|e| e.to_string())?;
         Ok(ClipAgent {
             tx: Some(tx),
+            directions,
             process,
             writer: Some(writer),
             reader: Some(reader),
@@ -140,15 +210,14 @@ impl ClipAgent {
 
     pub fn deliver(&self, body: &[u8]) {
         if let Some(tx) = &self.tx {
-            let _ = tx.try_send((PACKET, body.to_vec()));
+            let _ = tx.try_send(ToHelper::Packet(body.to_vec()));
         }
     }
 
-    /// Which ways copies go, from now on. Waits for room rather than being
-    /// dropped behind a burst of packets: it is a permission.
+    /// Which ways copies go, from now on.
     pub fn set_directions(&self, d: helio_clipboard::Directions) {
         if let Some(tx) = &self.tx {
-            let _ = tx.send_timeout((DIRECTIONS, vec![d.to_bits()]), Duration::from_secs(1));
+            tell_directions(tx, &self.directions, d.to_bits());
         }
     }
 }
@@ -411,4 +480,122 @@ pub fn run(args: &[String]) -> ExitCode {
     // Give the last log lines a moment to go out.
     std::thread::sleep(Duration::from_millis(50));
     ExitCode::SUCCESS
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use helio_clipboard::Directions;
+    use helio_proto::clip::{cancel_packet, full_ack_packet, Outgoing};
+    use helio_proto::control::{Control, EndReason, MAX_CONTROL_LEN};
+
+    // To the writer they are only values to pass on.
+    const BOTH: u8 = 3;
+    const NOTHING: u8 = 0;
+
+    /// The frames the writer gives the helper for what `tx` queued.
+    fn written(tx: Sender<ToHelper>, rx: Receiver<ToHelper>, now: &AtomicU8) -> Vec<(u8, Vec<u8>)> {
+        drop(tx);
+        let mut out = Vec::new();
+        write_frames(rx, now, BOTH, &mut out);
+        let mut frames = Vec::new();
+        let mut r = out.as_slice();
+        while let Some(f) = read_frame(&mut r) {
+            frames.push(f);
+        }
+        frames
+    }
+
+    #[test]
+    fn packets_reach_the_helper_in_order_with_no_change_told() {
+        let (tx, rx) = crossbeam_channel::bounded(8);
+        let now = AtomicU8::new(BOTH);
+        tx.send(ToHelper::Packet(vec![1])).unwrap();
+        tx.send(ToHelper::Packet(vec![2])).unwrap();
+        assert_eq!(
+            written(tx, rx, &now),
+            [(PACKET, vec![1]), (PACKET, vec![2])]
+        );
+    }
+
+    #[test]
+    fn a_permission_overtakes_the_packets_still_queued() {
+        let (tx, rx) = crossbeam_channel::bounded(8);
+        let now = AtomicU8::new(BOTH);
+        tx.send(ToHelper::Packet(vec![1])).unwrap();
+        tell_directions(&tx, &now, NOTHING);
+        assert_eq!(
+            written(tx, rx, &now),
+            [(DIRECTIONS, vec![NOTHING]), (PACKET, vec![1])]
+        );
+    }
+
+    #[test]
+    fn a_permission_is_not_lost_behind_a_full_queue() {
+        let (tx, rx) = crossbeam_channel::bounded(2);
+        let now = AtomicU8::new(BOTH);
+        tx.send(ToHelper::Packet(vec![1])).unwrap();
+        tx.send(ToHelper::Packet(vec![2])).unwrap();
+        tell_directions(&tx, &now, NOTHING);
+        assert_eq!(
+            written(tx, rx, &now),
+            [
+                (DIRECTIONS, vec![NOTHING]),
+                (PACKET, vec![1]),
+                (PACKET, vec![2])
+            ]
+        );
+    }
+
+    #[test]
+    fn a_permission_reaches_a_helper_with_nothing_queued() {
+        let (tx, rx) = crossbeam_channel::bounded(8);
+        let now = AtomicU8::new(BOTH);
+        tell_directions(&tx, &now, NOTHING);
+        assert_eq!(written(tx, rx, &now), [(DIRECTIONS, vec![NOTHING])]);
+    }
+
+    #[test]
+    fn a_change_and_back_tells_the_helper_nothing() {
+        let (tx, rx) = crossbeam_channel::bounded(8);
+        let now = AtomicU8::new(BOTH);
+        tell_directions(&tx, &now, NOTHING);
+        tell_directions(&tx, &now, BOTH);
+        assert_eq!(written(tx, rx, &now), []);
+    }
+
+    fn data_packet() -> Vec<u8> {
+        let now = Instant::now();
+        Outgoing::new(7, vec![1, 2, 3], 50_000_000, now)
+            .poll(now)
+            .remove(0)
+    }
+
+    const NO_SEND: Directions = Directions {
+        send: false,
+        receive: true,
+    };
+
+    #[test]
+    fn the_helpers_clipboard_packets_go_to_the_client() {
+        assert!(for_client(&data_packet(), Directions::BOTH));
+        assert!(for_client(&full_ack_packet(7, 3), Directions::BOTH));
+        assert!(for_client(&cancel_packet(7), Directions::BOTH));
+    }
+
+    #[test]
+    fn a_copy_stays_while_the_client_may_not_read_but_acks_and_cancels_go() {
+        assert!(!for_client(&data_packet(), NO_SEND));
+        assert!(for_client(&full_ack_packet(7, 3), NO_SEND));
+        assert!(for_client(&cancel_packet(7), NO_SEND));
+    }
+
+    #[test]
+    fn anything_else_from_the_helper_stays() {
+        let mut out = [0u8; MAX_CONTROL_LEN];
+        let n = Control::SessionEnd(EndReason::Quit).encode(0, &mut out);
+        assert!(!for_client(&out[..n], Directions::BOTH));
+        assert!(!for_client(&[], Directions::BOTH));
+        assert!(!for_client(b"not a packet", Directions::BOTH));
+    }
 }

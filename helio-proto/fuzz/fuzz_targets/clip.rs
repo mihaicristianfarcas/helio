@@ -7,5 +7,6 @@ use helio_proto::clip;
 // ack once did), and `decode_items` walks lengths the peer chose.
 fuzz_target!(|data: &[u8]| {
     let _ = clip::decode(data);
+    let _ = clip::from_packet(data);
     let _ = clip::decode_items(data);
 });

@@ -102,6 +102,17 @@ pub fn decode(body: &[u8]) -> Option<Msg<'_>> {
     }
 }
 
+/// The clipboard message a whole packet carries; `None` for anything else:
+/// another kind of packet, another control message, or a length that is not
+/// the packet's own.
+pub fn from_packet(packet: &[u8]) -> Option<Msg<'_>> {
+    let header = Header::decode(packet).ok()?;
+    if header.kind != Kind::Control || usize::from(header.total_len) != packet.len() {
+        return None;
+    }
+    decode(packet.get(HEADER_LEN..)?)
+}
+
 /// A whole control packet (header and body) around `body`.
 fn packet(body: &[u8]) -> Vec<u8> {
     let len = HEADER_LEN + body.len();
@@ -568,6 +579,50 @@ mod tests {
 
     fn body(p: &[u8]) -> &[u8] {
         &p[HEADER_LEN..]
+    }
+
+    #[test]
+    fn each_clipboard_packet_is_read_whole() {
+        let now = Instant::now();
+        let data = Outgoing::new(7, vec![1, 2, 3], 50_000_000, now).poll(now);
+        assert!(matches!(
+            from_packet(&data[0]),
+            Some(Msg::Data { id: 7, .. })
+        ));
+        assert!(matches!(
+            from_packet(&full_ack_packet(7, 3)),
+            Some(Msg::Ack { id: 7, .. })
+        ));
+        assert_eq!(from_packet(&cancel_packet(7)), Some(Msg::Cancel { id: 7 }));
+    }
+
+    #[test]
+    fn a_packet_cut_short_or_with_more_after_it_is_not_a_clipboard_packet() {
+        let p = cancel_packet(7);
+        assert_eq!(from_packet(&p[..p.len() - 1]), None);
+        assert_eq!(from_packet(&[p.as_slice(), &[0]].concat()), None);
+        assert_eq!(from_packet(&p[..HEADER_LEN]), None);
+        assert_eq!(from_packet(&[]), None);
+    }
+
+    #[test]
+    fn another_control_message_is_not_a_clipboard_packet() {
+        let mut out = [0u8; crate::control::MAX_CONTROL_LEN];
+        let n = crate::control::Control::SessionEnd(crate::control::EndReason::Quit)
+            .encode(0, &mut out);
+        assert_eq!(Header::decode(&out[..n]).unwrap().kind, Kind::Control);
+        assert_eq!(from_packet(&out[..n]), None);
+    }
+
+    #[test]
+    fn a_clipboard_body_in_another_kind_of_packet_is_not_a_clipboard_packet() {
+        let mut p = cancel_packet(7);
+        let mut header = Header::decode(&p).unwrap();
+        header.kind = Kind::Input;
+        let mut h = [0u8; HEADER_LEN];
+        header.encode(&mut h).unwrap();
+        p[..HEADER_LEN].copy_from_slice(&h);
+        assert_eq!(from_packet(&p), None);
     }
 
     /// Move `data` from an `Outgoing` to an `Incoming` over a link that
