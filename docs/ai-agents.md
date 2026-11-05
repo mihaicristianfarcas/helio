@@ -248,7 +248,8 @@ the runs and sessions Helio starts, and neither changes the other.
 - **Log In** (a session's page), or `helio watch HOST`, opens the agent's
   screen in a stream window (waiting up to 25 s for an agent still
   starting). **Ctrl+Alt+Shift+T** takes the keyboard and mouse; pressing it
-  again hands them back.
+  again hands them back. While another person has them it does nothing:
+  they are that person's to hand back, or the host's own Helio's.
 - **While you have them, the agent waits** — up to 15 minutes, not against
   the turn's minutes. Its next action is then not done: the model gets the
   screen as you left it and decides again. The same goes when you pause it
@@ -308,7 +309,9 @@ by time (rule 4), and what it logs is what the agent says (rule 8).
    far as their own permissions go, while the agent's input is held. No
    other agent takes over a session a person paused or took over.
 7. **A person's hold lasts.** A pause, a take-over or a stop is not undone
-   by the agent ending its session and starting another.
+   by the agent ending its session and starting another. A pause or a
+   take-over is not undone by another person watching either: only by the
+   person who took it, or on the host's own Helio.
 8. **Everything is written down.** Helio's agent says what each action is
    before doing it, and Helio Host logs it and shows it. The words are the
    agent's: the host does not check them against the input, and a note

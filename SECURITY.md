@@ -160,10 +160,11 @@ host's display driver and encoders.
 
 **AI agents** are clients of their own, held to rules the host enforces:
 never over a person, never on a secure screen, only with the permissions
-the host granted, and held by a person's pause, take-over or stop until
-that person lets go, however often the agent reconnects (a stop is kept
-with the agent's pairing, in `clients.toml`; a pause and a take-over for as
-long as the host runs). A Linux host sees a locked screen only when the
+the host granted, and held by a person's pause, take-over or stop however
+often the agent reconnects: a pause or a take-over until that person or the
+host's own Helio lets go, a stop until the host's own Helio allows it again
+(a stop is kept with the agent's pairing, in `clients.toml`; a pause and a
+take-over for as long as the host runs). A Linux host sees a locked screen only when the
 lock screen tells logind, and under Wayland does not see someone using its
 keyboard and mouse
 ([docs/platforms/linux.md](docs/platforms/linux.md#ai-agents)).

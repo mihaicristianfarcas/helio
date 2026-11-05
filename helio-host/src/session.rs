@@ -11,7 +11,8 @@
 //!   over from it;
 //! - people may watch it (`flags::WATCH`): the same picture goes to them,
 //!   and one may take over the keyboard and mouse, pause the agent, hand
-//!   back or stop it (`Control::AgentControl`);
+//!   back or stop it (`Control::AgentControl`); what one person holds is
+//!   theirs or the host's own Helio's to let go (`holds::let_go`);
 //! - its input is held while the host shows a secure screen, for a while
 //!   after someone uses the host's own keyboard or mouse, while paused, and
 //!   always when its access is view-only;
@@ -102,8 +103,8 @@ pub enum SessionCmd {
         peer: PeerId,
         report: LossReport,
     },
-    /// A watcher (or the API: peer 0) takes over, hands back, pauses,
-    /// resumes or stops the agent (`agent_control::*`).
+    /// A watcher (or the API: `holds::HOST_ITSELF`) takes over, hands back,
+    /// pauses, resumes or stops the agent (`agent_control::*`).
     AgentControl {
         peer: PeerId,
         op: u8,
@@ -372,7 +373,8 @@ struct AgentRun {
     watchers: Vec<Watcher>,
     /// The watcher who took over.
     controller: Option<PeerId>,
-    paused: bool,
+    /// Who paused it (`holds::HOST_ITSELF`: the host's own Helio).
+    paused: Option<PeerId>,
     /// Someone used the host's own keyboard or mouse: held until then.
     local_until: Option<Instant>,
     secure: bool,
@@ -383,7 +385,7 @@ struct AgentRun {
 impl AgentRun {
     fn state(&self, now: Instant) -> AgentState {
         let mut flags = 0;
-        if self.paused {
+        if self.paused.is_some() {
             flags |= agent_state::PAUSED;
         }
         if self.controller.is_some() {
@@ -884,7 +886,7 @@ impl SessionManager {
                     (true, true)
                         if a.agent
                             .as_ref()
-                            .is_some_and(|r| r.paused || r.controller.is_some()) =>
+                            .is_some_and(|r| r.paused.is_some() || r.controller.is_some()) =>
                     {
                         tracing::info!(
                             "an agent asked for the host while a person holds another's; refused"
@@ -1119,17 +1121,18 @@ impl SessionManager {
         self.agent_tick(Instant::now());
     }
 
-    /// A watcher (or the API, `peer` 0) acts on the agent.
+    /// A watcher (or the API, `holds::HOST_ITSELF`) acts on the agent.
     fn agent_control(&mut self, peer: PeerId, op: u8) {
         let Some(a) = self.active.as_mut() else {
             return;
         };
         let Some(run) = a.agent.as_mut() else { return };
-        if peer != 0 && !run.watchers.iter().any(|w| w.peer.id() == peer) {
+        let from_host = peer == crate::holds::HOST_ITSELF;
+        if !from_host && !run.watchers.iter().any(|w| w.peer.id() == peer) {
             return;
         }
         match op {
-            agent_control::TAKE_OVER if peer != 0 => {
+            agent_control::TAKE_OVER if !from_host => {
                 let may = run.watchers.iter().any(|w| {
                     w.peer.id() == peer
                         && w.permissions
@@ -1141,26 +1144,31 @@ impl SessionManager {
                     );
                     return;
                 }
-                if run.controller != Some(peer) {
+                if run.controller.is_none() {
                     tracing::info!("a watcher took over from the agent");
-                    run.controller = Some(peer);
+                }
+                if !crate::holds::take_over(&mut run.controller, peer) {
+                    tracing::info!("a take-over refused: another person took over");
                 }
             }
             agent_control::HAND_BACK => {
-                if run.controller.take().is_some() {
+                if crate::holds::let_go(&mut run.controller, peer) {
                     tracing::info!("handed back to the agent");
+                } else if run.controller.is_some() {
+                    tracing::info!("a hand-back refused: another person took over");
                 }
             }
             agent_control::PAUSE => {
-                if !run.paused {
+                if run.paused.is_none() {
                     tracing::info!("the agent is paused");
-                    run.paused = true;
+                    run.paused = Some(peer);
                 }
             }
             agent_control::RESUME => {
-                if run.paused {
+                if crate::holds::let_go(&mut run.paused, peer) {
                     tracing::info!("the agent is resumed");
-                    run.paused = false;
+                } else if run.paused.is_some() {
+                    tracing::info!("a resume refused: another person paused the agent");
                 }
             }
             agent_control::STOP => {
@@ -1171,7 +1179,7 @@ impl SessionManager {
                 let key = a.peer.public().to_b64().0;
                 // The stop is what holds it now: allowed again, it starts
                 // with nothing else held.
-                run.paused = false;
+                run.paused = None;
                 run.controller = None;
                 if let Err(e) = self.clients.lock().set_stopped(&key, true) {
                     tracing::warn!(error = %e, "the agent's stop could not be saved; it holds \
