@@ -66,6 +66,9 @@ jobs:
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace --no-fail-fast
+      # tools/third-party-notices needs it; one version, in that file.
+      - name: cargo-about
+        run: cargo install --locked cargo-about --version "$(cat tools/notices/cargo-about.version)" --features cli
       # Helio.app with Helio Host.app inside, signed ad hoc, inside out;
       # built, then archived from the staged zip, as the release does it on
       # two runners.
@@ -102,6 +105,9 @@ jobs:
           key: ${{ env.FFMPEG_BUILD }}
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace --no-fail-fast
+      # tools/third-party-notices needs it; one version, in that file.
+      - name: cargo-about
+        run: cargo install --locked cargo-about --version "$(cat tools/notices/cargo-about.version)" --features cli
       - name: The app, packaged
         shell: pwsh
         run: ./tools/package-windows.ps1
@@ -156,6 +162,9 @@ jobs:
       # out of memory.
       - run: cargo test --workspace --exclude helio-host -j 2 --no-fail-fast
       - run: cargo test -p helio-host --no-fail-fast
+      # tools/third-party-notices needs it; one version, in that file.
+      - name: cargo-about
+        run: cargo install --locked cargo-about --version "$(cat tools/notices/cargo-about.version)" --features cli
       - name: The app, packaged
         run: tools/linux/package
         env:

@@ -27,6 +27,9 @@
 # submission, and the ticket is stapled to the app, so macOS opens it from a
 # download, offline too. The release workflow sets all four on main.
 # HELIO_PROFILE=dev packages a debug build (CI checks the packaging so).
+#
+# The build puts THIRD-PARTY-NOTICES.txt in the app (tools/third-party-notices),
+# so it is signed with the rest; --from refuses an app without it.
 set -euo pipefail
 REPO=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 VERSION=$(sed -n '/^\[workspace.package\]/,/^\[/ s/^version = "\(.*\)"/\1/p' "$REPO/Cargo.toml")
@@ -63,9 +66,15 @@ if [[ $MODE == package ]]; then
         echo "$FROM holds no Helio.app" >&2
         exit 1
     fi
+    if [[ ! -f $APP/Contents/Resources/THIRD-PARTY-NOTICES.txt ]]; then
+        echo "$FROM holds no third-party notices: the crates' licenses go with every copy" >&2
+        exit 1
+    fi
 else
+    "$REPO/tools/third-party-notices" "$STAGE/THIRD-PARTY-NOTICES.txt"
     # The Developer ID is the archiving's, never the build's.
-    HELIO_SIGN_IDENTITY='' HELIO_RELEASE=1 "$REPO/tools/build-helio-app"
+    HELIO_NOTICES="$STAGE/THIRD-PARTY-NOTICES.txt" HELIO_SIGN_IDENTITY='' HELIO_RELEASE=1 \
+        "$REPO/tools/build-helio-app"
     if [[ $MODE == stage ]]; then
         mkdir -p "$(dirname "$STAGED")"
         rm -f "$STAGED"
