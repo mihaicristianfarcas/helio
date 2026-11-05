@@ -55,13 +55,15 @@ the next (a slot is looked up during the day after its own).
 **The host's API** (HTTPS on TCP 47802), which Helio's This computer pages
 and `helio host` use, answers on localhost only (127.0.0.1 and ::1):
 nothing on the network reaches it. It uses a self-signed certificate the
-host makes for itself, and every call carries the token the host writes
-for its own user: on Windows, readable by SYSTEM, Administrators and the
-user who turned hosting on, whom `helio-host enable` records beside the
-engine in `C:\Program Files\Helio Host` (turning hosting on from another
-account makes that account the owner). There is no account and no other
-token: every user of the computer can reach localhost, and an account made
-through the API would have been whoever asked first's.
+host makes for itself, and every call but `/api/state` carries the token
+the host writes for its own user: on Windows, readable by SYSTEM,
+Administrators and the user who turned hosting on, whom `helio-host enable`
+records beside the engine in `C:\Program Files\Helio Host` (turning hosting
+on from another account makes that account the owner). `/api/state` says
+only the host's name, its system and whether the token sent with it is
+good. There is no account and no other token: every user of the computer
+can reach localhost, and an account made through the API would have been
+whoever asked first's.
 
 **Secrets at rest.** On macOS and Linux, each device's private keys, the
 rendezvous secrets (the host's in `clients.toml`, a client's in
