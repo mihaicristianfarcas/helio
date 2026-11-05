@@ -9,7 +9,12 @@
 //! A hold lasts until a person lets go: **Resume**, **Hand back**, or the
 //! host's keyboard and mouse left alone for the hold's length. Without
 //! this, an agent shed every hold by reconnecting (docs/ai-agents.md, the
-//! rules the host holds agents to).
+//! rules the host holds agents to). A pause or a take-over is the person's
+//! who took it, or the host's own Helio's to let go ([`let_go`]), never
+//! another watcher's, who cannot take it from them either ([`take_over`]):
+//! the key that takes over and hands back only knows that someone holds the
+//! agent, so another watcher pressing it would hand the agent the host while
+//! that person is at it.
 //!
 //! Someone at the host holds every agent, not only the one whose session
 //! saw them: it is the host they are using. Between sessions nothing looks,
@@ -32,10 +37,36 @@ use helio_transport::PeerId;
 /// register.
 pub const INJECTION_MARGIN: Duration = Duration::from_millis(300);
 
+/// Who acts on an agent from the host's own Helio, through the API. No
+/// device has this id: the endpoint never gives a peer 0 (`add_peer`).
+pub const HOST_ITSELF: PeerId = 0;
+
+/// `by` lets go of `hold`, which is the holder's to let go or the host's own
+/// Helio's. Whether it was let go; someone else's stays as it is.
+pub fn let_go(hold: &mut Option<PeerId>, by: PeerId) -> bool {
+    let theirs = hold.is_some_and(|holder| holder == by || by == HOST_ITSELF);
+    if theirs {
+        *hold = None;
+    }
+    theirs
+}
+
+/// `by` takes the keyboard and mouse, unless someone else has them: taking
+/// them, they could then hand back what that person holds. Whether `by` has
+/// them now.
+pub fn take_over(controller: &mut Option<PeerId>, by: PeerId) -> bool {
+    let free = controller.is_none_or(|holder| holder == by);
+    if free {
+        *controller = Some(by);
+    }
+    free
+}
+
 /// A person's holds on one agent, from its last session.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub struct Kept {
-    pub paused: bool,
+    /// Who paused it.
+    pub paused: Option<PeerId>,
     /// The watcher who took over: they drive again when they watch again,
     /// and until they hand back, nobody else's input goes in.
     pub controller: Option<PeerId>,
@@ -127,16 +158,68 @@ mod tests {
     const HOLD: Duration = Duration::from_secs(10);
 
     #[test]
+    fn a_hold_is_let_go_by_the_person_who_took_it() {
+        let mut hold = Some(5);
+        assert!(let_go(&mut hold, 5));
+        assert_eq!(hold, None);
+    }
+
+    #[test]
+    fn another_watcher_does_not_let_go_of_someones_hold() {
+        let mut hold = Some(5);
+        assert!(!let_go(&mut hold, 6));
+        assert_eq!(hold, Some(5));
+    }
+
+    #[test]
+    fn the_hosts_own_helio_lets_go_of_anyones_hold() {
+        let mut hold = Some(5);
+        assert!(let_go(&mut hold, HOST_ITSELF));
+        assert_eq!(hold, None);
+    }
+
+    #[test]
+    fn a_watcher_does_not_let_go_of_a_hold_from_the_hosts_own_helio() {
+        let mut hold = Some(HOST_ITSELF);
+        assert!(!let_go(&mut hold, 5));
+        assert_eq!(hold, Some(HOST_ITSELF));
+    }
+
+    #[test]
+    fn a_watcher_takes_over_when_nobody_has_the_keyboard_and_mouse() {
+        let mut controller = None;
+        assert!(take_over(&mut controller, 5));
+        assert_eq!(controller, Some(5));
+        // Asked again, control messages being sent twice.
+        assert!(take_over(&mut controller, 5));
+        assert_eq!(controller, Some(5));
+    }
+
+    #[test]
+    fn a_watcher_does_not_take_over_from_another_person() {
+        let mut controller = Some(5);
+        assert!(!take_over(&mut controller, 6));
+        assert_eq!(controller, Some(5));
+    }
+
+    #[test]
+    fn nobody_lets_go_of_a_hold_that_is_not_there() {
+        let mut hold = None;
+        assert!(!let_go(&mut hold, 5));
+        assert!(!let_go(&mut hold, HOST_ITSELF));
+    }
+
+    #[test]
     fn a_paused_agent_starts_its_next_session_paused() {
         let mut holds = Holds::default();
         holds.keep(
             KEY,
             Kept {
-                paused: true,
+                paused: Some(HOST_ITSELF),
                 controller: None,
             },
         );
-        assert!(holds.take(&KEY).paused);
+        assert_eq!(holds.take(&KEY).paused, Some(HOST_ITSELF));
         // Another agent was not paused.
         assert_eq!(holds.take(&OTHER), Kept::default());
     }
@@ -145,7 +228,7 @@ mod tests {
     fn a_take_over_outlasts_the_agents_session_until_handed_back() {
         let mut holds = Holds::default();
         let kept = Kept {
-            paused: false,
+            paused: None,
             controller: Some(42),
         };
         holds.keep(KEY, kept);

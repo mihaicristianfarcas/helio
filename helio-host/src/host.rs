@@ -201,7 +201,10 @@ impl Host {
     pub fn agent_control(&self, op: u8) {
         let _ = self
             .sessions
-            .send(crate::session::SessionCmd::AgentControl { peer: 0, op });
+            .send(crate::session::SessionCmd::AgentControl {
+                peer: crate::holds::HOST_ITSELF,
+                op,
+            });
     }
 
     /// Set what a paired client may do. A session of its that is running,
