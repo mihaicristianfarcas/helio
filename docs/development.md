@@ -196,9 +196,13 @@ yet, `.github/workflows/release.yml` builds the app, with the host's engine
 inside it, on an Apple silicon and an Intel Mac, on Windows and on Linux:
 one archive for each system and architecture, and Windows' installer. Once
 they are signed, the same files become the website's downloads, then the
-GitHub release `vVERSION`, and the workflow opens a pull request that brings
-the Homebrew cask, `Casks/helio.rb`, to it (`tools/update-casks`); `brew
-upgrade` sees the release once that is merged. GitHub holds CI on a pull
+GitHub release `vVERSION`, whose text is `.github/release-notes/VERSION.md`,
+and the workflow opens a pull request that brings the Homebrew cask,
+`Casks/helio.rb`, to it (`tools/update-casks`); `brew upgrade` sees the release
+once that is merged. The notes are written by hand and come with the change
+that sets the version: CI fails that pull request without them, and the
+workflow's first job stops without them. They are shown on GitHub, so their
+links are full addresses. GitHub holds CI on a pull
 request a workflow opened until it is approved: the workflow approves it, or
 says on the pull request that it needs approving by hand.
 
