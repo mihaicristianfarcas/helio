@@ -3,8 +3,6 @@
 Stream a computer's desktop and its games to another computer, inside one
 post-quantum WireGuard tunnel.
 
-![Helio on a Mac, streaming a Windows PC: typing into Notepad on the host, then starting a road game and steering it](docs/images/helio-demo.gif)
-
 - **Best tested:** a Mac as the client, streaming a Windows host with an
   NVIDIA GPU and SudoVDA ([the test setup](docs/benchmarks.md#test-setup)).
 - **Install:** [download for macOS, Windows or Linux](https://helio.mihaicristian.dev/#install),
