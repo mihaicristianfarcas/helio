@@ -79,7 +79,10 @@ fn write_local_token(dir: &Path) -> Option<String> {
     match written {
         Ok(()) => Some(t),
         Err(e) => {
-            tracing::warn!(error = %e, "no local token for Helio Host's app (it signs in instead)");
+            tracing::warn!(
+                error = %e,
+                "no local token: Helio's This computer pages and `helio host` cannot use Helio Host"
+            );
             let _ = std::fs::remove_file(&path);
             None
         }
