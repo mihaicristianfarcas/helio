@@ -34,8 +34,8 @@ const file = (id: string, ext: string, label: string, system: System): File => (
  * button offers and Intel is in the line of other platforms.
  */
 export const FILES = {
-  macArm: file('Helio-macos-arm64', '.dmg', 'macOS (Apple silicon)', 'macos'),
-  macIntel: file('Helio-macos-x86_64', '.dmg', 'macOS (Intel)', 'macos'),
+  macArm: file('Helio-macos-arm64', '.zip', 'macOS (Apple silicon)', 'macos'),
+  macIntel: file('Helio-macos-x86_64', '.zip', 'macOS (Intel)', 'macos'),
   windows: file('Helio-windows-x86_64-setup', '.exe', 'Windows', 'windows'),
   linux: file('Helio-linux-x86_64', '.tar.gz', 'Linux', 'linux'),
 };
