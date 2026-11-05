@@ -35,10 +35,7 @@ pub struct SavedState {
     ///
     /// It is also the one change here a crash strands VISIBLY -- a dead server
     /// leaves the host's monitors dark, which is much worse than a stranded
-    /// primary assignment. `#[serde(default)]` so a state file written by an
-    /// older build still loads rather than being read as corrupt and ignored,
-    /// which would strand exactly what this exists to recover.
-    #[serde(default)]
+    /// primary assignment.
     pub displays_disabled: bool,
 }
 
