@@ -1,7 +1,6 @@
-//! Windows display control over SudoVDA (v2 design §6).
+//! Windows display control over SudoVDA.
 //!
-//! Five things here are load-bearing and look removable. Read
-//! `spikes/vdd-mode/README.md` before simplifying any of them:
+//! Five things here are load-bearing and look removable:
 //!
 //! 1. **Primary is set with the CCD API, not `ChangeDisplaySettingsEx`.**
 //!    `CDS_SET_PRIMARY` returns `DISP_CHANGE_FAILED` on an indirect display
@@ -609,9 +608,8 @@ fn force_mode(name: &str, mode: DisplayMode) -> Result<(), DisplayError> {
         )));
     }
 
-    // Read back rather than trust the return code: v1 design §15.3's whole
-    // concern was an API that reports success while the desktop mode does not
-    // move.
+    // Read back rather than trust the return code: the worry here is an API
+    // that reports success while the desktop mode does not move.
     for _ in 0..20 {
         std::thread::sleep(Duration::from_millis(100));
         if let Some(d) = attached_displays().into_iter().find(|d| d.name == name) {
@@ -679,7 +677,7 @@ impl Keepalive {
                         return;
                     }
                 };
-                // v2 design §6.5: a remote host has no reason to stay awake, so
+                // A remote host has no reason to stay awake, so
                 // Windows powers the display off at its idle timeout (900 s on
                 // the test host), the desktop stops compositing, and
                 // change-driven capture correctly has nothing to send. The
@@ -867,8 +865,8 @@ impl WindowsDisplay {
         crate::hdr::sdr_white_nits(self.active_id?)
     }
 
-    /// If a previous run died with a session active, put the desktop back
-    /// (v2 design §6.4). Call once at startup, before anything else touches
+    /// If a previous run died with a session active, put the desktop back.
+    /// Call once at startup, before anything else touches
     /// the display.
     ///
     /// The virtual display itself usually self-heals — the watchdog reaps it
@@ -994,7 +992,7 @@ impl WindowsDisplay {
     /// there.
     ///
     /// Without this `activate` would treat the client's original mode as
-    /// already active and return its idempotent no-op (v2 design §4.4) -- so a
+    /// already active and return its idempotent no-op -- so a
     /// client renegotiating after someone changed the resolution in Windows
     /// settings would be acked the mode it asked for while the display stayed
     /// in the one it was moved to.
@@ -1111,7 +1109,7 @@ impl DisplayControl for WindowsDisplay {
         follow_input_desktop();
         if let Some(active) = self.active.as_ref() {
             if active.mode == mode {
-                return Ok(active.clone()); // idempotent -- v2 design §4.4
+                return Ok(active.clone()); // idempotent
             }
             // ADD would hand back the OLD monitor: same GUID, different mode.
             tracing::info!(
@@ -1124,7 +1122,7 @@ impl DisplayControl for WindowsDisplay {
         let opened_at = Instant::now();
         let device = Device::open()?;
 
-        // Record who was primary BEFORE we move it (v2 design §6.4). Only on the
+        // Record who was primary BEFORE we move it. Only on the
         // first activate of a session -- a mode change must not overwrite the
         // real pre-session primary with our own virtual display.
         let mut saved_state = false;

@@ -21,10 +21,9 @@ members = [
     "helio-ui",
     "helio-update",
 ]
-# spikes/* are deliberately NOT members -- a throwaway probe must never gate a
-# workspace-wide `cargo test`. Each spike also carries its own empty
-# `[workspace]` table so it resolves standalone.
-exclude = ["spikes", "tools/rawinput-probe"]
+# A Windows-only probe, deliberately NOT a member: it must never gate a
+# workspace-wide `cargo test`.
+exclude = ["tools/rawinput-probe"]
 
 [workspace.package]
 # The project's version: every program built from the workspace has it

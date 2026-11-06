@@ -1,13 +1,13 @@
 # Run a command in the INTERACTIVE desktop session and stream back its output.
 #
-# WHY THIS EXISTS: an SSH session on Windows lands in session 0 (services).
-# Windows Graphics Capture requires a real desktop session, so any WGC code
-# started over SSH fails with `ItemConvertFailed` before capturing anything.
-# This wraps the command in a scheduled task registered with `/it`
-# (interactive), which runs it in the logged-on user's session instead.
+# WHY THIS EXISTS: an SSH session on Windows lands in session 0 (services),
+# where there is no desktop to capture and no display to configure. This
+# wraps the command in a scheduled task registered with `/it` (interactive),
+# which runs it in the logged-on user's session instead.
 #
-# Anything touching WGC -- the cuda-interop spike, helio-capture, the server
-# binary -- must be launched this way when driven remotely.
+# Anything touching the desktop -- helio-capture, helio-display's tests --
+# must be launched this way when driven remotely. tools/host-run.ps1 does the
+# same for a short command; this one takes a timeout, for longer runs.
 #
 # Usage:
 #   powershell -ExecutionPolicy Bypass -File run-interactive.ps1 `

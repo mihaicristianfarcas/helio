@@ -3,7 +3,7 @@ use libfuzzer_sys::fuzz_target;
 use helio_proto::reassemble::Reassembler;
 
 // The depacketizer parses hostile network input -- the one component an
-// attacker can reach with arbitrary bytes (v1 design §13.1).
+// attacker can reach with arbitrary bytes.
 fuzz_target!(|data: &[u8]| {
     let mut r = Reassembler::new(4);
     for chunk in data.chunks(1200) {

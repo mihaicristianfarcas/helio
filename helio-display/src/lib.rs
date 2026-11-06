@@ -1,12 +1,9 @@
 //! Display control: putting a display into a requested mode and putting it
-//! back (v2 design §6).
+//! back.
 //!
 //! Display control is one of the three things that differ per host platform
 //! (with capture and input injection), so it sits behind a trait; everything
 //! that uses it is portable.
-//!
-//! Section references in this crate (`v2 design §6.1`) are to the original
-//! design documents in `docs/design/`.
 
 use serde::{Deserialize, Serialize};
 
@@ -32,7 +29,7 @@ pub mod macos;
 pub struct DisplayMode {
     pub width: u16,
     pub height: u16,
-    /// Millihertz. See v2 design §4.4.
+    /// Millihertz, so 59.94 Hz is exact.
     pub refresh_mhz: u32,
 }
 
@@ -102,7 +99,7 @@ pub trait DisplayControl {
     /// Put a display into `mode` and return which one to capture.
     ///
     /// MUST be idempotent: activating a mode already active is a no-op that
-    /// still returns the active display (v2 design §4.4 -- a duplicated
+    /// still returns the active display (a duplicated
     /// SessionStart must cost nothing).
     fn activate(&mut self, mode: DisplayMode) -> Result<ActiveDisplay, DisplayError>;
 

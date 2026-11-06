@@ -11,8 +11,8 @@ program of its own, which keeps running when you quit the app.
 
 This page is the map: what runs where, how a frame gets from the host's
 screen to the client's, and which crate does what. Why each piece is the way
-it is, and what was measured on the way, is in the
-[design history](design/README.md) and in the code's comments.
+it is is in the code's comments, and what it costs in
+[benchmarks.md](benchmarks.md).
 
 ## The pieces
 
@@ -66,8 +66,7 @@ it is, and what was measured on the way, is in the
 | `helio-host-data` | What the host keeps on disk, for it and for whatever manages it: its data folder (private to the host on Windows), its identity, its paired clients and what each may do |
 
 `vendor/` holds two tiny no-op crates GPUI names but does not use (see the
-workspace `Cargo.toml`); `spikes/` holds the early experiments
-([spikes/README.md](../spikes/README.md)).
+workspace `Cargo.toml`).
 
 ## One client, one host, on every desktop
 
@@ -178,9 +177,7 @@ bitrate to congestion and the FEC to the link's own loss
 ### Why the video path looks like Sunshine's
 
 Each of these was a visible artefact until it was done the Sunshine and
-Moonlight way, first learnt from Apollo, Sunshine's fork (the full table,
-with the source it was checked against, is in
-[design/v3-design.md](design/v3-design.md)):
+Moonlight way, first learnt from Apollo, Sunshine's fork:
 
 | Choice | Without it |
 |---|---|
@@ -248,7 +245,7 @@ No keys are copied by hand:
 
 A client is then known by its tunnel key; there is nothing else to steal
 from the network. See [SECURITY.md](../SECURITY.md) for the model, and
-[design/v3-design.md](design/v3-design.md) §4 for why the pairing is hybrid.
+`helio-pairing/src/pair.rs` for why the pairing is hybrid.
 
 What a client may do once paired is the host's to say, per client, as
 Apollo does: its permissions (`helio_proto::permission`, kept in
@@ -289,4 +286,3 @@ a client coming back.
 - [networking.md](networking.md) — the internet path.
 - [ai-agents.md](ai-agents.md) — AI agents as clients.
 - [benchmarks.md](benchmarks.md) — what it all costs, measured.
-- [design/](design/README.md) — the designs and measurements behind this.

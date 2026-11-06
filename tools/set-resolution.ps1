@@ -1,12 +1,12 @@
 # Change the primary display's resolution.
 #
 # For measurements on a host with no physical monitor attached, which may sit
-# at a low fallback mode (e.g. 1024x768): capture-rate figures (v1 design §7.1)
+# at a low fallback mode (e.g. 1024x768): capture-rate figures
 # mean nothing below the resolution being measured.
 #
 # MUST run in the interactive desktop session -- ChangeDisplaySettingsEx called
 # from an SSH session (session 0) cannot affect the logged-on desktop. Drive it
-# through spikes/run-interactive.ps1.
+# through tools/run-interactive.ps1.
 #
 # Usage:
 #   powershell -ExecutionPolicy Bypass -File tools\set-resolution.ps1 -Width 1920 -Height 1080

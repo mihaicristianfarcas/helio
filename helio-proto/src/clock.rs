@@ -11,7 +11,7 @@
 //! client's `now_us()` are offsets from two unrelated instants on two unrelated
 //! machines. Subtracting one from the other measures nothing.
 //!
-//! Every stage the telemetry attributes (v1 design §12.1) is therefore
+//! Every stage the telemetry attributes is therefore
 //! measured *within* one process. The network leg and the end-to-end figure
 //! need something that sees both machines: the client's clock-offset estimate
 //! from the ping exchange (`helio_client::stats`), or a camera filming both

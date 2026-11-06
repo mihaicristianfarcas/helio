@@ -4,7 +4,7 @@
 //! `WinDisc 1024x768` and no real monitors, so every assertion here would be
 //! meaningless there. Over SSH, from the repository on the host:
 //!
-//!   spikes\run-interactive.ps1 -WorkDir C:\path\to\helio -Exe cargo.exe `
+//!   tools\run-interactive.ps1 -WorkDir C:\path\to\helio -Exe cargo.exe `
 //!     -Arguments "test -p helio-display --test windows_display -- --ignored --test-threads=1"
 //!
 //! `--test-threads=1` is required: these all drive the one physical desktop.
@@ -47,7 +47,7 @@ fn activate_then_restore_returns_the_desktop_to_where_it_started() {
 #[test]
 #[ignore = "requires the virtual display driver"]
 fn activating_an_already_active_mode_is_a_no_op() {
-    // A duplicated SessionStart must cost nothing (v2 design §4.4).
+    // A duplicated SessionStart must cost nothing.
     let mut d = WindowsDisplay::new(state_path("idempotent"));
     let mode = DisplayMode {
         width: 1920,
@@ -63,7 +63,7 @@ fn activating_an_already_active_mode_is_a_no_op() {
 #[test]
 #[ignore = "requires the virtual display driver"]
 fn the_display_survives_longer_than_the_watchdog() {
-    // The driver reaps every monitor ~3 s after the last ioctl (v2 design §6.1).
+    // The driver reaps every monitor ~3 s after the last ioctl.
     // This is the test that the keepalive thread actually runs -- without it a
     // session dies about three seconds in, which no unit test can catch.
     let mut d = WindowsDisplay::new(state_path("watchdog"));
@@ -117,7 +117,7 @@ fn a_different_mode_replaces_the_active_one() {
 #[test]
 #[ignore = "requires the virtual display driver"]
 fn restore_puts_the_original_primary_back() {
-    // v2 design §6.4: the session moves the primary to the virtual display, so
+    // The session moves the primary to the virtual display, so
     // teardown must move it back or the user is left on the wrong monitor.
     let before = helio_display::windows::primary_id().expect("a primary exists");
 

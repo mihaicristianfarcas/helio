@@ -2,7 +2,7 @@
 //! against the API layer games read rather than against a success return.
 //!
 //! "SendInput returned success" is not evidence a game saw anything. The
-//! precedent is in v1 design §8.3 (docs/design/): a keyframe request silently
+//! precedent: a keyframe request silently
 //! did nothing for 300 frames while reporting success.
 //!
 //! RIDEV_INPUTSINK means this receives input even without foreground focus,

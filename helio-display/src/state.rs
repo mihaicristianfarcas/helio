@@ -1,10 +1,10 @@
-//! Crash-restore state (v2 design §6.4).
+//! Crash-restore state.
 //!
 //! If the host dies with a display in a mode it set, nothing puts it back.
 //! Writing the pre-session state to disk means the next start can.
 //!
 //! With SudoVDA the virtual display itself self-heals -- the driver's watchdog
-//! reaps it within ~3 s once nothing is pinging (v2 design §6.1). What does NOT
+//! reaps it within ~3 s once nothing is pinging. What does NOT
 //! self-heal is the primary-display assignment and desktop arrangement that
 //! `SetDisplayConfig` changed, so that is what this records.
 
@@ -14,7 +14,7 @@ use std::path::Path;
 /// The display that was primary before the session started.
 ///
 /// Not a `DisplayMode`: with SudoVDA the physical display's own mode is never
-/// touched (v2 design §6.3), so there is no resolution to put back. What the session
+/// touched, so there is no resolution to put back. What the session
 /// changes -- and what a crash therefore strands -- is the primary assignment.
 ///
 /// The three integers are an opaque platform identity. On Windows they are the
@@ -84,7 +84,7 @@ mod tests {
 
     #[test]
     fn missing_file_is_none_not_an_error() {
-        // "No stale state" is the normal startup case (v2 design §6.4).
+        // "No stale state" is the normal startup case.
         assert_eq!(load(&tmp("absent")), None);
     }
 

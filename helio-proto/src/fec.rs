@@ -1,8 +1,8 @@
-//! Reed-Solomon parameters and block splitting. See v1 design §6.2 and §6.3.
+//! Reed-Solomon parameters and block splitting.
 //!
 //! THIS IS THE ONLY FILE THAT TALKS TO THE REED-SOLOMON CRATE.
 //!
-//! Three crate constraints drive this module (v1 design §6.3):
+//! Three crate constraints drive this module:
 //!   1. every shard must be the same size -- the caller zero-pads the last
 //!   2. shard size must be non-zero and even
 //!   3. not every (data, parity) pair is supported -- must be checked
@@ -11,7 +11,7 @@ use reed_solomon_simd::engine::DefaultEngine;
 use reed_solomon_simd::rate::{DefaultRate, Rate};
 
 /// Data shards per FEC block. Reed-Solomon caps at 255 total shards; 200
-/// leaves headroom for parity (v1 design §6.2).
+/// leaves headroom for parity.
 pub const MAX_DATA_SHARDS_PER_BLOCK: usize = 200;
 
 /// Upper bound on the parity search in [`supported_parity`], so a pathological
@@ -87,7 +87,7 @@ impl Default for FecPolicy {
     }
 }
 
-/// 20% parity, rounded up, with a floor of 2 (v1 design §6.2): the default
+/// 20% parity, rounded up, with a floor of 2: the default
 /// [`FecPolicy`].
 pub fn parity_for(data_shards: usize) -> usize {
     FecPolicy::DEFAULT.parity(data_shards)
@@ -97,7 +97,7 @@ pub fn parity_for(data_shards: usize) -> usize {
 /// within the search limit.
 ///
 /// Never assume [`parity_for`] yields a supported pair -- this crate is
-/// Leopard-RS based and rejects some combinations (v1 design §6.3).
+/// Leopard-RS based and rejects some combinations.
 pub fn supported_parity(data_shards: usize, wanted: usize) -> Option<usize> {
     (wanted..=PARITY_SEARCH_LIMIT).find(|&parity| {
         <DefaultRate<DefaultEngine> as Rate<DefaultEngine>>::supports(data_shards, parity)
@@ -154,8 +154,8 @@ mod tests {
 
     #[test]
     fn parity_is_twenty_percent_rounded_up() {
-        assert_eq!(parity_for(36), 8); // v1 design §6.1: 1080p60 average frame
-        assert_eq!(parity_for(31), 7); // v1 design §6.1: 1080p120
+        assert_eq!(parity_for(36), 8); // 1080p60 average frame
+        assert_eq!(parity_for(31), 7); // 1080p120
         assert_eq!(parity_for(30), 6);
         assert_eq!(parity_for(45), 9);
         assert_eq!(parity_for(106), 22);
@@ -164,7 +164,7 @@ mod tests {
     #[test]
     fn parity_never_below_two() {
         // The floor is load-bearing: a static-scene P-frame can be a single
-        // packet, where 20% rounds to zero parity (v1 design §6.2).
+        // packet, where 20% rounds to zero parity.
         assert_eq!(parity_for(1), 2);
         assert_eq!(parity_for(2), 2);
         assert_eq!(parity_for(5), 2);
@@ -241,7 +241,7 @@ mod tests {
     #[test]
     fn large_frames_split_into_balanced_blocks() {
         // 340 shards (a 4K keyframe) exceeds one block; RS caps at 255 total
-        // shards and we cap data at 200 to leave parity headroom (v1 design §6.2).
+        // shards and we cap data at 200 to leave parity headroom.
         let blocks = block_sizes(340);
         assert_eq!(blocks.len(), 2);
         assert_eq!(blocks.iter().sum::<usize>(), 340);

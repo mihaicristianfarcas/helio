@@ -104,7 +104,7 @@ Moonlight + Sunshine: [docs/parity.md](docs/parity.md).
 ## Documentation
 
 Everything is in [docs/](docs/README.md): installing, using, the command
-line, how it works, each platform, benchmarks, and the design history.
+line, how it works, each platform, and benchmarks.
 
 ## Contributing
 

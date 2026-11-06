@@ -1,4 +1,4 @@
-//! Input events, carried in datagrams with `Kind::Input` (v2 design §4.3).
+//! Input events, carried in datagrams with `Kind::Input`.
 //!
 //! Pure: no winit, no Windows, no sockets. The client encodes the same bytes
 //! the host decodes, and every rule that can be wrong -- the sequence span, the
@@ -6,7 +6,7 @@
 //!
 //! A packet carries the last up-to-8 events, NOT just the new ones. No
 //! per-event sequence number is transmitted: the receiver derives the span from
-//! `frame_id - count + 1 ..= frame_id`, which is what makes §5.4's redundancy
+//! `frame_id - count + 1 ..= frame_id`, which is what makes that redundancy
 //! cost nothing.
 
 use std::time::Duration;
@@ -14,7 +14,7 @@ use std::time::Duration;
 use crate::header::{Header, Kind};
 use crate::HEADER_LEN;
 
-/// v2 design §4.3: `event_count` is 1..=8.
+/// `event_count` is 1..=8.
 pub const MAX_EVENTS_PER_PACKET: usize = 8;
 
 /// Header + count byte + 8 events at their largest encoding (5 bytes).
@@ -65,14 +65,14 @@ impl Button {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum InputEvent {
     /// PS/2 set-1 scancode. The E0 extended prefix is encoded in the high bit,
-    /// so right control is `0x801d`, not a two-byte sequence (v2 design §4.3).
+    /// so right control is `0x801d`, not a two-byte sequence.
     KeyDown(u16),
     KeyUp(u16),
     MouseMoveRel {
         dx: i16,
         dy: i16,
     },
-    /// Stream pixels, already transformed by the client (v2 design §5.2).
+    /// Stream pixels, already transformed by the client.
     MouseMoveAbs {
         x: u16,
         y: u16,
@@ -243,10 +243,10 @@ fn decode_event(body: &[u8]) -> Option<(InputEvent, usize)> {
 }
 
 /// Which client process a packet came from, carried in the header's
-/// `fragment_idx` (v2 design §4.3).
+/// `fragment_idx`.
 ///
 /// **Why the sequence number alone is not enough.** `SequenceGate` keeps a
-/// watermark and discards anything not newer, which is what makes the §5.4
+/// watermark and discards anything not newer, which is what makes the trailing
 /// retransmits idempotent. A client that restarts begins counting from 0 again,
 /// so every packet it sends is "older" than the watermark left by the previous
 /// one -- and the host discards ALL of it, silently, until the new client has
@@ -304,7 +304,7 @@ pub fn encode(
 ) -> usize {
     assert!(
         !events.is_empty() && events.len() <= MAX_EVENTS_PER_PACKET,
-        "event_count must be 1..=8 (v2 design §4.3)"
+        "event_count must be 1..=8"
     );
 
     let mut n = HEADER_LEN;
@@ -321,10 +321,10 @@ pub fn encode(
         frame_end: true,
         kind: Kind::Input,
         total_len: n as u16,
-        // v2 design §4.3: for kind=2 this field is not a fragment index -- input is
+        // For kind=2 this field is not a fragment index -- input is
         // never fragmented -- it is the sending client's [`Generation`].
         fragment_idx: generation,
-        // v2 design §4: the remaining FEC fields are meaningless for input and are
+        // The remaining FEC fields are meaningless for input and are
         // zeroed. data_shards is 1 rather than 0 to match control.rs, where a
         // zero-shard header would be a malformed video header if misrouted.
         data_shards: 1,
@@ -379,7 +379,7 @@ pub fn decode(body: &[u8], newest_seq: u32, generation: Generation) -> Option<In
 ///
 /// Pure, so it lives here rather than in the client -- and so its behaviour is
 /// tested with no winit and no socket. Every packet carries the WHOLE ring, not
-/// just what is new, which is what makes v2 design §5.4's redundancy free.
+/// just what is new, which is what makes the redundancy free.
 pub struct InputRing {
     events: [InputEvent; MAX_EVENTS_PER_PACKET],
     len: usize,
@@ -441,8 +441,8 @@ impl InputRing {
         }
     }
 
-    /// Encode the whole ring. `None` when nothing has been pushed yet -- spec
-    /// §4.3's `event_count` is 1..=8, so a zero-event packet is not valid, and
+    /// Encode the whole ring. `None` when nothing has been pushed yet --
+    /// `event_count` is 1..=8, so a zero-event packet is not valid, and
     /// the trailing repeat must not fire before any input exists.
     pub fn encode_into(&self, capture_ts_us: u32, out: &mut [u8; MAX_INPUT_LEN]) -> Option<usize> {
         if self.len == 0 {
@@ -460,7 +460,7 @@ impl InputRing {
 
 /// Drops input the receiver has already applied.
 ///
-/// This is what makes unreliable input safe (v2 design §5.4). Duplicates and
+/// This is what makes unreliable input safe. Duplicates and
 /// reorders are idempotent BY CONSTRUCTION -- including relative deltas, which
 /// would otherwise be applied once per retransmitted copy and send the camera
 /// spinning. It is also why the client's trailing repeat needs no host-side
@@ -475,7 +475,7 @@ pub struct SequenceGate {
     generation: Option<Generation>,
 }
 
-/// Wrap-aware "is `a` newer than `b`", per v1 design §5.1. u32 at ~1000 events/s takes
+/// Wrap-aware "is `a` newer than `b`". u32 at ~1000 events/s takes
 /// 49 days to wrap, but the rule is not conditional on it being likely.
 fn newer_than(a: u32, b: u32) -> bool {
     (a.wrapping_sub(b) as i32) > 0
@@ -528,7 +528,7 @@ impl SequenceGate {
 /// future non-winit client reuses this table rather than reimplementing it.
 ///
 /// Only keys with a real set-1 scancode appear here. A key winit can emit that
-/// this enum has no variant for is one v2 design §5.1 deliberately drops, and that
+/// this enum has no variant for is one deliberately dropped, and that
 /// decision belongs at the client boundary, not in this table.
 #[rustfmt::skip]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -596,10 +596,10 @@ impl Key {
     ];
 }
 
-/// v2 design §4.3: the E0 extended prefix rides in the high bit.
+/// The E0 extended prefix rides in the high bit.
 const E0: u16 = 0x8000;
 
-/// [`Key`] -> PS/2 set-1 make code, positionally (v2 design E4, §5.1).
+/// [`Key`] -> PS/2 set-1 make code, positionally.
 ///
 /// **Total.** Every variant has a code; there is no `Option` and no fallback.
 /// Keys with no set-1 representation simply have no `Key` variant, so the
@@ -722,13 +722,13 @@ pub fn scancode(key: Key) -> u16 {
     }
 }
 
-/// v2 design §5.3, matching Moonlight's `MOUSE_BATCHING_INTERVAL_MS 1`.
+/// Matching Moonlight's `MOUSE_BATCHING_INTERVAL_MS 1`.
 pub const BATCH_WINDOW: Duration = Duration::from_millis(1);
 
-/// v2 design §5.4: eight trailing copies after the queue drains.
+/// Eight trailing copies after the queue drains.
 pub const REPEAT_COUNT: usize = 8;
 
-/// Accumulates relative motion over the ≤1ms batching window (v2 design §5.3).
+/// Accumulates relative motion over the ≤1ms batching window.
 ///
 /// Two rules, both of which have bitten other implementations:
 ///
@@ -780,7 +780,7 @@ impl MotionBatcher {
     }
 }
 
-/// The exponential-backoff trailing repeat of v2 design §5.4.
+/// The exponential-backoff trailing repeat.
 ///
 /// A pure iterator over inter-send gaps: 1, 2, 4, 8, 16, 32, 64, 128 ms, so the
 /// last copy leaves 255ms after the original. Driven by whatever calls it,
@@ -854,15 +854,9 @@ mod tests {
 
         let header = Header::decode(&wire[..n]).expect("decodes");
         assert_eq!(header.kind, Kind::Input);
-        assert_eq!(
-            header.total_len as usize, n,
-            "total_len must be exact (v1 design §5.1)"
-        );
+        assert_eq!(header.total_len as usize, n, "total_len must be exact");
         assert_eq!(header.capture_ts_us, 12_345);
-        assert_eq!(
-            header.frame_id, 41,
-            "frame_id is the NEWEST event's seq (v2 design §4.1)"
-        );
+        assert_eq!(header.frame_id, 41, "frame_id is the NEWEST event's seq");
 
         let batch =
             decode(&wire[HEADER_LEN..n], header.frame_id, header.fragment_idx).expect("decodes");
@@ -902,7 +896,7 @@ mod tests {
 
     #[test]
     fn hostile_bodies_return_none_rather_than_panicking() {
-        // This parses anything that reaches the tunnel (v2 design §10.1).
+        // This parses anything that reaches the tunnel.
         assert_eq!(decode(&[], 0, 0), None);
         assert_eq!(
             decode(&[0], 0, 0),
@@ -952,7 +946,7 @@ mod tests {
 
     #[test]
     fn an_empty_ring_encodes_nothing() {
-        // v2 design §4.3: event_count is 1..=8. A zero-event packet is not valid,
+        // event_count is 1..=8. A zero-event packet is not valid,
         // and the trailing repeat must not fire before any input exists.
         let ring = InputRing::new();
         let mut out = [0u8; MAX_INPUT_LEN];
@@ -1015,7 +1009,7 @@ mod tests {
 
     #[test]
     fn extended_keys_carry_the_e0_bit() {
-        // v2 design §4.3: E0 rides in the high bit rather than as a second byte.
+        // E0 rides in the high bit rather than as a second byte.
         assert_eq!(scancode(Key::ControlRight), 0x801d);
         assert_eq!(scancode(Key::AltRight), 0x8038);
         assert_eq!(scancode(Key::ArrowUp), 0x8048);
@@ -1090,7 +1084,7 @@ mod tests {
 
     #[test]
     fn a_duplicate_packet_admits_nothing() {
-        // The trailing repeat (v2 design §5.4) sends the SAME packet up to eight
+        // The trailing repeat sends the SAME packet up to eight
         // more times. If this admitted anything, every held key would be
         // re-pressed and every relative delta applied nine times.
         let mut gate = SequenceGate::new();
@@ -1159,7 +1153,7 @@ mod tests {
 
     #[test]
     fn the_new_generation_is_still_gated_against_itself() {
-        // Rebasing must not disarm the gate: the §5.4 retransmits from the NEW
+        // Rebasing must not disarm the gate: the trailing retransmits from the NEW
         // client have to stay idempotent, or its first eight events replay on
         // every copy.
         let mut gate = SequenceGate::new();
@@ -1239,7 +1233,7 @@ mod tests {
 
     #[test]
     fn comparison_is_wrap_aware() {
-        // v1 design §5.1 makes this mandatory on frame_id. A naive `>` would treat
+        // This is mandatory on frame_id. A naive `>` would treat
         // every packet after the wrap as ancient and freeze input forever.
         let mut gate = SequenceGate::new();
         gate.admit(&batch(&[InputEvent::KeyDown(0x11)], u32::MAX - 1));
@@ -1254,7 +1248,7 @@ mod tests {
 
     #[test]
     fn motion_accumulates_into_one_event() {
-        // v2 design §5.3: batching is applied to motion only, summing deltas.
+        // Batching is applied to motion only, summing deltas.
         let mut b = MotionBatcher::new();
         b.accumulate(3.0, -1.0);
         b.accumulate(4.0, -2.0);
@@ -1266,7 +1260,7 @@ mod tests {
 
     #[test]
     fn the_batcher_splits_rather_than_saturating() {
-        // v2 design §5.3 (checked against Moonlight's source): it splits when
+        // Checked against Moonlight's source: it splits when
         // accumulated deltas exceed INT16.
         // Saturating would silently clamp a fast flick -- the camera stops
         // short and the player has no idea why.
@@ -1287,7 +1281,7 @@ mod tests {
 
     #[test]
     fn sub_pixel_motion_is_carried_not_truncated() {
-        // winit's DeviceEvent::MouseMotion deltas are f64 (v2 design §4.3). A slow
+        // winit's DeviceEvent::MouseMotion deltas are f64. A slow
         // drag of 0.4px per event truncates to 0 every time, and the cursor
         // never moves at all. The residue must carry.
         let mut b = MotionBatcher::new();
@@ -1316,7 +1310,7 @@ mod tests {
 
     #[test]
     fn the_repeat_schedule_is_exponential_and_finite() {
-        // v2 design §5.4: 1, 2, 4, 8, 16, 32, 64, 128 ms as INTER-SEND gaps, so the
+        // 1, 2, 4, 8, 16, 32, 64, 128 ms as INTER-SEND gaps, so the
         // last copy leaves 255ms after the original. The backoff is the
         // load-bearing part: eight copies packed into 8ms all fit inside one
         // Wi-Fi loss burst; the same eight spread over 255ms do not.
@@ -1333,7 +1327,7 @@ mod tests {
     #[test]
     fn resetting_rearms_the_schedule() {
         // Any new event cancels the schedule, since the fresh packet carries
-        // the same ring (v2 design §5.4).
+        // the same ring.
         let mut s = RepeatSchedule::new();
         s.next_delay();
         s.next_delay();

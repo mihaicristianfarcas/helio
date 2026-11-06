@@ -1,4 +1,4 @@
-//! Per-stage latency attribution (v1 design §12.1).
+//! Per-stage latency attribution.
 //!
 //! Telemetry is not optional: an end-to-end latency figure without per-stage
 //! attribution cannot be acted on. Report p50/p95/p99, never means alone --
