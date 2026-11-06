@@ -12,7 +12,8 @@
 #                                                             runs the installer, helio-update/src/install/windows.rs)
 #
 # The files: Helio.exe beside FFmpeg's DLLs (avcodec, avutil, swresample)
-# and FFmpeg's license, helio-host.exe, bin\helio.exe, and drivers\: the
+# and FFmpeg's license, THIRD-PARTY-NOTICES.txt (the crates' licenses),
+# helio-host.exe, bin\helio.exe, and drivers\: the
 # ViGEmBus installer that turning hosting on runs, and the drivers'
 # notices (tools\windows\drivers.ps1). helio-host.exe
 # sits beside Helio.exe, where the app's hosting switch finds it; turning
@@ -62,6 +63,29 @@ $cargoProfile = if ($env:HELIO_PROFILE) { $env:HELIO_PROFILE } else { 'release' 
 $name = "Helio-$version-windows-x86_64"
 $dist = Join-Path $repo 'target\dist'
 
+# THIRD-PARTY-NOTICES.txt beside the programs: the command in
+# tools/third-party-notices, which says why. Not through it: the bash on a
+# Windows machine's PATH can be WSL's.
+function Add-Notices([string]$stage) {
+    $about = (Get-Content (Join-Path $repo 'tools\notices\cargo-about.version')).Trim()
+    Push-Location $repo
+    try {
+        $ErrorActionPreference = 'Continue'
+        $have = cargo about --version 2>$null | Select-Object -First 1
+        if ($have -ne "cargo-about $about") {
+            throw "The packages need cargo-about ${about}: cargo install --locked cargo-about --version $about --features cli"
+        }
+        $target = (rustc -vV | Select-String '^host: (.+)$').Matches[0].Groups[1].Value
+        cargo about generate --manifest-path Cargo.toml --workspace --locked --fail `
+            -c tools\notices\about.toml --target $target tools\notices\notices.hbs `
+            -o (Join-Path $stage 'THIRD-PARTY-NOTICES.txt')
+        $ErrorActionPreference = 'Stop'
+        if ($LASTEXITCODE -ne 0) { throw "cargo about failed ($LASTEXITCODE)" }
+    } finally {
+        Pop-Location
+    }
+}
+
 # Build, and put the files where the packages are made from: $stage.
 function Build([string]$stage) {
     if (-not $FFmpeg) { throw 'Pass -FFmpeg DIR or set FFMPEG_DIR: an FFmpeg 8 shared build (include\, lib\, bin\).' }
@@ -105,6 +129,7 @@ function Build([string]$stage) {
     if (-not (Test-Path $license)) { throw "There is no LICENSE.txt in $FFmpeg, and FFmpeg's DLLs go only with it." }
     Copy-Item $license (Join-Path $stage 'FFmpeg LICENSE.txt')
     Add-Drivers $repo $stage
+    Add-Notices $stage
 }
 
 function Ssign {
@@ -195,6 +220,9 @@ if ($From) {
         Write-Output "staged $stage"
         return
     }
+}
+if (-not (Test-Path (Join-Path $stage 'THIRD-PARTY-NOTICES.txt'))) {
+    throw "$stage holds no THIRD-PARTY-NOTICES.txt: the crates' licenses go with every copy."
 }
 if ($ssign) { Sign-Files $ssign $stage }
 Package $stage $ssign

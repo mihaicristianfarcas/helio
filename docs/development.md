@@ -195,9 +195,13 @@ yet, `.github/workflows/release.yml` builds the app, with the host's engine
 inside it, on an Apple silicon and an Intel Mac, on Windows and on Linux:
 one archive for each system and architecture, and Windows' installer. Once
 they are signed, the same files become the website's downloads, then the
-GitHub release `vVERSION`, and the workflow opens a pull request that brings
-the Homebrew cask, `Casks/helio.rb`, to it (`tools/update-casks`); `brew
-upgrade` sees the release once that is merged. GitHub holds CI on a pull
+GitHub release `vVERSION`, whose text is `.github/release-notes/VERSION.md`,
+and the workflow opens a pull request that brings the Homebrew cask,
+`Casks/helio.rb`, to it (`tools/update-casks`); `brew upgrade` sees the release
+once that is merged. The notes are written by hand and come with the change
+that sets the version: CI fails that pull request without them, and the
+workflow's first job stops without them. They are shown on GitHub, so their
+links are full addresses. GitHub holds CI on a pull
 request a workflow opened until it is approved: the workflow approves it, or
 says on the pull request that it needs approving by hand.
 
@@ -222,6 +226,7 @@ when it needs to be and never merged into it.
 | `tools/package-windows.ps1` | `Helio-VERSION-windows-x86_64-setup.exe`, the installer (`tools/windows/helio.iss`, Inno Setup 6.6 or newer): per user, no administrator, Helio in the Start menu and Settings > Apps, whose **Uninstall** turns hosting off first and takes `bin` off the user's `PATH` if Settings > General put it there; Helio's own update runs it again, silently. And `Helio-VERSION-windows-x86_64.zip`, the same files, unpacked: Helio.exe beside FFmpeg's DLLs and license and the host's engine, `helio-host.exe`; `bin\helio.exe`, the `helio` command (helio-app's `helio-console`, which runs `Helio.exe cli`). `-Sign` signs them all (below) |
 | `tools/windows/test-install.ps1 -Setup FILE` | Not a package: installs the installer silently, turns hosting on, installs again (as a person does, then as Helio's update does, `/HELIOUPDATE`, which leaves the host's engine alone), uninstalls, and checks each step and that nothing is left; `-Signed` also verifies every signature, and `-UnsignedEngine` that the engine refuses an unsigned and a changed copy. As an administrator, for a user without Helio. CI runs it on each pull request, the release workflow on each package |
 | `tools/linux/package` | `Helio-VERSION-linux-ARCH.tar.gz`: a folder with `helio-app`, `helio-host`, the host's unit `helio-host.service`, the launcher entry, its icon and `install.sh` (`tools/linux/install-release`; its `--uninstall` also removes the `~/.local/bin/helio` link Settings > General makes) |
+| `tools/third-party-notices OUT [TARGET]` | `THIRD-PARTY-NOTICES.txt`, which every package holds: each crate built into the programs for that target, with the text of the license it is used under. The three scripts above run it (`tools/package-windows.ps1` runs its command itself), and `--from` and `-From` refuse a build without the file. It needs cargo-about at the version in `tools/notices/cargo-about.version`: `cargo install --locked cargo-about --version VERSION --features cli`. `tools/notices/about.toml` lists the licenses accepted, in the order of choice for a crate that offers several; one it does not list fails the run, so read that license before adding it |
 | `tools/publish-downloads DIST` | The downloads: each archive at `https://download.helio.mihaicristian.dev/latest/Helio-OS-ARCH.EXT`, then `latest/SHA256SUMS` and `latest.json` (version, commit, sizes, checksums), in the Cloudflare R2 bucket `helio-downloads`, with the wrangler `tools/wrangler` locks (`npm ci`, no install scripts); last, the archives the previous `latest.json` listed and this one does not are deleted |
 
 All of them build with `HELIO_RELEASE=1`, so the programs follow

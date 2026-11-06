@@ -11,7 +11,8 @@
 # host's engine (helio-host) and its user unit (helio-host.service, installed but not
 # enabled: hosting is off until the app's switch turns it on), the launcher
 # entry and its icon, the host's hidden entry (for KDE's virtual display),
-# and install.sh (tools/linux/install-release). ARCH is
+# THIRD-PARTY-NOTICES.txt (tools/third-party-notices) and install.sh
+# (tools/linux/install-release). ARCH is
 # this machine's (x86_64, aarch64); VERSION the workspace's. The programs
 # link the system's libraries (FFmpeg, PipeWire, ...) as this machine has
 # them: built on Ubuntu 24.04, they run on it and on distributions built on
@@ -56,6 +57,7 @@ done
 # The launcher entry's icon at the icon theme's sizes (helio-app/assets/hicolor,
 # drawn by helio-app/examples/make-icon.rs).
 cp -R "$REPO/helio-app/assets/hicolor" "$STAGE/$NAME/"
+"$REPO/tools/third-party-notices" "$STAGE/$NAME/THIRD-PARTY-NOTICES.txt"
 # Unpacked as whoever unpacks it, not as the build's user.
 rm -f "$DIST"/*-linux-"$ARCH".tar.gz
 tar -C "$STAGE" --owner=0 --group=0 --numeric-owner -czf "$DIST/$NAME.tar.gz" "$NAME"

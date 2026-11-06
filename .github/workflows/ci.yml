@@ -37,6 +37,15 @@ jobs:
       - name: Rust
         run: rustup toolchain install stable --profile minimal --component rustfmt && rustup default stable
       - run: cargo fmt --all -- --check
+      # A version with no tag yet is released by merging it, and its release
+      # has these notes for its text: said here, not after the merge, when
+      # release.yml's first job would stop for the same reason.
+      - name: Release notes
+        run: |
+          version=$(sed -n '/^\[workspace.package\]/,/^\[/ s/^version = "\(.*\)"/\1/p' Cargo.toml)
+          git ls-remote --exit-code --tags origin "refs/tags/v$version" >/dev/null && exit 0
+          [ -f ".github/release-notes/$version.md" ] ||
+            { echo "::error::v$version has no release notes: .github/release-notes/$version.md"; exit 1; }
 
   # Cargo.lock against the RustSec advisory database, fetched fresh on each
   # run. Some dependencies parse what anyone on the internet sends and no
@@ -66,6 +75,9 @@ jobs:
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace --no-fail-fast
+      # tools/third-party-notices needs it; one version, in that file.
+      - name: cargo-about
+        run: cargo install --locked cargo-about --version "$(cat tools/notices/cargo-about.version)" --features cli
       # Helio.app with Helio Host.app inside, signed ad hoc, inside out;
       # built, then archived from the staged zip, as the release does it on
       # two runners.
@@ -102,6 +114,9 @@ jobs:
           key: ${{ env.FFMPEG_BUILD }}
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace --no-fail-fast
+      # tools/third-party-notices needs it; one version, in that file.
+      - name: cargo-about
+        run: cargo install --locked cargo-about --version "$(cat tools/notices/cargo-about.version)" --features cli
       - name: The app, packaged
         shell: pwsh
         run: ./tools/package-windows.ps1
@@ -156,6 +171,9 @@ jobs:
       # out of memory.
       - run: cargo test --workspace --exclude helio-host -j 2 --no-fail-fast
       - run: cargo test -p helio-host --no-fail-fast
+      # tools/third-party-notices needs it; one version, in that file.
+      - name: cargo-about
+        run: cargo install --locked cargo-about --version "$(cat tools/notices/cargo-about.version)" --features cli
       - name: The app, packaged
         run: tools/linux/package
         env:

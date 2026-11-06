@@ -1,14 +1,15 @@
 # How it's built and verified
 
 What stands behind Helio, and what does not, so you can decide how far to
-trust it. The figures here were taken at commit `c2e75ab` on 2026-10-30.
+trust it. The counts of commits, pull requests and tests here were taken at
+commit `7a9d108` on 2026-11-05.
 
 ## Built with AI coding agents
 
 Helio is written with AI coding agents, under the rules in
 [AGENTS.md](../AGENTS.md): how code, comments, documentation and commits are
 written, what has to be measured, what has to stay private. The history
-shows it: all 162 commits on `main` that no bot made carry a
+shows it: all 291 commits on `main` that no bot made, merges aside, carry a
 `Co-Authored-By` line naming Claude.
 
 ## How changes are reviewed
@@ -21,7 +22,7 @@ GitHub enforces the pull request and four of the CI checks below
 conversations resolved, so `main`'s history is linear, and `main` takes no
 force push or deletion. GitHub does not enforce the review: branch
 protection asks for no approvals, and the reviews happen outside GitHub, so
-none of the 51 pull requests shows one.
+none of the 73 merged pull requests shows one.
 
 The rest of what protects a release:
 
@@ -46,9 +47,9 @@ CI runs on every pull request and on `main` after each merge
 
 | Check | Runner | What it does |
 |---|---|---|
-| Formatting | `ubuntu-latest` | `cargo fmt --all -- --check` |
+| Formatting | `ubuntu-latest` | `cargo fmt --all -- --check`, and that a version with no tag yet has its release notes |
 | Advisories | `ubuntu-latest` | `cargo audit` (cargo-audit 0.22.2, installed with `--locked`): `Cargo.lock` against the [RustSec](https://rustsec.org) advisory database as it stands that day. A known vulnerability fails it; unmaintained, unsound and yanked crates are listed, not failed |
-| macOS | `macos-15`, Apple silicon | clippy with warnings as errors, the tests, and the app packaged with the host and `helio` inside it |
+| macOS | `macos-15`, Apple silicon | clippy with warnings as errors, the tests, and the app packaged with the host, `helio` and the crates' licenses inside it. A dependency under a license `tools/notices/about.toml` does not list stops the packaging |
 | Windows | `windows-latest`, x64 | The same, and the installer run for real: install, turn hosting on, install again, uninstall, each step checked. The drivers must be as they were afterwards; a driver the runner refuses is reported in the log, not a failure |
 | Linux | `ubuntu-24.04`, x86_64 | The same as macOS, the host's crate on its own, and the fuzz targets built |
 
@@ -60,14 +61,14 @@ version, it does all of that and publishes nothing.
 
 ### The tests
 
-The workspace has 615 test functions, and each system runs the ones that
+The workspace has 794 test functions, and each system runs the ones that
 apply to it:
 
 | System | Passed | Ignored | Failed |
 |---|---|---|---|
-| macOS | 519, 4 of them doc tests | 2 | 0 |
-| Windows | 556 | 6 | 0 |
-| Linux | 503 | 3 | 0 |
+| macOS | 680 | 2 | 0 |
+| Windows | 718 | 6 | 0 |
+| Linux | 674 | 3 | 0 |
 
 To count them:
 
@@ -108,8 +109,9 @@ checks say nothing about them:
 
 The parsers that read the stream's network input first have
 [cargo-fuzz](https://github.com/rust-fuzz/cargo-fuzz) targets, in
-`helio-proto/fuzz`. Each ran for two minutes without a crash, on an Apple
-silicon Mac with rustc 1.99.0 and no sanitizer (`cargo fuzz run -s none`):
+`helio-proto/fuzz`. Each ran for two minutes without a crash, at commit
+`c2e75ab` on 2026-10-30, on an Apple silicon Mac with rustc 1.99.0 and no
+sanitizer (`cargo fuzz run -s none`):
 
 | Target | Parser | Runs |
 |---|---|---|

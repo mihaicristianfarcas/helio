@@ -8,6 +8,8 @@
 # download.helio.mihaicristian.dev; the website is on the landing-page branch)
 # and as the GitHub release vVERSION, and a pull request brings the Homebrew
 # cask (Casks/helio.rb) to it (main takes changes only through pull requests).
+# The release's text is .github/release-notes/VERSION.md, which the change
+# that sets the version brings (ci.yml checks it on the pull request).
 # So releasing a version is merging the change that sets it, and no other
 # push publishes anything: the website serves released versions only, one file
 # per system for as long as a version lasts, which is how a file gathers
@@ -98,7 +100,15 @@ jobs:
           git ls-remote --exit-code --tags origin "refs/tags/v$version" >/dev/null && code=0 || code=$?
           case $code in
             0) echo "v$version is released already: nothing to publish" ;;
-            2) echo "new=true" >> "$GITHUB_OUTPUT" ;;
+            2)
+              # Written by hand, for whoever reads the release; before any
+              # build runs, not after everything is signed.
+              if [ ! -f ".github/release-notes/$version.md" ]; then
+                echo "::error::v$version has no release notes: .github/release-notes/$version.md"
+                exit 1
+              fi
+              echo "new=true" >> "$GITHUB_OUTPUT"
+              ;;
             *) echo "::error::could not ask whether the tag v$version exists (git exit code $code)"; exit 1 ;;
           esac
 
@@ -127,6 +137,9 @@ jobs:
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           key: release
+      # tools/third-party-notices needs it; one version, in that file.
+      - name: cargo-about
+        run: cargo install --locked cargo-about --version "$(cat tools/notices/cargo-about.version)" --features cli
       - name: Build
         run: tools/package-macos --stage-only
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -245,6 +258,9 @@ jobs:
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           key: release-${{ env.FFMPEG_BUILD }}
+      # tools/third-party-notices needs it; one version, in that file.
+      - name: cargo-about
+        run: cargo install --locked cargo-about --version "$(cat tools/notices/cargo-about.version)" --features cli
       # On main, with the publisher set, the engine refuses to turn hosting
       # on with a copy not signed by it (the next job signs it so).
       - name: Build
@@ -403,6 +419,9 @@ jobs:
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           key: release
+      # tools/third-party-notices needs it; one version, in that file.
+      - name: cargo-about
+        run: cargo install --locked cargo-about --version "$(cat tools/notices/cargo-about.version)" --features cli
       - name: Build and package
         run: tools/linux/package
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -513,7 +532,7 @@ jobs:
         run: |
           gh release view "v$VERSION" >/dev/null 2>&1 ||
             gh release create "v$VERSION" dist/* --target "$GITHUB_SHA" \
-              --title "Helio $VERSION" --generate-notes
+              --title "Helio $VERSION" --notes-file ".github/release-notes/$VERSION.md"
       - name: The cask, at the new version, as a pull request
         env:
           GH_TOKEN: ${{ github.token }}
