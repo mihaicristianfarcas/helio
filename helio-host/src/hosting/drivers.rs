@@ -66,15 +66,11 @@ const START_WAIT: Duration = Duration::from_secs(10);
 #[derive(Debug, Default, Serialize, Deserialize)]
 struct Installed {
     /// SudoVDA's root device, made here.
-    #[serde(default)]
     sudovda_device: bool,
     /// The driver package as Windows' driver store named it (`oem42.inf`).
-    #[serde(default)]
     sudovda_package: Option<String>,
     /// The stores its certificate was added to (`Root`, `TrustedPublisher`).
-    #[serde(default)]
     sudovda_stores: Vec<String>,
-    #[serde(default)]
     vigembus: bool,
 }
 
