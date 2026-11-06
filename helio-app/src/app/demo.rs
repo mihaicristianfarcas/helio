@@ -185,7 +185,7 @@ impl HelioApp {
             }
             if action == "update" {
                 self.updates.pretend(Some(helio_update::Update::Release {
-                    version: "0.7.0".into(),
+                    version: "1.1.0".into(),
                     url: format!("{}/releases", helio_update::REPOSITORY),
                 }));
             } else if action == "update-main" {

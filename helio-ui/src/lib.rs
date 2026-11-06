@@ -165,7 +165,7 @@ pub fn shows_version() -> bool {
     std::env::var_os("HELIO_UI_DEMO").is_none()
 }
 
-/// How the window names a program: "Helio 0.9.7", or the bare name where
+/// How the window names a program: "Helio 1.0.0", or the bare name where
 /// [`shows_version`] says not to.
 pub fn name_with_version(name: &str, version: &str) -> String {
     named(name, version, shows_version())
