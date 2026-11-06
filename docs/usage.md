@@ -114,8 +114,9 @@ Windows and Linux) opens them.
 | | Swap mouse buttons | The left button clicks right on the host, and the right one left (Moonlight's option) |
 | | Reverse scrolling | The wheel and the trackpad scroll the host the other way (Moonlight's option) |
 
-Settings are kept in `settings.toml` in Helio's data folder, beside the paired
-hosts (`hosts.toml`) and this device's keys:
+Settings are kept in `settings.toml` in Helio's data folder, where one left out
+takes its default, beside the paired hosts (`hosts.toml`) and this device's
+keys:
 
 | System | Helio's data folder |
 |---|---|
@@ -227,8 +228,9 @@ computer that only plays shows none of them.
 The host reads its name, its ports and the two NVIDIA settings only when it
 starts, so changing one restarts it: at once, or when the stream that runs
 ends. Helio's settings pages say which.
-Helio Host's data folder holds `config.toml`, its identity, the paired clients,
-its API's certificate and token, and `logs/`:
+Helio Host's data folder holds `config.toml`, where a setting left out takes its
+default, its identity, the paired clients, its API's certificate and token, and
+`logs/`:
 
 | System | Helio Host's data folder |
 |---|---|
