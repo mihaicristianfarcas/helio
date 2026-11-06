@@ -1,7 +1,6 @@
 //! The 20-byte Helio header. It IS the inner IPv4 header: only three of
 //! its twenty bytes are validated by boringtun on receive, so the rest carry
-//! Helio data at zero overhead. See v1 design §5 for the full layout table and
-//! §4.1 for the exact constraints.
+//! Helio data at zero overhead.
 //!
 //! THIS IS THE ONLY FILE THAT KNOWS BYTE OFFSETS. Do not lay out header bytes
 //! anywhere else.
@@ -56,14 +55,14 @@ pub struct Header {
     pub frame_end: bool,
     pub kind: Kind,
     /// Header + payload length of THIS datagram. Must be exact: boringtun
-    /// returns only `packet[..total_len]` to us (v1 design §5.1).
+    /// returns only `packet[..total_len]` to us.
     pub total_len: u16,
     pub fragment_idx: u16,
     pub data_shards: u8,
     pub parity_shards: u8,
     pub fec_block_idx: u8,
     /// True payload length of the whole frame. Required because Reed-Solomon
-    /// pads the final shard (v1 design §5.1, §6.3). Max 2^24 - 1.
+    /// pads the final shard. Max 2^24 - 1.
     pub frame_len: u32,
     pub capture_ts_us: u32,
     pub frame_id: u32,
@@ -196,11 +195,7 @@ mod tests {
         // boringtun's validate_decapsulated_packet requires packet[0] >> 4 == 4.
         let mut buf = [0u8; HEADER_LEN];
         sample().encode(&mut buf).unwrap();
-        assert_eq!(
-            buf[0] >> 4,
-            4,
-            "inner packet must look like IPv4 (v1 design §4.1)"
-        );
+        assert_eq!(buf[0] >> 4, 4, "inner packet must look like IPv4");
         assert_eq!(buf[0], 0x45);
     }
 

@@ -40,7 +40,7 @@ proptest! {
     }
 
     /// Decode must never panic on arbitrary bytes -- it parses hostile
-    /// network input (v1 design §13.1).
+    /// network input.
     #[test]
     fn decode_never_panics(bytes in prop::collection::vec(any::<u8>(), 0..2000)) {
         let _ = Header::decode(&bytes);

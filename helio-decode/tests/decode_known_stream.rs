@@ -1,11 +1,15 @@
 //! Decode a real H.264 elementary stream end to end.
 //!
-//! The fixture is the stream the VideoToolbox latency spike measured against
-//! (`spikes/vt-latency`): 600 frames of 1920x1080, no B-frames, one IDR then
-//! 599 P-frames -- the same shape the host's encoders produce, so what passes
-//! here is what the client will be fed.
+//! The fixture is 600 frames of 1920x1080, no B-frames, one IDR then 599
+//! P-frames -- the same shape the host's encoders produce, so what passes
+//! here is what the client will be fed. To regenerate it:
 //!
-//! Regenerate it with the ffmpeg command in `spikes/vt-latency/README.md`.
+//! ```text
+//! ffmpeg -f lavfi -i testsrc=size=1920x1080:rate=60 -t 10 \
+//!   -c:v libx264 -preset ultrafast -tune zerolatency \
+//!   -bf 0 -g 9999 -x264-params "sliced-threads=0" \
+//!   -f h264 testsrc.h264
+//! ```
 
 #![cfg(target_os = "macos")]
 
@@ -91,7 +95,7 @@ fn decodes_every_frame_of_a_known_stream() {
 
         // Wait for this frame's callback before submitting the next. That is
         // both what keeps the run inside the ready queue's bound of 2, and an
-        // assertion in its own right: the spike measured one callback per submit,
+        // assertion in its own right: VideoToolbox gives one callback per submit,
         // and if that ever stops holding this test hangs to the deadline rather
         // than silently passing on a decoder that has started buffering.
         let deadline = Instant::now() + Duration::from_secs(5);

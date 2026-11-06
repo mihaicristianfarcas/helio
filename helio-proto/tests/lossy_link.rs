@@ -1,4 +1,4 @@
-//! Property tests over a simulated lossy link (v1 design §13.1).
+//! Property tests over a simulated lossy link.
 //!
 //! THE invariant: a frame either reconstructs byte-exactly, or is not
 //! reported. Never silently corrupt.

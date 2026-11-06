@@ -1,13 +1,10 @@
-//! Input injection on the host (v2 design §5).
+//! Input injection on the host.
 //!
 //! A platform-free trait, [`InputSink`], with one implementation per host
 //! platform: `SendInput` on Windows, CoreGraphics events on macOS, XTest on
 //! Linux under X11 (Wayland injects through the desktop portal, in `helio-host`).
 //! Display control (`helio-display`) has the same shape: both are seams
 //! where host platforms differ, so the session code above them is portable.
-//!
-//! Section references in this crate (`v2 design §5.4`) are to the original
-//! design documents in `docs/design/`.
 
 use helio_proto::input::{Button, InputEvent};
 
@@ -73,8 +70,8 @@ pub trait InputSink {
     fn inject(&mut self, events: &[InputEvent]) -> Result<(), InputError>;
 
     /// Release everything currently held. The backstop for input redundancy
-    /// (v2 design §5.4) and the answer to "the client dies holding a key"
-    /// (v2 design §9) -- called on every teardown.
+    /// and the answer to "the client dies holding a key": called on every
+    /// teardown.
     fn release_all(&mut self) -> Result<(), InputError>;
 
     /// When input last went out on the sink's own time, after `inject`

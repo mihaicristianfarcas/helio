@@ -1,5 +1,4 @@
-//! Hardware video decoding behind a platform-neutral trait (v1 design §9;
-//! the design documents are in `docs/design/`).
+//! Hardware video decoding behind a platform-neutral trait.
 //!
 //! VideoToolbox on macOS; on Windows, FFmpeg with D3D11VA (`d3d11va`), which
 //! hands out GPU textures rather than going through the trait; on Linux,

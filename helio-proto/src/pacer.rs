@@ -1,5 +1,4 @@
 //! Selects which captured frames to encode, given a target framerate.
-//! See v1 design §7.2 and §7.2.1.
 //!
 //! CRITICAL: capture delivery is present-driven, NOT clock-driven. A static
 //! desktop presents nothing and frames stop arriving entirely. This type is
@@ -50,7 +49,7 @@ impl Pacer {
     /// Should the frame captured at `now_us` be encoded?
     ///
     /// Uses wrapping arithmetic: `now_us` shares the `capture_ts_us` timebase,
-    /// which wraps every ~71.6 minutes (v1 design §5.1). Distances are compared as
+    /// which wraps every ~71.6 minutes. Distances are compared as
     /// `i32` after a wrapping subtraction, which is correct for any real gap
     /// under ~35 minutes and needs no special case at the wrap.
     pub fn should_encode(&mut self, now_us: u32) -> bool {
@@ -158,8 +157,8 @@ mod tests {
 
     #[test]
     fn sparse_arrival_always_encodes() {
-        // A static desktop presents nothing, so frames arrive far apart
-        // (v1 design §7.2.1). Every one must be encoded.
+        // A static desktop presents nothing, so frames arrive far apart.
+        // Every one must be encoded.
         let mut p = Pacer::new(60);
         assert!(p.should_encode(0));
         assert!(p.should_encode(5_000_000)); // 5 s later
@@ -187,7 +186,7 @@ mod tests {
 
     #[test]
     fn survives_timestamp_wrap() {
-        // capture_ts_us wraps every ~71.6 minutes (v1 design §5.1).
+        // capture_ts_us wraps every ~71.6 minutes.
         let mut p = Pacer::new(60);
         assert!(p.should_encode(u32::MAX - 1000));
         // Wrapped past the end: delta is 1000 + 15_667 via wrapping_sub.

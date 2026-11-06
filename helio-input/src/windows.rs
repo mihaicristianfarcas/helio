@@ -1,11 +1,10 @@
-//! `SendInput` injection (v2 design §5.1, §5.2).
+//! `SendInput` injection.
 //!
 //! Keys inject with `KEYEVENTF_SCANCODE`, so Windows derives the virtual key
 //! from the scancode using the HOST's active layout. For positional input --
 //! WASD, hotkeys, modifiers -- that is exactly right and is why games work.
 //! For text entry the character follows the host's layout, not the client's.
-//! v2 design §5.1 states that tradeoff and accepts it deliberately; it is not
-//! a bug.
+//! That tradeoff is deliberate; it is not a bug.
 //!
 //! A trackpad's scrolling arrives as a distance and goes out as wheel units
 //! (`scroll`), from the scaling of the display being streamed and the
@@ -87,7 +86,7 @@ impl VirtualDesktop {
     }
 }
 
-/// The E0 extended prefix rides in the scancode's high bit (v2 design §4.3).
+/// The E0 extended prefix rides in the scancode's high bit.
 const EXTENDED_BIT: u16 = 0x8000;
 
 pub struct SendInputSink {
@@ -155,12 +154,12 @@ impl SendInputSink {
             InputEvent::MouseMoveRel { dx, dy } => {
                 // Relative: no ABSOLUTE flag, so the delta is applied to the
                 // current position. This is the path games read as raw motion
-                // (v2 design §5.2) and it must never carry MOUSEEVENTF_ABSOLUTE.
+                // and it must never carry MOUSEEVENTF_ABSOLUTE.
                 out.push(mouse_input(dx as i32, dy as i32, MOUSEEVENTF_MOVE.0, 0));
             }
             InputEvent::MouseMoveAbs { x, y } => {
                 // Normalise stream pixels into the 0..=65535 space. The client
-                // has already done window -> stream (v2 design §5.2), so this is the
+                // has already done window -> stream, so this is the
                 // only transform the host performs.
                 //
                 // VIRTUALDESK below means Windows reads this pair across every

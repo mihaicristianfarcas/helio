@@ -1,4 +1,4 @@
-//! Datagrams -> frames, with Reed-Solomon recovery. See v1 design §5, §6.3, §13.1.
+//! Datagrams -> frames, with Reed-Solomon recovery.
 //!
 //! Invariant under test: a frame either reconstructs BYTE-EXACTLY or is not
 //! reported at all. Silent corruption is the failure mode to prevent.
@@ -344,7 +344,7 @@ impl Reassembler {
 
     /// Every block of the frame in slot `si` is done: assemble it in block
     /// order, then strip padding using frame_len -- the reason that field
-    /// exists (v1 design §5.1).
+    /// exists.
     fn finish(&mut self, si: usize) -> Option<CompletedFrame> {
         let slot = &mut self.slots[si];
         slot.in_use = false;
@@ -493,7 +493,7 @@ mod tests {
 
     #[test]
     fn recovers_a_lost_final_shard_using_frame_len() {
-        // The regression test for the reason frame_len exists (v1 design §5.1):
+        // The regression test for the reason frame_len exists:
         // the final shard is padded, so recovery yields PAYLOAD_LEN bytes and
         // only frame_len says how many are real.
         let original = frame(PAYLOAD_LEN * 2 + 3);

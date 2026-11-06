@@ -1,11 +1,10 @@
-//! Raw SudoVDA ioctl client (v2 design §6.1).
+//! Raw SudoVDA ioctl client.
 //!
 //! SudoVDA is the SudoMaker Virtual Display Adapter, present on the host
 //! because Apollo installs it. It creates virtual monitors on demand over a
 //! private ioctl interface, taking the mode as a *creation parameter* — which
-//! is why nothing here calls `ChangeDisplaySettingsEx`, and why the driver bug
-//! v1 design §15.3 worried about (mode changes on a virtual display driver)
-//! cannot apply.
+//! is why nothing here calls `ChangeDisplaySettingsEx`, and why a driver's bugs
+//! in changing a virtual display's mode cannot apply.
 //!
 //! This module is transport only: open the device, send an ioctl, map the
 //! error. Policy — when to add, when to set primary, when to ping — is
@@ -13,8 +12,7 @@
 //!
 //! Contract mirrored from `SudoMaker/SudoVDA`: `Common/Include/sudovda-ioctl.h`
 //! and `Virtual Display Driver (HDR)/SudoVDA/Driver.cpp`. Verified against the
-//! installed driver by `spikes/vdd-mode`; see its README before changing
-//! anything here.
+//! installed driver; `super::windows` lists what rests on it.
 
 use crate::{DisplayError, DisplayMode};
 use std::ffi::c_void;
@@ -66,8 +64,8 @@ struct AddParams {
     width: u32,
     height: u32,
     /// The driver does `if (VSync < 1000) VSync *= 1000`, so this takes Hz or
-    /// millihertz. We always pass millihertz, matching the wire protocol
-    /// (v2 design §4.4), so no conversion happens anywhere.
+    /// millihertz. We always pass millihertz, matching the wire protocol,
+    /// so no conversion happens anywhere.
     refresh: u32,
     monitor_guid: GUID,
     device_name: [i8; 14],
@@ -254,7 +252,7 @@ impl Device {
     /// Reset the driver's watchdog.
     ///
     /// SudoVDA disconnects every monitor if it goes ~3 s without an ioctl
-    /// (v2 design §6.1, verified), so this is not optional bookkeeping — it is what
+    /// (verified), so this is not optional bookkeeping — it is what
     /// keeps the streamed display alive.
     pub fn ping(&self) -> Result<(), DisplayError> {
         self.ioctl::<(), u8>(IOCTL_DRIVER_PING, None)

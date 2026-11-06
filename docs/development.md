@@ -8,7 +8,7 @@ changes themselves — code style, comments, docs, commits — are in
 ## The repository
 
 ```
-Cargo.toml            the workspace (every crate below but spikes/ and tools/rawinput-probe)
+Cargo.toml            the workspace (every crate below but tools/rawinput-probe)
 helio-app/            the app's window (GPUI), This computer   ─┐
 helio-client/         the client: session, stream, platforms   │ the app
 helio-cli/            `helio`, the command line                │
@@ -17,9 +17,8 @@ helio-host/           the host: sessions, pipelines, its API   ─┐ the host
 helio-host-data/      its data folder, identity, clients       ─┘
 helio-*/              the libraries both share (see docs/architecture.md)
 Casks/                the Homebrew cask, written at each release (see below)
-docs/                 documentation; docs/design/ is the design history
+docs/                 documentation
 tools/                build, deploy and test scripts (below)
-spikes/               early experiments, not built with the workspace
 vendor/               two no-op crates GPUI names
 ```
 
@@ -139,7 +138,7 @@ tools/linux-dev tools/linux/virtual-display-test # GNOME's virtual display, head
 - `tools/host-run.ps1 -Command '…'` runs a command in the interactive
   console session and prints its output: SSH lands in session 0, where there
   is no desktop to capture and no display to configure.
-  `spikes/run-interactive.ps1` does the same for longer runs.
+  `tools/run-interactive.ps1` does the same for longer runs.
 - `tools/set-resolution.ps1` sets the primary display's mode (for
   measurements on a host without a monitor); `tools/rawinput-probe` reports
   what raw input — the API games read — actually received.
@@ -498,5 +497,5 @@ what they do not.
 - The UI's icons are SVG files in `helio-ui/assets/icons/`, 24×24 with
   1.75 pt round strokes in `currentColor`, embedded in the binary.
 - `helio-decode/tests/fixtures/testsrc.h264` is the known stream the
-  decoder tests use (regenerate it with the FFmpeg command in
-  `spikes/vt-latency/README.md`).
+  decoder tests use (regenerate it with the FFmpeg command at the top of
+  `helio-decode/tests/decode_known_stream.rs`).

@@ -17,7 +17,6 @@
 - [benchmarks.md](benchmarks.md) — what it costs, measured
 - [parity.md](parity.md) — against Moonlight + Sunshine/Apollo, feature by feature
 - [verification.md](verification.md) — how it's built and verified, and what has not been
-- [design/](design/README.md) — the design history
 
 **Changing Helio**
 

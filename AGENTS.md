@@ -145,9 +145,7 @@ run on macOS, Windows and Linux, over shared libraries (`helio-*`).
   it was taken on and under. "3.9 s with the host's monitor asleep", not
   "slow".
 - **References**: Moonlight and Sunshine (and Apollo, for what is its own)
-  by source file; the design documents as `v1 design §5.1` or
-  `v2 design §6.4` ([docs/design/](docs/design/README.md)); other docs by
-  path.
+  by source file; other docs by path.
 - **No history in comments**: no dates, people's or machines' names, "we
   tried", "used to", ticket or plan numbers. Git holds the history; a
   comment describes the code as it is. ("An earlier version did X, which
@@ -172,7 +170,6 @@ rules hold for `README.md`, every page below and the issue forms in
 | `docs/architecture.md`, `docs/networking.md`, `docs/platforms/*.md`, `docs/ai-agents.md`, `docs/ui.md` | How it works, and each platform's behaviour and limits |
 | `docs/benchmarks.md`, `docs/parity.md`, `docs/verification.md` | What it achieves, measured, against Moonlight + Sunshine/Apollo; how it is built and verified |
 | `docs/development.md`, `AGENTS.md`, `CONTRIBUTING.md` | People changing it |
-| `docs/design/` | The design history. Frozen: fix links and typos only |
 
 A new page gets a row here and a line in [docs/README.md](docs/README.md).
 
@@ -247,8 +244,6 @@ second copy is the one that goes stale.
   (`check-jsonschema --builtin-schema vendor.github-issue-forms` for a form,
   `vendor.github-issue-config` for `config.yml`), and ask for what
   [docs/logs.md](docs/logs.md) tells people to send.
-- **`docs/design/` is frozen**: the history of how it was designed. Fix links
-  and typos only. A design that changed is described in the living pages.
 
 ## Commits and pull requests
 
@@ -324,7 +319,6 @@ fuzz targets and a real stream are yours to run
   Use the Linux container, a loopback test, and `HELIO_DATA_DIR` /
   `HELIO_HOST_DATA_DIR` pointing at temporary folders so your checks neither read
   nor change the user's own pairings and settings.
-- Do not edit `docs/design/` beyond links and typos.
 - Do not add private details (machine names, addresses, paths from the
   environment you run in) to code, tests or docs.
 - Never write a number, a test result or a statement about how the project

@@ -5,9 +5,6 @@
 //!
 //! This crate performs no I/O and has no platform or GPU dependencies, so
 //! everything in it is unit-tested, property-tested and fuzzed on any machine.
-//!
-//! Section references in this crate (`v1 design §5.1`, `v2 design §4.3`) are
-//! to the original design documents in `docs/design/`.
 
 pub mod annexb;
 pub mod audio;
@@ -28,11 +25,11 @@ pub mod telemetry;
 pub mod video;
 
 /// Bytes of header on every datagram. Occupies the inner IPv4 header's
-/// positions (v1 design §5).
+/// positions.
 pub const HEADER_LEN: usize = 20;
 
-/// Media payload bytes per datagram at the default 1280-byte path MTU
-/// (v1 design §6). Must be even: Reed-Solomon rejects odd shard sizes.
+/// Media payload bytes per datagram at the default 1280-byte path MTU.
+/// Must be even: Reed-Solomon rejects odd shard sizes.
 pub const PAYLOAD_LEN: usize = 1180;
 
 /// Largest inner packet we build for any path.

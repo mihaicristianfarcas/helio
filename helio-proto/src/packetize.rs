@@ -1,4 +1,4 @@
-//! Frame -> datagrams. See v1 design §5, §6.2, §6.3.
+//! Frame -> datagrams.
 //!
 //! Layout of the returned Vec: for each FEC block, all data-shard datagrams in
 //! fragment order, then all parity-shard datagrams. `fragment_idx` restarts at
@@ -12,7 +12,7 @@ use reed_solomon_simd::ReedSolomonEncoder;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PacketizeError {
     EmptyFrame,
-    /// frame_len is a u24 on the wire (v1 design §5.1).
+    /// frame_len is a u24 on the wire.
     FrameTooLarge,
     NoSupportedParity,
     Rs(&'static str),
@@ -80,7 +80,7 @@ impl Datagrams {
 
 pub struct Packetizer {
     /// Reused across frames; `reset()` per block avoids per-frame
-    /// reallocation (v1 design §6.3).
+    /// reallocation.
     encoder: Option<ReedSolomonEncoder>,
     fec: FecPolicy,
     /// Bytes per shard: `PAYLOAD_LEN`, or `LAN_PAYLOAD_LEN` on the LAN.

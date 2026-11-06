@@ -3,17 +3,14 @@
 **/*.rs.bk
 .DS_Store
 
-# Spike artifacts: regenerate with the commands in each spike's README.
-spikes/**/*.h264
-spikes/**/*.png
-spikes/**/Cargo.lock
-
 # cargo-fuzz working data; the target and corpus are regenerable.
 helio-proto/fuzz/target
 helio-proto/fuzz/corpus
 helio-proto/fuzz/artifacts
 helio-proto/fuzz/Cargo.lock
-spikes/**/interactive-run.log
+
+# What tools/run-interactive.ps1 leaves in its working folder.
+interactive-run.log
 
 # Output of the example runs, regenerable per each example's doc comment.
 *.h264
