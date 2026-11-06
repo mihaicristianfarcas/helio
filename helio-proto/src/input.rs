@@ -27,9 +27,8 @@ const TAG_MOUSE_MOVE_ABS: u8 = 3;
 const TAG_BUTTON_DOWN: u8 = 4;
 const TAG_BUTTON_UP: u8 = 5;
 const TAG_WHEEL: u8 = 6;
-// Tag 7 is HeldState, reserved by v2 design §4.3 and deliberately not implemented.
-const TAG_TEXT: u8 = 8;
-const TAG_SCROLL: u8 = 9;
+const TAG_TEXT: u8 = 7;
+const TAG_SCROLL: u8 = 8;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Button {

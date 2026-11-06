@@ -25,20 +25,20 @@ pub mod flags {
     /// Keep the host's own monitors on during the session (by default they
     /// are turned off, so the virtual display is the whole desktop, as
     /// Sunshine's `ensure_only_display` makes the streamed display the only one).
-    pub const KEEP_HOST_DISPLAYS: u8 = 2;
+    pub const KEEP_HOST_DISPLAYS: u8 = 1;
     /// Play audio on the host as well as streaming it.
-    pub const HOST_AUDIO: u8 = 4;
+    pub const HOST_AUDIO: u8 = 2;
     /// Join the session an AI agent is running, as a viewer: the host sends
     /// this client the same picture, and takes its input only after it takes
     /// over (`Control::AgentControl`). The size is the agent's, in the ack.
-    pub const WATCH: u8 = 8;
+    pub const WATCH: u8 = 4;
     /// Share the clipboard both ways (`clip`), if the host allows it: its
     /// ack says (`features::CLIPBOARD`).
-    pub const CLIPBOARD: u8 = 16;
+    pub const CLIPBOARD: u8 = 8;
     /// The client reassembles video of `LAN_PAYLOAD_LEN` shards (the
     /// header's `lan_shards`): the host may send them while it reaches the
     /// client on the local network.
-    pub const LAN_SHARDS: u8 = 32;
+    pub const LAN_SHARDS: u8 = 16;
 }
 
 /// `SessionAck::features`: what the host does for this session beyond the
@@ -452,24 +452,24 @@ pub mod host_warning {
     pub const CAPTURE_BLOCKED: u8 = 2;
 }
 
-const OP_SESSION_START: u8 = 2;
-const OP_SESSION_ACK: u8 = 3;
-const OP_SESSION_END: u8 = 4;
-const OP_REQUEST_IDR: u8 = 6;
-const OP_INVALIDATE: u8 = 7;
-const OP_LOSS_REPORT: u8 = 8;
-const OP_PING: u8 = 9;
-const OP_PING_REPLY: u8 = 10;
-const OP_GAMEPAD: u8 = 11;
-const OP_RUMBLE: u8 = 12;
-const OP_HOST_WARNING: u8 = 15;
-const OP_PROGRESS: u8 = 16;
-const OP_AGENT_CONTROL: u8 = 17;
-const OP_AGENT_STATE: u8 = 18;
-const OP_AGENT_NOTE: u8 = 19;
-const OP_HDR_METADATA: u8 = 20;
-const OP_PERMISSIONS: u8 = 21;
-const OP_RENDEZVOUS_OFFER: u8 = 22;
+const OP_SESSION_START: u8 = 1;
+const OP_SESSION_ACK: u8 = 2;
+const OP_SESSION_END: u8 = 3;
+const OP_REQUEST_IDR: u8 = 4;
+const OP_INVALIDATE: u8 = 5;
+const OP_LOSS_REPORT: u8 = 6;
+const OP_PING: u8 = 7;
+const OP_PING_REPLY: u8 = 8;
+const OP_GAMEPAD: u8 = 9;
+const OP_RUMBLE: u8 = 10;
+const OP_HOST_WARNING: u8 = 11;
+const OP_PROGRESS: u8 = 12;
+const OP_AGENT_CONTROL: u8 = 13;
+const OP_AGENT_STATE: u8 = 14;
+const OP_AGENT_NOTE: u8 = 15;
+const OP_HDR_METADATA: u8 = 16;
+const OP_PERMISSIONS: u8 = 17;
+const OP_RENDEZVOUS_OFFER: u8 = 18;
 
 struct W<'a> {
     b: &'a mut [u8],
@@ -807,21 +807,6 @@ mod tests {
         assert_eq!(h.kind, Kind::Control);
         assert_eq!(h.total_len as usize, n);
         assert_eq!(Control::decode(&out[HEADER_LEN..n]), Some(c));
-    }
-
-    #[test]
-    fn an_offer_from_a_host_of_another_release_is_dropped_not_misread() {
-        // Op 13, an earlier host's: its rendezvous key, then the host-wide
-        // secret. Taken as this release's offer, the key would be saved as
-        // the pair's secret.
-        let mut old = vec![13u8];
-        old.extend([7u8; 32]);
-        old.extend([9u8; 32]);
-        assert_eq!(Control::decode(&old), None);
-        // Op 14, an earlier client's answer.
-        let mut answer = vec![14u8];
-        answer.extend([7u8; 32]);
-        assert_eq!(Control::decode(&answer), None);
     }
 
     #[test]

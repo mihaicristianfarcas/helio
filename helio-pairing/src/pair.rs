@@ -44,7 +44,9 @@ use serde::{Deserialize, Serialize};
 use sha2::Sha256;
 use spake2::{Ed25519Group, Identity, Password, Spake2};
 
-pub const VERSION: u32 = 2;
+/// The exchange's version: a device on another one is refused and told
+/// which side to update, never fallen back to (an attacker could force it).
+pub const VERSION: u32 = 1;
 /// ML-KEM-768's encapsulation key and ciphertext, in bytes.
 const KEM_KEY_LEN: usize = 1184;
 const KEM_CT_LEN: usize = 1088;
@@ -223,7 +225,7 @@ struct Keys {
 /// The pairing's keys, from both secrets: SPAKE2's (the PIN) and ML-KEM's.
 fn derive(spake: &[u8], kem: &[u8]) -> Keys {
     let ikm = [spake, kem].concat();
-    let hk = hkdf::Hkdf::<Sha256>::new(Some(b"helio pairing v2: SPAKE2 + ML-KEM-768"), &ikm);
+    let hk = hkdf::Hkdf::<Sha256>::new(Some(b"helio pairing v1: SPAKE2 + ML-KEM-768"), &ikm);
     let mut confirm = [0u8; 32];
     let mut seal = [0u8; 32];
     hk.expand(b"confirm", &mut confirm)
