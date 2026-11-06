@@ -25,7 +25,7 @@ use crate::rendezvous::{Kind, Secret};
 /// HKDF's salt: separates these keys from any other use of the secret. It
 /// never leaves the process, so naming the product here tells no one
 /// anything.
-const DERIVATION: &[u8] = b"helio rendezvous 2";
+const DERIVATION: &[u8] = b"helio rendezvous";
 
 /// A BEP 44 salt's length. Any length up to 64 bytes is valid; the key
 /// alone already makes the slot unique, so the salt only has to look as
