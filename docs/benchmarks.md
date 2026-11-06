@@ -5,8 +5,7 @@ the real stream end to end, against Moonlight + Sunshine/Apollo where that
 means something. The host comparisons so far were measured against Apollo,
 the Sunshine fork whose virtual display Helio Host follows: its capture, NVENC
 settings, FEC and pacing are Sunshine's. Every figure says what it was
-measured on; the earliest measurements (v1, v2) are in the
-[design history](design/README.md).
+measured on.
 
 ## Test setup
 
@@ -131,8 +130,8 @@ through the stream window and renderer, no host or decoder; each frame
 handed over up to 3 ms late), on the MacBook's built-in 120 Hz display at
 3600x2338, V-Sync on, full screen. "Recorded" is `screencapture -V` running
 through the whole run; "a window over it" is a small window above the
-stream for 4 s, as a recorder's controls or a dialog would be. Before is Helio
-0.8.2, which let one frame at a time wait for the glass full screen; after,
+stream for 4 s, as a recorder's controls or a dialog would be. Before is a build
+that let one frame at a time wait for the glass full screen; after,
 three while the trips to the glass say the picture is composited.
 
 | Case | Before: shown | Before: decode to glass | After: shown | After: decode to glass |
@@ -404,32 +403,6 @@ Switches for diagnosis: `HELIO_SEND_BATCH=N` (0: one datagram per call),
 `HELIO_RECV_BATCH=N` (0: one per call), `HELIO_LAN_SHARDS=0` (client:
 path-sized datagrams on the LAN too), `HELIO_SERVICE_CLASS=0` (see
 [cli.md](cli.md#environment-variables)).
-
-## Helio 0.8.0 against 0.7.0 (2026-10-05)
-
-Whether the renderer's HDR and 4:4:4 paths cost an SDR stream anything, and
-what the Windows host's streaming set-up (full GPU power, a 1 ms timer, DWM
-under MMCSS, Wi-Fi in media-streaming mode) does to host processing. Helio
-(Mac, Wi-Fi) against Helio Host 0.8.0 (the Windows host, Wi-Fi), through a VPN
-overlay rather than the LAN: 3024x1890 at 120 fps, 100 Mbit/s, HEVC, 7.1
-audio, frame pacing on, full screen, 60 fps noise on the host. Two pairs of
-runs, 0.7.0 then 0.8.0 and then the other way round; each figure is a run's
-62 s under load.
-
-| | Helio 0.7.0 | Helio 0.8.0 |
-|---|---|---|
-| Frames received | 116.8-118.4 fps | 117.3-117.7 fps |
-| Frames shown | 111.6 fps | 110.9-111.6 fps |
-| Decode | 1.49-1.58 ms | 1.52-1.58 ms |
-| Decode to glass (median) | 15.1-16.6 ms | 16.5 ms |
-| Host processing | 5.1-5.2 ms | 5.2 ms |
-
-The new paths cost the SDR stream nothing measurable. Host processing is
-5.1-5.2 ms against 5.0 ms on 2026-09-27 before the streaming set-up: no gain
-at this load, where the GPU's clocks are up anyway (full power is for light
-scenes, which this did not measure). Fewer frames were shown than on
-2026-09-28 (116.2 of 118.5) with both versions alike: the VPN path delivers
-frames less evenly. Not measured: round trip and loss over the LAN.
 
 ## Trackpad scrolling (2026-11-04)
 
