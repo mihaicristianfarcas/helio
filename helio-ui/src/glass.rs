@@ -5,7 +5,15 @@
 //!   content view, blurring the whole window. Exactly asides': no mask (its
 //!   `native::set_glass` keeps the blur to the pill's shapes, which a window
 //!   of pages has none of), and GPUI's alpha blending made "over"
-//!   ([`blend_alpha_over`]).
+//!   ([`blend_alpha_over`]). One difference, made by [`dress`]: the view's
+//!   material is `underWindowBackground`, not GPUI's `selection`. Linked
+//!   with the macOS 26 SDK or later, `selection` no longer blurs what is
+//!   behind the window, which then showed sharp through the tints; asides
+//!   is built with the 15.5 SDK, where it still does. Measured on macOS
+//!   27.2 with stripes behind such a view (GPUI's tint removal applied):
+//!   `selection` let them through whole, `underWindowBackground` blurred
+//!   them to an even grey, the same grey `selection` gives with the 15.5
+//!   SDK.
 //! - Windows 11 (2022 Update, build 22621, and later): the system's own
 //!   acrylic (`DWMWA_SYSTEMBACKDROP_TYPE`, `DWMSBT_TRANSIENTWINDOW`), set by
 //!   [`dress`] once the window is open. GPUI has none of its own: it is
@@ -99,10 +107,12 @@ pub fn window_background() -> WindowBackgroundAppearance {
 #[cfg(windows)]
 const SYSTEM_BACKDROPS: u32 = 22621;
 
-/// What a main window's glass needs once it is open: on Windows 11, the
-/// system's acrylic in place of the Mica GPUI asked for (see the module's
-/// words). Elsewhere nothing.
+/// What a main window's glass needs once it is open: on a Mac, a material
+/// that blurs; on Windows 11, the system's acrylic in place of the Mica GPUI
+/// asked for (see the module's words). Elsewhere nothing.
 pub fn dress(window: &gpui::Window) {
+    #[cfg(target_os = "macos")]
+    blur_under_window(window);
     #[cfg(windows)]
     {
         use raw_window_handle::{HasWindowHandle, RawWindowHandle};
@@ -136,8 +146,63 @@ pub fn dress(window: &gpui::Window) {
             tracing::warn!(error = %e, "the window keeps Mica: no acrylic");
         }
     }
-    #[cfg(not(windows))]
+    #[cfg(not(any(windows, target_os = "macos")))]
     let _ = window;
+}
+
+/// Gives the blur GPUI put under the window's view (an `NSVisualEffectView`
+/// in the window's content view) the `underWindowBackground` material.
+#[cfg(target_os = "macos")]
+fn blur_under_window(window: &gpui::Window) {
+    use objc2::msg_send;
+    use objc2::runtime::{AnyClass, AnyObject};
+    use raw_window_handle::{HasWindowHandle, RawWindowHandle};
+
+    /// `NSVisualEffectMaterialUnderWindowBackground`.
+    const UNDER_WINDOW_BACKGROUND: isize = 21;
+
+    if window_background() != WindowBackgroundAppearance::Blurred {
+        return;
+    }
+    let Ok(handle) = HasWindowHandle::window_handle(window) else {
+        return;
+    };
+    let RawWindowHandle::AppKit(h) = handle.as_raw() else {
+        return;
+    };
+    let Some(effect) = AnyClass::get(c"NSVisualEffectView") else {
+        return;
+    };
+    // SAFETY: `ns_view` is this open window's view, on the main thread;
+    // `window`, `contentView`, `subviews`, `count`, `objectAtIndex:`,
+    // `isKindOfClass:` and `setMaterial:` are AppKit's documented methods,
+    // called with the types they take.
+    unsafe {
+        let view = h.ns_view.as_ptr() as *mut AnyObject;
+        let ns_window: *mut AnyObject = msg_send![view, window];
+        let Some(ns_window) = ns_window.as_ref() else {
+            return;
+        };
+        let content: *mut AnyObject = msg_send![ns_window, contentView];
+        let Some(content) = content.as_ref() else {
+            return;
+        };
+        let subviews: *mut AnyObject = msg_send![content, subviews];
+        let Some(subviews) = subviews.as_ref() else {
+            return;
+        };
+        let count: usize = msg_send![subviews, count];
+        for i in 0..count {
+            let sub: *mut AnyObject = msg_send![subviews, objectAtIndex: i];
+            let Some(sub) = sub.as_ref() else {
+                continue;
+            };
+            let blur: bool = msg_send![sub, isKindOfClass: effect];
+            if blur {
+                let _: () = msg_send![sub, setMaterial: UNDER_WINDOW_BACKGROUND];
+            }
+        }
+    }
 }
 
 /// Windows' build number (22000 is Windows 11), once asked; 0 elsewhere.
