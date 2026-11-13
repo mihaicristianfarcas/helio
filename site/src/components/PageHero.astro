@@ -9,7 +9,8 @@ import { Image } from 'astro:assets';
 interface Props {
   id: string;
   badge?: { text: string; href?: string };
-  title: string;
+  /** The title in the phrases a line may break between; none is split. */
+  title: string[];
   actions: { label: string; href: string; primary?: boolean }[];
   shots: { src: ImageMetadata; alt: string; place: 'back' | 'front' }[];
 }
@@ -21,7 +22,7 @@ const { id, badge, title, actions, shots } = Astro.props;
   <div class="wrap top">
     <div class="copy">
       {badge && (badge.href ? <a class="badge" href={badge.href}>{badge.text}</a> : <span class="badge">{badge.text}</span>)}
-      <h1>{title}</h1>
+      <h1>{title.flatMap((phrase, i) => [i > 0 && ' ', <span class="phrase">{phrase}</span>])}</h1>
       <p class="lede"><slot /></p>
       <div class="actions">
         {actions.map((a) => (
@@ -71,8 +72,10 @@ const { id, badge, title, actions, shots } = Astro.props;
     column-gap: var(--gap-head);
   }
 
+  /* The title's size follows the column's width. */
   .copy {
     max-width: var(--measure);
+    container-type: inline-size;
   }
 
   .badge {
@@ -91,12 +94,18 @@ const { id, badge, title, actions, shots } = Astro.props;
     text-decoration: none;
   }
 
+  /* As large as the window allows, and never so large that the longest phrase,
+     "and game streaming" at 9.41 em in Geist, misses the column: 9.5 em
+     leaves a little for other browsers' rounding. So beside the pictures the
+     title is always the same three lines, and two on a wider column. */
   h1 {
-    /* No more than four lines beside the pictures, down to the narrowest
-       two-column window, 960 px: "remote desktop" is about 7 em wide. */
-    font-size: clamp(2.25rem, 1.25rem + 3vw, 3.75rem);
+    font-size: min(clamp(2.25rem, 1.25rem + 3vw, 3.75rem), 100cqi / 9.5);
     letter-spacing: -0.035em;
     line-height: 1.05;
+  }
+
+  .phrase {
+    white-space: nowrap;
   }
 
   .lede {
