@@ -1,7 +1,8 @@
 ---
-//! The top of a page: a badge, the title, a line of what it is, two actions and
-//! two pictures, one behind the other. The home page and /agents share it, so
-//! the two stay alike.
+//! The top of a page, one screen tall: a badge, the title, a line of what it
+//! is and two actions, with two pictures beside them, one behind the other,
+//! and an optional strip along the bottom. The home page and /agents share it,
+//! so the two stay alike.
 import type { ImageMetadata } from 'astro';
 import { Image } from 'astro:assets';
 
@@ -17,7 +18,7 @@ const { id, badge, title, actions, shots } = Astro.props;
 ---
 
 <section class="hero" id={id}>
-  <div class="wrap">
+  <div class="wrap top">
     <div class="copy">
       {badge && (badge.href ? <a class="badge" href={badge.href}>{badge.text}</a> : <span class="badge">{badge.text}</span>)}
       <h1>{title}</h1>
@@ -31,26 +32,43 @@ const { id, badge, title, actions, shots } = Astro.props;
       </div>
     </div>
     <div class="windows">
-      {shots.map((s, i) => (
-        <figure class={s.place}>
-          <Image
-            src={s.src}
-            alt={s.alt}
-            widths={[640, 960, 1280, 1600]}
-            sizes="(max-width: 1168px) 70vw, 800px"
-            loading="eager"
-            fetchpriority={i === shots.length - 1 ? 'high' : undefined}
-          />
-        </figure>
-      ))}
+      <div class="pair">
+        {shots.map((s, i) => (
+          <figure class={s.place}>
+            <Image
+              src={s.src}
+              alt={s.alt}
+              widths={[640, 960, 1280, 1600]}
+              sizes="(max-width: 959px) 84vw, 760px"
+              loading="eager"
+              fetchpriority={i === shots.length - 1 ? 'high' : undefined}
+            />
+          </figure>
+        ))}
+      </div>
     </div>
   </div>
+  <slot name="foot" />
 </section>
 
 <style>
+  /* One screen: the window under the header, down to the next section's rule.
+     The pictures take what the text and the strip leave; on a window too
+     short for the text, the hero grows to hold it. */
   .hero {
-    padding-top: clamp(56px, 8vw, 104px);
-    padding-bottom: clamp(48px, 6vw, 80px);
+    display: grid;
+    grid-template-rows: 1fr;
+    row-gap: var(--gap-head);
+    min-height: calc(100svh - var(--nav-height, var(--nav)));
+    padding-block: var(--gap-head) clamp(48px, 6vw, 80px);
+  }
+
+  /* The text, then the pictures. */
+  .top {
+    display: grid;
+    grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+    align-items: center;
+    column-gap: var(--gap-head);
   }
 
   .copy {
@@ -74,7 +92,9 @@ const { id, badge, title, actions, shots } = Astro.props;
   }
 
   h1 {
-    font-size: clamp(2.25rem, 1.5rem + 3vw, 3.75rem);
+    /* No more than four lines beside the pictures, down to the narrowest
+       two-column window, 960 px: "remote desktop" is about 7 em wide. */
+    font-size: clamp(2.25rem, 1.25rem + 3vw, 3.75rem);
     letter-spacing: -0.035em;
     line-height: 1.05;
   }
@@ -91,33 +111,46 @@ const { id, badge, title, actions, shots } = Astro.props;
     margin-top: 32px;
   }
 
-  /* One picture behind, up and to the right; the other in front of it, lower
-     and to the left. Both in one grid cell, so the pair takes the height it
-     needs; the offset is a share of the width, so the pair keeps its shape
-     at every size. */
+  /* The room the pictures have: their column, as tall as the row. Sized by
+     the row, not by the pictures, so the pictures can fit it. */
   .windows {
+    align-self: stretch;
     display: grid;
-    margin-top: var(--gap-part);
+    align-items: center;
+    justify-items: end;
+    container-type: size;
   }
 
-  .windows > figure {
+  /* One picture behind, up and to the right; the other in front of it, lower
+     and to the left. Both in one grid cell; the offset is a share of the
+     width, so the pair keeps its shape at every size. The front one is the
+     lower, so the pair is --drop plus --share of 3:2 of its width tall, which
+     caps its width at the room's height. */
+  .pair {
+    --share: 0.84;
+    --drop: 0.13;
+    display: grid;
+    width: min(100cqw, 100cqh / (var(--drop) + var(--share) * 2 / 3));
+  }
+
+  .pair > figure {
     grid-area: 1 / 1;
-    width: 78%;
+    width: calc(var(--share) * 100%);
     margin: 0;
   }
 
-  .windows > .back {
+  .pair > .back {
     justify-self: end;
     align-self: start;
   }
 
-  .windows > .front {
+  .pair > .front {
     z-index: 1;
     justify-self: start;
-    margin-top: 13%;
+    margin-top: calc(var(--drop) * 100%);
   }
 
-  .windows :global(img) {
+  .pair :global(img) {
     width: 100%;
     height: auto;
     border: 1px solid rgb(255 255 255 / 0.16);
@@ -125,5 +158,23 @@ const { id, badge, title, actions, shots } = Astro.props;
     box-shadow: 0 30px 80px -24px rgb(0 0 0 / 0.75);
     /* To look at only: not dragged, selected or opened on their own. */
     pointer-events: none;
+  }
+
+  /* Too narrow for the title beside the pictures: the pictures go under it,
+     the width of the page, and take the height they need. */
+  @media (max-width: 959px) {
+    .top {
+      grid-template-columns: minmax(0, 1fr);
+      align-content: center;
+      row-gap: var(--gap-part);
+    }
+
+    .windows {
+      container-type: normal;
+    }
+
+    .pair {
+      width: 100%;
+    }
   }
 </style>
