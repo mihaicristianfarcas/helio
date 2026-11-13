@@ -1,9 +1,11 @@
 ---
-//! The license, what Helio is and the way to the downloads. The pictures are
-//! one window on macOS's and Windows' default wallpapers, as each desktop
-//! composites it (scripts/capture-hero.sh). The version is the install card's
+//! The license, what Helio is and the way to the downloads, with what a
+//! stream can be along the bottom. The pictures are one window on macOS's and
+//! Windows' default wallpapers, as each desktop composites it
+//! (scripts/capture-hero.sh). The version is the install card's
 //! to say, from the downloads' own latest.json.
 import PageHero from './PageHero.astro';
+import Specs from './Specs.astro';
 import { REPO, onGitHub } from '../lib/repo';
 import macos from '../assets/hero/macos.webp';
 import windows from '../assets/hero/windows.webp';
@@ -28,4 +30,5 @@ const alt = (desktop: string) =>
 >
   Stream a computer’s desktop and games to another, inside one post-quantum WireGuard tunnel. One app for macOS, Windows
   and Linux, with hosting a switch you turn on. Free and open source.
+  <Specs slot="foot" />
 </PageHero>
