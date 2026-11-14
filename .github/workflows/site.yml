@@ -44,7 +44,12 @@ jobs:
           cache: npm
           cache-dependency-path: site/package-lock.json
       - run: npm ci
+      # The token lets the build read the repository's star count for the
+      # header (site/src/lib/stars.ts): a runner's shared address is often
+      # over GitHub's anonymous limit. Without it the button has no count.
       - run: npm run build
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
       - name: Deploy
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_SITE_TOKEN }}

@@ -567,7 +567,11 @@ what they do not.
 where it can: the UI's icons in `helio-ui/assets/icons/`. Its
 downloads are the newest released version ([Releases](#releases)): the page
 links their fixed names (`src/lib/downloads.ts`) and, as it loads, reads
-`latest.json` for the version and the sizes. The page lives on the
+`latest.json` for the version and the sizes. The GitHub button in the header
+shows the repository's stars: the build reads them from GitHub's API
+(`src/lib/stars.ts`, with the workflow's token; a build that cannot reach
+GitHub leaves the button without a count) and the page refreshes them as it
+loads, at most once an hour per browser. The page lives on the
 `landing-page` branch only, rebased on `main` and never merged into it.
 Each push to that branch that changes `site/` or the icons runs
 `.github/workflows/site.yml`, which builds the page and deploys it with

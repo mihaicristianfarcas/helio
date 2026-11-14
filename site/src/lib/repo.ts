@@ -2,6 +2,9 @@
 
 export const REPO = 'https://github.com/mihaicristianfarcas/helio';
 
+/** The same repository in GitHub's API, which says its star count. */
+export const REPO_API = REPO.replace('https://github.com/', 'https://api.github.com/repos/');
+
 /** A file in the repository, on GitHub. */
 export const onGitHub = (path: string) => `${REPO}/blob/main/${path}`;
 

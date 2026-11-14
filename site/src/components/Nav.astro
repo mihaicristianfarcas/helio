@@ -1,8 +1,14 @@
 ---
 //! Section navigation, held at the top of the window. The site is one page,
-//! so every link is to a section of it.
+//! so every link is to a section of it. The GitHub button carries the
+//! repository's stars: the build's reading (lib/stars.ts) is in the markup,
+//! and the script refreshes it, at most once an hour per browser, as GitHub
+//! allows an address 60 anonymous calls an hour and many share one.
 import Logo from './Logo.astro';
-import { REPO } from '../lib/repo';
+import { REPO, REPO_API } from '../lib/repo';
+import { short, stars } from '../lib/stars';
+
+const count = await stars();
 ---
 
 <header class="nav" data-nav>
@@ -18,12 +24,24 @@ import { REPO } from '../lib/repo';
       <a href="#faq">FAQ</a>
     </nav>
     <div class="end">
-      <a class="gh" href={REPO} aria-label="Source on GitHub">
+      <a
+        class="gh"
+        href={REPO}
+        aria-label={count === null ? 'Source on GitHub' : `Source on GitHub, ${count.toLocaleString('en')} stars`}
+      >
         <svg width="20" height="20" viewBox="0 0 16 16" aria-hidden="true" fill="currentColor"
           ><path
             d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"
           ></path></svg
         >
+        <span class="stars" data-stars data-api={REPO_API} hidden={count === null}>
+          <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true" fill="currentColor"
+            ><path
+              d="M8 .25a.75.75 0 0 1 .673.418l1.882 3.815 4.21.612a.75.75 0 0 1 .416 1.279l-3.046 2.97.719 4.192a.75.75 0 0 1-1.088.791L8 12.347l-3.766 1.98a.75.75 0 0 1-1.088-.79l.72-4.194L.818 6.374a.75.75 0 0 1 .416-1.28l4.21-.611L7.327.668A.75.75 0 0 1 8 .25Z"
+            ></path></svg
+          >
+          <span data-count>{count === null ? '' : short(count)}</span>
+        </span>
       </a>
       <a class="button primary small" href="#install">Download</a>
     </div>
@@ -95,15 +113,32 @@ import { REPO } from '../lib/repo';
   }
 
   .gh {
-    display: grid;
-    place-items: center;
-    width: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-width: 36px;
     height: 36px;
+    padding-inline: 8px;
     color: var(--text-2);
+    font-size: 0.875rem;
   }
 
   .gh:hover {
     color: var(--text);
+    text-decoration: none;
+  }
+
+  /* The star and its count, a little smaller and quieter than the mark. */
+  .stars {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .stars[hidden] {
+    display: none;
   }
 
   .small {
@@ -264,4 +299,45 @@ import { REPO } from '../lib/repo';
   const stick = () => header.toggleAttribute('data-stuck', window.scrollY > 0);
   window.addEventListener('scroll', stick, { passive: true });
   stick();
+
+  // The stars: what the build read is already there. A figure this browser
+  // saved replaces it at once, however old, rather than wait for GitHub: it is
+  // usually the later reading, and a visit after a deploy that predates it
+  // shows the older number only until GitHub answers. One under an hour old is
+  // all the page asks for. Any failure (offline, over the limit, storage
+  // refused) leaves what the page has.
+  const stars = header.querySelector<HTMLElement>('[data-stars]');
+  if (stars) {
+    const KEY = 'helio:stars';
+    const HOUR = 3_600_000;
+    const show = (count: number) => {
+      stars.querySelector('[data-count]')!.textContent = new Intl.NumberFormat('en', {
+        notation: 'compact',
+        maximumFractionDigits: 1,
+      }).format(count).toLowerCase();
+      stars.hidden = false;
+      stars.parentElement!.setAttribute('aria-label', `Source on GitHub, ${count.toLocaleString('en')} stars`);
+    };
+    const valid = (count: unknown): count is number => Number.isSafeInteger(count) && (count as number) >= 0;
+    const refresh = async () => {
+      let saved: { count: number; at: number } | null = null;
+      try {
+        const kept = JSON.parse(localStorage.getItem(KEY) ?? 'null');
+        if (kept && valid(kept.count) && Number.isFinite(kept.at)) saved = kept;
+      } catch {}
+      if (saved) {
+        show(saved.count);
+        if (Date.now() - saved.at < HOUR) return;
+      }
+      try {
+        const response = await fetch(stars.dataset.api!, { headers: { accept: 'application/vnd.github+json' } });
+        if (!response.ok) return;
+        const { stargazers_count: count } = await response.json();
+        if (!valid(count)) return;
+        show(count);
+        localStorage.setItem(KEY, JSON.stringify({ count, at: Date.now() }));
+      } catch {}
+    };
+    refresh();
+  }
 </script>
