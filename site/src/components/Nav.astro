@@ -1,25 +1,21 @@
 ---
-//! Section navigation, held at the top of the window.
-//! Sections live on the home page: from another page their links go there.
+//! Section navigation, held at the top of the window. The site is one page,
+//! so every link is to a section of it.
 import Logo from './Logo.astro';
 import { REPO } from '../lib/repo';
-
-const base = import.meta.env.BASE_URL.replace(/\/?$/, '/');
-const home = Astro.url.pathname.replace(/\/?$/, '/') === base ? '' : base;
-const agents = `${base}agents/`;
 ---
 
 <header class="nav" data-nav>
   <canvas class="strip" data-sky-strip aria-hidden="true"></canvas>
   <div class="wrap bar">
-    <a href={home ? base : '#top'} class="home" aria-label={home ? 'Helio, home page' : 'Helio, top of the page'}><Logo /></a>
+    <a href="#top" class="home" aria-label="Helio, top of the page"><Logo /></a>
     <button type="button" class="menu" aria-expanded="false" aria-controls="sections" data-menu>Menu</button>
     <nav id="sections" aria-label="Sections">
-      <a href={`${home}#features`}>Features</a>
-      <a href={`${home}#latency`}>Latency</a>
-      <a href={agents} aria-current={home ? 'page' : undefined}>AI agents</a>
-      <a href={`${home}#platforms`}>Platforms</a>
-      <a href={`${home}#faq`}>FAQ</a>
+      <a href="#features">Features</a>
+      <a href="#latency">Latency</a>
+      <a href="#agents">AI agents</a>
+      <a href="#platforms">Platforms</a>
+      <a href="#faq">FAQ</a>
     </nav>
     <div class="end">
       <a class="gh" href={REPO} aria-label="Source on GitHub">
@@ -29,7 +25,7 @@ const agents = `${base}agents/`;
           ></path></svg
         >
       </a>
-      <a class="button primary small" href={`${home}#install`}>Download</a>
+      <a class="button primary small" href="#install">Download</a>
     </div>
   </div>
 </header>

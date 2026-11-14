@@ -1,7 +1,7 @@
 //! Keyboard regressions against the built page and its actual component scripts.
 //! DOM checks cover control order and focus changes; they do not render a browser.
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
@@ -330,23 +330,25 @@ test('without JavaScript static content has no Tab stops and every download stay
   } finally { await close(); }
 });
 
-test('the hero badge names the license, and no page writes a version into itself', () => {
-  const pages = ['dist/index.html', 'dist/agents/index.html'].map((file) => readFileSync(join(site, file), 'utf8'));
-  const text = pages.map((page) => page.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '').replace(/<[^>]+>/g, ' '));
-  assert.equal(text.join(' ').match(/Version\s+\d/g)?.length ?? 0, 0);
-  assert.match(pages[0], /class="badge" href="[^"]*\/blob\/main\/LICENSE"[^>]*>GPL-3\.0</);
+test('the hero badge names the license, and the page writes no version into itself', () => {
+  const page = readFileSync(join(site, 'dist/index.html'), 'utf8');
+  const text = page.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '').replace(/<[^>]+>/g, ' ');
+  assert.equal(text.match(/Version\s+\d/g)?.length ?? 0, 0);
+  assert.match(page, /class="badge" href="[^"]*\/blob\/main\/LICENSE"[^>]*>GPL-3\.0</);
 });
 
-test('the agents page reaches the home page from its header and footer', () => {
-  const agents = readFileSync(join(site, 'dist/agents/index.html'), 'utf8');
-  for (const section of ['features', 'latency', 'platforms', 'faq', 'install']) {
-    assert.match(agents, new RegExp(`href="/#${section}"`));
-  }
-  assert.doesNotMatch(agents.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, ''), /href="#(?!main)/);
+test('the site is one page, and each of its own links finds its section there', () => {
+  const pages = readdirSync(join(site, 'dist'), { recursive: true }).filter((file) => file.endsWith('.html'));
+  assert.deepEqual(pages, ['index.html']);
+  const ids = new Set([...html.matchAll(/\sid="([^"]+)"/g)].map((match) => match[1]));
+  const links = [...html.matchAll(/href="#([^"]*)"/g)].map((match) => match[1]);
+  for (const section of ['features', 'latency', 'agents', 'platforms', 'faq', 'install']) assert.ok(links.includes(section), section);
+  for (const link of links) assert.ok(ids.has(link), `#${link}`);
+  assert.doesNotMatch(html, /href="[^"#]*\/agents\b/);
 });
 
-test('neither page names the apps as they were called before', () => {
-  for (const file of ['dist/index.html', 'dist/agents/index.html', 'dist/robots.txt', 'dist/sitemap.xml']) {
+test('the page does not name the apps as they were called before', () => {
+  for (const file of ['dist/index.html', 'dist/robots.txt', 'dist/sitemap.xml']) {
     assert.doesNotMatch(readFileSync(join(site, file), 'utf8'), /pingpong|\bPing\b|\bPong\b/i);
   }
 });

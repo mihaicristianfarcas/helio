@@ -28,7 +28,7 @@
 #   about the new helio-app.exe first, and leave nothing else on the screen:
 #   the picture is the screen. Then the wallpaper as it was, and the done file
 #   puts the monitors back. Wallpaper: Windows 11's light Bloom (img0.jpg).
-# - agent-screen.png (2560x1600), behind the agent's window on /agents: a
+# - agent-screen.png (2560x1600), beside the agent's window in AI agents: a
 #   Windows VM, hero/windows/agentshot.ps1, the desktop the sample session
 #   talks about.
 # - agent.png: as macos.png, with HELIO_UI_DEMO=agents=sample-ask,size=1120x740

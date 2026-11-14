@@ -1,8 +1,7 @@
 # Helio's landing page
 
-Two pages, built with [Astro](https://astro.build): real screenshots of the
-app, and a real stream recorded in the Linux container. The home page, and
-`/agents` for AI agents.
+One page, built with [Astro](https://astro.build): real screenshots of the
+app, and a real stream recorded in the Linux container.
 
 Builds target `https://helio.mihaicristian.dev` by default, including
 the canonical URL, link previews, software structured data, `robots.txt`
