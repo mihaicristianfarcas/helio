@@ -516,8 +516,8 @@ npx wrangler deploy   # after a build: deploys site/dist/, as the workflow does
 (default `/`) set the deployment URL and path. The canonical URL,
 link-preview image URLs, software structured data, `robots.txt` and
 `sitemap.xml` all use that deployment URL. The sitemap lists the landing
-page and `/agents`, without section anchors or a build-time last-modified
-date. Preview
+page, the site's only page, without section anchors or a build-time
+last-modified date. Preview
 deployments should use their host’s indexing controls to keep previews out
 of search results.
 
@@ -531,11 +531,10 @@ What it shows is made from the app, by scripts in `site/scripts/`:
 
 The pictures name no version: under `HELIO_UI_DEMO` the window leaves it out,
 and the install card is the one place the site says it, from `latest.json`.
-The hero of `/agents` shares the home page's layout (`PageHero.astro`):
-behind the sample agent
-session is `src/assets/hero/agent-screen.webp`, the screen that session shows,
-a real screenshot of a Windows desktop holding the files it talks about
-(`hero/windows/agentshot.ps1`). `og-card.html` is the link preview
+The AI agents section shows the sample agent session
+(`src/assets/hero/agent.webp`) beside `src/assets/hero/agent-screen.webp`, the
+screen that session shows, a real screenshot of a Windows desktop holding the
+files it talks about (`hero/windows/agentshot.ps1`). `og-card.html` is the link preview
 (`public/og.jpg`), the hero's pictures on the page's sky
 (`src/lib/sky.js`, which needs WebGL); any headless browser renders it at
 1200x630.
