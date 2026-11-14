@@ -1,6 +1,8 @@
 ---
 //! Answers for people choosing a streaming setup. Platform and network
-//! limits follow README.md, docs/parity.md and docs/networking.md.
+//! limits follow README.md, docs/parity.md and docs/networking.md. Each
+//! answer sits under its question and runs the whole column, all shown: the
+//! page has the room, so nothing waits behind a click.
 import Testers from './Testers.astro';
 import { onGitHub } from '../lib/repo';
 ---
@@ -13,32 +15,32 @@ import { onGitHub } from '../lib/repo';
     </div>
 
     <div class="questions">
-      <details>
-        <summary><h3>Can I use Helio for remote desktop gaming?</h3></summary>
+      <div class="qa">
+        <h3>Can I use Helio for remote desktop gaming?</h3>
         <p>
           Yes. Helio Host streams the desktop, games included, to Helio on another computer: measured at 3024×1890 and
           120 fps, with HEVC, H.264 or AV1, HDR, 4:4:4 colour and up to 7.1 sound. Controllers and rumble need a Windows
           host. See the <a href="#latency">benchmarks and their test conditions</a>.
         </p>
-      </details>
-      <details>
-        <summary><h3>Is Helio an alternative to Moonlight and Sunshine/Apollo?</h3></summary>
+      </div>
+      <div class="qa">
+        <h3>Is Helio an alternative to Moonlight and Sunshine/Apollo?</h3>
         <p>
           Yes, with its own protocol, so install it on both computers: it does not connect to Sunshine or Apollo, and
           Moonlight does not connect to Helio Host. See the
           <a href={onGitHub('docs/parity.md')}>feature comparison with Moonlight and Sunshine/Apollo</a>.
         </p>
-      </details>
-      <details>
-        <summary><h3>Which computers can host and receive a stream?</h3></summary>
+      </div>
+      <div class="qa">
+        <h3>Which computers can host and receive a stream?</h3>
         <p>
           macOS 14 or later, Windows 10 and 11, and Linux under X11 or Wayland, as client and as host; phones, tablets
           and TVs are out of scope. On a Linux host under sway or Hyprland, the client cannot send keyboard or mouse
           input. See the <a href="#platforms">platform requirements</a>.
         </p>
-      </details>
-      <details>
-        <summary><h3>Do I need a VPN or port forwarding to stream over the internet?</h3></summary>
+      </div>
+      <div class="qa">
+        <h3>Do I need a VPN or port forwarding to stream over the internet?</h3>
         <p>
           Usually neither. Pair once on your local network, or through a VPN such as Tailscale when away from the host:
           Helio then links the host’s web UI to type the PIN in. Internet streaming is on by default, finding paired
@@ -46,17 +48,17 @@ import { onGitHub } from '../lib/repo';
           on both sides blocks it, forward UDP port 47800 to the host. See
           <a href={onGitHub('docs/networking.md')}>internet setup and network limits</a>.
         </p>
-      </details>
-      <details>
-        <summary><h3>How does Helio stay up to date?</h3></summary>
+      </div>
+      <div class="qa">
+        <h3>How does Helio stay up to date?</h3>
         <p>
           The window says when a release is out. <strong>Install and Restart</strong> downloads it from GitHub, checks
           it, installs it the way you installed the app and opens Helio again. Nothing downloads until you choose. See
           <a href={onGitHub('docs/usage.md#updates')}>how each system installs an update</a>.
         </p>
-      </details>
-      <details>
-        <summary><h3>How do I uninstall Helio?</h3></summary>
+      </div>
+      <div class="qa">
+        <h3>How do I uninstall Helio?</h3>
         <p>
           On Windows, <strong>Settings &gt; Apps &gt; Installed apps</strong>, then Helio, then
           <strong>Uninstall</strong>. With Homebrew, <code>brew uninstall --cask helio</code>; on Linux,
@@ -64,14 +66,14 @@ import { onGitHub } from '../lib/repo';
           <a href={onGitHub('docs/install.md#uninstalling')}>what to delete to remove them too</a>, and the steps for a
           download on a Mac.
         </p>
-      </details>
-      <details>
-        <summary><h3>Is Helio free and open source?</h3></summary>
+      </div>
+      <div class="qa">
+        <h3>Is Helio free and open source?</h3>
         <p>
           Yes. Helio is free to download and use, and its source is under the GPL-3.0 license.
           <a href="#install">Download Helio</a> for your system.
         </p>
-      </details>
+      </div>
     </div>
     <Testers />
   </div>
@@ -79,30 +81,24 @@ import { onGitHub } from '../lib/repo';
 
 <style>
   .questions {
-    max-width: var(--measure);
+    display: grid;
+    row-gap: 40px;
   }
 
-  details {
-    padding-block: 12px;
-  }
-
-  summary {
-    color: var(--text);
-    cursor: pointer;
-  }
-
-  summary::marker {
-    color: var(--accent);
+  /* The answer under its question, as wide as the column and broken only
+     where that ends, as a title's .lede is. */
+  .qa {
+    display: grid;
+    row-gap: 8px;
   }
 
   h3 {
-    display: inline;
-    font-size: 1rem;
+    font-size: 1.125rem;
     letter-spacing: -0.01em;
+    line-height: 1.4;
   }
 
-  details p {
-    margin-top: 12px;
-    font-size: 0.9375rem;
+  p {
+    text-wrap: wrap;
   }
 </style>

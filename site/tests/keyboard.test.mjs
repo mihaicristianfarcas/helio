@@ -286,16 +286,13 @@ test('section and skip links focus a visible action, never a heading or static r
   } finally { await close(); }
 });
 
-test('closed FAQ answers and inactive download panels never enter the Tab order', async () => {
+test('every FAQ answer is shown with its links in the Tab order, and inactive download panels never enter it', async () => {
   const { window, document, stops, close } = page(components);
   try {
-    const details = document.querySelector('details');
-    const answerLink = details.querySelector('p a');
-    assert.ok(!stops().includes(answerLink));
-    details.open = true;
-    assert.ok(stops().includes(answerLink));
-    details.open = false;
-    assert.ok(!stops().includes(answerLink));
+    assert.equal(document.querySelectorAll('#faq details, #faq summary').length, 0);
+    const answerLinks = document.querySelectorAll('#faq .qa p a');
+    assert.ok(answerLinks.length >= 7);
+    for (const link of answerLinks) assert.ok(stops().includes(link));
     const hiddenPanels = document.querySelectorAll('[data-picker] .panel[hidden]');
     assert.equal(hiddenPanels.length, 2);
     for (const panel of hiddenPanels) {
