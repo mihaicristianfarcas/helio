@@ -66,7 +66,7 @@ function page(components = [], width = 1280) {
 
 const components = [
   'components/Nav.astro', 'components/Gallery.astro', 'components/Install.astro',
-  'components/Command.astro', 'components/Video.astro', 'layouts/Base.astro',
+  'components/Command.astro', 'components/Video.astro', 'components/FAQ.astro', 'layouts/Base.astro',
 ];
 
 test('cached fonts cannot restore a refresh before the gallery and downloads initialize', async () => {
@@ -286,19 +286,64 @@ test('section and skip links focus a visible action, never a heading or static r
   } finally { await close(); }
 });
 
-test('every FAQ answer is shown with its links in the Tab order, and inactive download panels never enter it', async () => {
+test('on a wide screen every FAQ answer is shown, its question is no Tab stop, and inactive download panels never enter the Tab order', async () => {
   const { window, document, stops, close } = page(components);
   try {
-    assert.equal(document.querySelectorAll('#faq details, #faq summary').length, 0);
+    const items = [...document.querySelectorAll('#faq details')];
+    assert.equal(items.length, 7);
     const answerLinks = document.querySelectorAll('#faq .qa p a');
     assert.ok(answerLinks.length >= 7);
     for (const link of answerLinks) assert.ok(stops().includes(link));
+    for (const item of items) {
+      const summary = item.querySelector('summary');
+      assert.equal(item.open, true);
+      assert.ok(!stops().includes(summary), 'a question that toggles nothing is not a stop');
+      assert.equal(summary.getAttribute('aria-disabled'), 'true');
+      summary.click();
+      assert.equal(item.open, true, 'a click cannot close an answer on a wide screen');
+    }
     const hiddenPanels = document.querySelectorAll('[data-picker] .panel[hidden]');
     assert.equal(hiddenPanels.length, 2);
     for (const panel of hiddenPanels) {
       assert.equal(window.getComputedStyle(panel).display, 'none');
       assert.ok(stops().every((element) => !panel.contains(element)));
     }
+  } finally { await close(); }
+});
+
+test('on a narrow screen the FAQ answers start closed, and each question toggles its own', async () => {
+  const { document, stops, close } = page(components, 390);
+  try {
+    const items = [...document.querySelectorAll('#faq details')];
+    for (const item of items) {
+      const summary = item.querySelector('summary');
+      const link = item.querySelector('p a');
+      assert.equal(item.open, false);
+      assert.ok(stops().includes(summary));
+      assert.equal(summary.hasAttribute('aria-disabled'), false);
+      assert.ok(!stops().includes(link));
+    }
+    const [first, second] = items;
+    first.querySelector('summary').click();
+    assert.equal(first.open, true);
+    assert.equal(second.open, false);
+    assert.ok(stops().includes(first.querySelector('p a')));
+    assert.ok(!stops().includes(second.querySelector('p a')));
+    first.querySelector('summary').click();
+    assert.equal(first.open, false);
+    assert.ok(!stops().includes(first.querySelector('p a')));
+  } finally { await close(); }
+});
+
+test('the FAQ follows the window across its breakpoint', async () => {
+  const { window, document, close } = page(components, 1280);
+  try {
+    const items = [...document.querySelectorAll('#faq details')];
+    window.happyDOM.setViewport({ width: 390, height: 900 });
+    assert.ok(items.every((item) => !item.open && !item.querySelector('summary').hasAttribute('aria-disabled')));
+    items[0].querySelector('summary').click();
+    window.happyDOM.setViewport({ width: 1280, height: 900 });
+    assert.ok(items.every((item) => item.open && item.querySelector('summary').getAttribute('tabindex') === '-1'));
   } finally { await close(); }
 });
 
@@ -318,10 +363,11 @@ test('missing downloads leave focus on an available link and cannot be followed'
   } finally { await close(); }
 });
 
-test('without JavaScript static content has no Tab stops and every download stays available', async () => {
+test('without JavaScript static content has no Tab stops, every FAQ answer is open and every download stays available', async () => {
   const { document, stops, close } = page();
   try {
     assert.ok(stops().every((element) => element.matches(actions)));
+    assert.equal(document.querySelectorAll('#faq details:not([open])').length, 0);
     assert.equal(document.querySelectorAll('[data-picker] .panel[hidden]').length, 0);
     assert.ok(stops().filter((element) => element.matches('[data-file]')).length >= 6);
   } finally { await close(); }

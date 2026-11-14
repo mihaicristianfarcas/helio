@@ -20,10 +20,12 @@ A push to the `landing-page` branch deploys it by itself
 (`.github/workflows/site.yml`), to the Cloudflare Worker that
 `wrangler.jsonc` describes.
 
-Tab and Shift+Tab visit clickable links, buttons and FAQ toggles in page
-order, from the header to the footer. Every gallery choice and download
-has its own stop. Enter activates links; Enter or Space activates
-buttons and FAQ toggles. The mobile menu also accepts arrow keys, Home
+Tab and Shift+Tab visit clickable links, buttons and, on a screen narrower
+than 760 px, FAQ toggles, in page order, from the header to the footer. Every
+gallery choice and download has its own stop. Enter activates links; Enter or
+Space activates buttons and FAQ toggles. On a narrow screen the FAQ answers
+start closed; on a wider one every answer is open and the questions are no
+stops. The mobile menu also accepts arrow keys, Home
 and End; Escape closes it and returns focus to Menu. The first Tab reveals
 Skip to content, which moves focus to the first action in the main content.
 
