@@ -126,8 +126,7 @@ const cardAlt = 'Helio: remote desktop and game streaming, its Hosts window on m
       // a section loses it once the browser has scrolled there, for the
       // same reason. Focus moves to the first visible action at the
       // destination, so keyboard navigation continues through controls.
-      // Every way to the downloads, from this page or another, says why there
-      // are none on a phone. Capture, so the in-page jump below never sees it.
+      // Every way to the downloads says why there are none on a phone. Capture, so the in-page jump below never sees it.
       document.addEventListener('click', (e) => {
         if (!document.documentElement.hasAttribute('data-phone')) return;
         if (!(e.target as Element).closest('a[href$="#install"]')) return;

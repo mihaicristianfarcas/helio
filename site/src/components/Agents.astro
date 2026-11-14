@@ -1,13 +1,13 @@
 ---
-// AI agents on your hosts (docs/ai-agents.md): the real windows, what you
-// keep control of, clef's screen checks, and the host's own rules. Behind the
-// agent's window in the hero is the very screen that window shows.
-import PageHero from './PageHero.astro';
+//! AI agents on your hosts (docs/ai-agents.md): the real windows, what you
+//! keep control of, clef's screen checks, and the host's own rules. The two
+//! pictures are one moment of one session, side by side: the agent's window
+//! in Helio on the client, and the very screen on the host it shows
+//! (scripts/capture-hero.sh).
+import { Image } from 'astro:assets';
 import { onGitHub } from '../lib/repo';
 import session from '../assets/hero/agent.webp';
 import screen from '../assets/hero/agent-screen.webp';
-
-const base = import.meta.env.BASE_URL.replace(/\/?$/, '/');
 
 const rules = [
   ['Never over a person', 'An agent is refused while a person streams.'],
@@ -18,33 +18,38 @@ const rules = [
 ];
 ---
 
-<PageHero
-  id="agents"
-  badge={{ text: 'AI agents' }}
-  title={['Let an AI agent', 'use your host']}
-  actions={[
-    { label: 'Download', href: `${base}#install`, primary: true },
-    { label: 'How agents work', href: onGitHub('docs/ai-agents.md') },
-  ]}
-  shots={[
-    {
-      src: screen,
-      alt: 'What the agent sees: a Windows desktop with File Explorer on the Downloads folder, its two biggest files selected.',
-      place: 'back',
-    },
-    {
-      src: session,
-      alt: "An agent session in Helio: the conversation about the Downloads folder, the agent waiting for a go-ahead to empty the Recycle Bin with Allow and Don't buttons, a screenshot of the Windows desktop it saw after its last step, with File Explorer on Downloads, and its plan.",
-      place: 'front',
-    },
-  ]}
->
-  An agent sees the screen and uses the keyboard and mouse as you do through Helio: over the same tunnel, from anywhere.
-  Watch it, take over or stop it at any point.
-</PageHero>
-
-<section class="section page">
+<section class="section" id="agents">
   <div class="wrap">
+    <div class="head">
+      <span class="eyebrow">AI agents</span>
+      <h2 class="title">Let an AI agent use your host</h2>
+      <p class="lede">
+        An agent sees the screen and uses the keyboard and mouse as you do through Helio: over the same tunnel, from
+        anywhere. Watch it, take over or stop it at any point.
+      </p>
+    </div>
+
+    <div class="screens">
+      <figure>
+        <Image
+          src={session}
+          alt="An agent session in Helio: the conversation about the Downloads folder, the agent waiting for a go-ahead to empty the Recycle Bin with Allow and Don't buttons, a screenshot of the Windows desktop it saw after its last step, with File Explorer on Downloads, and its plan."
+          widths={[640, 960, 1280]}
+          sizes="(max-width: 759px) 94vw, (max-width: 1328px) 48vw, 640px"
+        />
+        <figcaption><strong>Client</strong> · the agent’s session in Helio</figcaption>
+      </figure>
+      <figure>
+        <Image
+          src={screen}
+          alt="What the agent sees: a Windows desktop with File Explorer on the Downloads folder, its two biggest files selected."
+          widths={[640, 960, 1280]}
+          sizes="(max-width: 759px) 94vw, (max-width: 1328px) 52vw, 680px"
+        />
+        <figcaption><strong>Host</strong> · the Windows desktop it sees and uses</figcaption>
+      </figure>
+    </div>
+
     <ul class="points">
       <li>
         <h3>Watch it, or take over</h3>
@@ -81,11 +86,11 @@ const rules = [
     </ul>
 
     <div class="rules">
-      <h2>Rules the host holds every agent to</h2>
+      <h3>Rules the host holds every agent to</h3>
       <ol class="steps">
         {rules.map(([title, body]) => (
           <li>
-            <h3>{title}</h3>
+            <h4>{title}</h4>
             <p>{body}</p>
           </li>
         ))}
@@ -99,17 +104,51 @@ const rules = [
 </section>
 
 <style>
-  /* Under the hero, whose own space below is the gap. */
-  .page {
-    padding-top: 0;
-    border-top: 0;
+  /* Client and host side by side, the same height: the columns share the
+     width as the pictures' shapes do, 3:2 (2700x1800) and 16:10
+     (2560x1600). The pictures and the captions are rows both figures share,
+     so the captions line up to the pixel, whatever each picture rounds to. */
+  .screens {
+    display: grid;
+    grid-template-columns: minmax(0, 1.5fr) minmax(0, 1.6fr);
+    column-gap: 24px;
+  }
+
+  .screens figure {
+    display: grid;
+    grid-row: span 2;
+    grid-template-rows: subgrid;
+    row-gap: 14px;
+    margin: 0;
+  }
+
+  /* As the hero's pictures (PageHero.astro). */
+  .screens :global(img) {
+    width: 100%;
+    height: auto;
+    border: 1px solid rgb(255 255 255 / 0.16);
+    border-radius: 14px;
+    box-shadow: 0 30px 80px -24px rgb(0 0 0 / 0.75);
+    /* To look at only: not dragged, selected or opened on their own. */
+    pointer-events: none;
+  }
+
+  /* As the latency section's Host and Client (Latency.astro). */
+  figcaption {
+    color: var(--text-3);
+    font-size: 0.875rem;
+  }
+
+  figcaption strong {
+    color: var(--text);
+    font-weight: 500;
   }
 
   .points {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
     gap: 40px;
-    margin: 0;
+    margin: var(--gap-part) 0 0;
     padding: 0;
     list-style: none;
   }
@@ -127,7 +166,8 @@ const rules = [
     margin-top: var(--gap-part);
   }
 
-  .rules h2 {
+  /* As the latency section's Pipeline breakdown. */
+  .rules > h3 {
     font-size: clamp(1.25rem, 1.1rem + 0.6vw, 1.5rem);
     letter-spacing: -0.02em;
   }
@@ -143,6 +183,14 @@ const rules = [
   @media (max-width: 900px) {
     .points {
       grid-template-columns: 1fr;
+    }
+  }
+
+  /* Too narrow for two pictures to be read: one above the other. */
+  @media (max-width: 759px) {
+    .screens {
+      grid-template-columns: minmax(0, 1fr);
+      row-gap: var(--gap-head);
     }
   }
 </style>
