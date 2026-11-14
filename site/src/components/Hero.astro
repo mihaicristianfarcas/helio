@@ -1,12 +1,12 @@
 ---
-//! The license, what Helio is and the way to the downloads, with what a
-//! stream can be along the bottom. The pictures are one window on macOS's and
+//! What Helio is and the way to the downloads, with what a stream can be
+//! along the bottom. The pictures are one window on macOS's and
 //! Windows' default wallpapers, as each desktop composites it
 //! (scripts/capture-hero.sh). The version is the install card's
 //! to say, from the downloads' own latest.json.
 import PageHero from './PageHero.astro';
 import Specs from './Specs.astro';
-import { REPO, onGitHub } from '../lib/repo';
+import { REPO } from '../lib/repo';
 import macos from '../assets/hero/macos.webp';
 import windows from '../assets/hero/windows.webp';
 
@@ -17,7 +17,6 @@ const alt = (desktop: string) =>
 <!-- The best-tested setup: the Mac, the client, in front of the Windows host. -->
 <PageHero
   id="top"
-  badge={{ text: 'GPL-3.0', href: onGitHub('LICENSE') }}
   title={['Low-latency', 'remote desktop', 'and game streaming']}
   actions={[
     { label: 'Download', href: '#install', primary: true },
