@@ -246,9 +246,11 @@ const tabs = [
     box-shadow: var(--shadow);
   }
 
+  /* Under the tabs, as a title's .lede: the width it has, broken only where
+     that ends. */
   figcaption {
-    max-width: var(--measure);
     margin-bottom: 24px;
+    text-wrap: wrap;
     color: var(--text-2);
     font-size: 0.9375rem;
   }
