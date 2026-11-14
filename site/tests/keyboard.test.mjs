@@ -172,6 +172,80 @@ for (const width of [1280, 390]) {
   });
 }
 
+// The GitHub button's stars: the build's reading is in the markup (lib/stars.ts);
+// the page refreshes it. These start from a slot of their own, so they hold
+// whether or not the build that made dist/ could reach GitHub.
+function starSlot(document, count) {
+  const slot = document.querySelector('[data-stars]');
+  slot.hidden = count === null;
+  slot.querySelector('[data-count]').textContent = count === null ? '' : String(count);
+  return slot;
+}
+
+test('the star count is refreshed from GitHub, and kept for an hour', async () => {
+  const { window, document, run, close } = page();
+  try {
+    const slot = starSlot(document, null);
+    window.localStorage.clear();
+    let calls = 0;
+    window.fetch = async (url) => {
+      calls += 1;
+      assert.equal(url, 'https://api.github.com/repos/mihaicristianfarcas/helio');
+      return { ok: true, json: async () => ({ stargazers_count: 1234 }) };
+    };
+    run('components/Nav.astro');
+    await new Promise(setImmediate);
+    assert.equal(slot.hidden, false);
+    assert.equal(slot.querySelector('[data-count]').textContent, '1.2k');
+    assert.equal(document.querySelector('.gh').getAttribute('aria-label'), 'Source on GitHub, 1,234 stars');
+    assert.equal(calls, 1);
+    run('components/Nav.astro');
+    await new Promise(setImmediate);
+    assert.equal(calls, 1, 'a figure under an hour old is not asked for again');
+  } finally { await close(); }
+});
+
+test('an older saved star count is shown at once, and GitHub is asked for the newer', async () => {
+  const { window, document, run, close } = page();
+  try {
+    const slot = starSlot(document, 4);
+    window.localStorage.setItem('helio:stars', JSON.stringify({ count: 999, at: Date.now() - 2 * 3_600_000 }));
+    let answer;
+    window.fetch = () => new Promise((resolve) => { answer = resolve; });
+    run('components/Nav.astro');
+    await new Promise(setImmediate);
+    const text = () => slot.querySelector('[data-count]').textContent;
+    assert.equal(text(), '999', 'the saved figure replaces the build\'s while GitHub is asked');
+    answer({ ok: true, json: async () => ({ stargazers_count: 1300 }) });
+    await new Promise(setImmediate);
+    assert.equal(text(), '1.3k');
+    assert.equal(JSON.parse(window.localStorage.getItem('helio:stars')).count, 1300);
+  } finally { await close(); }
+});
+
+test('a refused, failed or malformed answer leaves the star count the page has', async () => {
+  for (const answer of [
+    async () => ({ ok: false, json: async () => ({}) }),
+    async () => { throw new Error('offline'); },
+    async () => ({ ok: true, json: async () => ({ stargazers_count: 'many' }) }),
+    async () => ({ ok: true, json: async () => ({ stargazers_count: -1 }) }),
+  ]) {
+    for (const had of [7, null]) {
+      const { window, document, run, close } = page();
+      try {
+        const slot = starSlot(document, had);
+        window.localStorage.clear();
+        window.fetch = answer;
+        run('components/Nav.astro');
+        await new Promise(setImmediate);
+        assert.equal(slot.hidden, had === null);
+        assert.equal(slot.querySelector('[data-count]').textContent, had === null ? '' : '7');
+        assert.equal(window.localStorage.getItem('helio:stars'), null, 'only a good answer is kept');
+      } finally { await close(); }
+    }
+  }
+});
+
 for (const [agent, system, button, listed] of [
   ['Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)', 'macos', 'Helio-macos-arm64', ['Helio-macos-x86_64', 'Helio-windows-x86_64-setup', 'Helio-linux-x86_64']],
   ['Mozilla/5.0 (Windows NT 10.0; Win64; x64)', 'windows', 'Helio-windows-x86_64-setup', ['Helio-macos-arm64', 'Helio-macos-x86_64', 'Helio-linux-x86_64']],
