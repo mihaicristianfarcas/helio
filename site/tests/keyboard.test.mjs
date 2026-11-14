@@ -65,11 +65,11 @@ function page(components = [], width = 1280) {
 }
 
 const components = [
-  'components/Nav.astro', 'components/Gallery.astro', 'components/Install.astro',
+  'components/Nav.astro', 'components/Install.astro',
   'components/Command.astro', 'components/Video.astro', 'components/FAQ.astro', 'layouts/Base.astro',
 ];
 
-test('cached fonts cannot restore a refresh before the gallery and downloads initialize', async () => {
+test('cached fonts cannot restore a refresh before the downloads initialize', async () => {
   const { window, document, run, close } = page();
   try {
     document.fonts = { ready: Promise.resolve() };
@@ -80,7 +80,6 @@ test('cached fonts cannot restore a refresh before the gallery and downloads ini
     assert.equal(window.scrollY, 0, 'the initial expanded layout must not receive the saved position');
     assert.equal(document.documentElement.dataset.restore, '400');
     for (const component of components.filter((component) => component !== 'layouts/Base.astro')) run(component);
-    assert.equal(document.querySelector('[data-gallery]').hasAttribute('data-ready'), true);
     assert.equal(document.querySelectorAll('[data-picker] .panel:not([hidden])').length, 1);
     document.dispatchEvent(new window.Event('DOMContentLoaded'));
     await Promise.resolve();
@@ -172,41 +171,6 @@ for (const width of [1280, 390]) {
     } finally { await close(); }
   });
 }
-
-test('pressing a page stops the pages changing, though Safari gives a clicked button no focus', async () => {
-  const { window, document, close } = page(components);
-  try {
-    const gallery = document.querySelector('[data-gallery]');
-    assert.equal(gallery.hasAttribute('data-auto'), true, 'the pages start by themselves');
-    assert.equal(gallery.querySelector('[data-toggle]'), null);
-    const choices = [...gallery.querySelectorAll('[data-tab]')];
-    choices[2].click();
-    assert.equal(gallery.hasAttribute('data-auto'), false);
-    const fill = new window.Event('animationend', { bubbles: true });
-    fill.animationName = 'fill';
-    gallery.dispatchEvent(fill);
-    assert.equal(choices[2].getAttribute('aria-pressed'), 'true', 'the chosen page stays');
-  } finally { await close(); }
-});
-
-test('every gallery choice remains a button in the Tab order and focus stops autoplay', async () => {
-  const { document, stops, close } = page(components);
-  try {
-    const gallery = document.querySelector('[data-gallery]');
-    const choices = [...gallery.querySelectorAll('[data-tab]')];
-    assert.equal(choices.length, 5);
-    assert.ok(choices.every((button) => stops().includes(button)));
-    for (const [i, button] of choices.entries()) {
-      button.focus();
-      assert.equal(gallery.hasAttribute('data-auto'), false);
-      button.click();
-      assert.ok(document.activeElement === button);
-      assert.equal(button.getAttribute('aria-pressed'), 'true');
-      assert.equal(gallery.querySelector(`[data-pane="${i}"]`).getAttribute('aria-hidden'), 'false');
-      assert.ok(choices.every((choice) => stops().includes(choice)));
-    }
-  } finally { await close(); }
-});
 
 for (const [agent, system, button, listed] of [
   ['Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)', 'macos', 'Helio-macos-arm64', ['Helio-macos-x86_64', 'Helio-windows-x86_64-setup', 'Helio-linux-x86_64']],

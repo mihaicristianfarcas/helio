@@ -597,7 +597,6 @@ What it shows is made from the app, by scripts in `site/scripts/`:
 
 | Script | Makes |
 |---|---|
-| `capture-apps.sh` (macOS) | The window's screenshots in `src/assets/shots/`, from the demo mode in its dark appearance, at 1200x800 points, with empty temporary data folders and a home folder of their own. Each is the screen where the window is, over the page's own ink, `--bg` (`hero/macos/wall.swift`), since the demo's `snapshot` step shows dark pages lighter than they are. Needs Screen Recording and Accessibility for the terminal. |
 | `capture-hero.sh` | The hero's pictures in `src/assets/hero/`: the Hosts page (`hosts-sample`) on macOS's and Windows' default wallpapers, 2700x1800, as each desktop composites it. The script's header says how each is made; `hero/` holds what runs there. |
 | `record-stream.sh` | The stream video in `public/media/`: a Linux host and client in the container (`tools/linux-dev`), the host showing a running clock (`clock-scene.py`), both screens read at the same instants from Xvfb's framebuffers (`grab-screens.py`) and set side by side; and the averages of the client's statistics, for `src/lib/facts.ts`. A run whose slowest second fell below 55 fps (the VM starved, both sides at once) is refused and made again. |
 

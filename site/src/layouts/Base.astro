@@ -96,8 +96,8 @@ const cardAlt = 'Helio: remote desktop and game streaming, its Hosts window on m
     <a class="skip" href="#main">Skip to content</a>
     <slot />
     <script is:inline>
-      // Module scripts collapse the gallery and download panels before
-      // DOMContentLoaded. Restoring earlier uses the much taller fallback
+      // Module scripts collapse the download panels, and on a narrow screen
+      // the FAQ answers, before DOMContentLoaded. Restoring earlier uses the much taller fallback
       // layout, so that collapse can move or clamp the saved scroll position.
       (() => {
         const root = document.documentElement;

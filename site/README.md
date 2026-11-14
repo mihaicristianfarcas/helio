@@ -22,7 +22,7 @@ A push to the `landing-page` branch deploys it by itself
 
 Tab and Shift+Tab visit clickable links, buttons and, on a screen narrower
 than 760 px, FAQ toggles, in page order, from the header to the footer. Every
-gallery choice and download has its own stop. Enter activates links; Enter or
+download has its own stop. Enter activates links; Enter or
 Space activates buttons and FAQ toggles. On a narrow screen the FAQ answers
 start closed; on a wider one every answer is open and the questions are no
 stops. The mobile menu also accepts arrow keys, Home
@@ -36,7 +36,7 @@ have focus or the mobile menu is open. Reduced motion removes its slide
 transition.
 
 On refresh, the saved scroll position is restored after the component
-scripts finish arranging the gallery and downloads and the fonts settle.
+scripts finish arranging the downloads and the FAQ and the fonts settle.
 The font wait has a 600 ms fallback after component initialization.
 
 Copy results are announced to screen readers. The stream video has native controls without JavaScript and
