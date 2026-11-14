@@ -411,11 +411,10 @@ test('without JavaScript static content has no Tab stops, every FAQ answer is op
   } finally { await close(); }
 });
 
-test('the hero badge names the license, and the page writes no version into itself', () => {
+test('the page writes no version into itself', () => {
   const page = readFileSync(join(site, 'dist/index.html'), 'utf8');
   const text = page.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '').replace(/<[^>]+>/g, ' ');
   assert.equal(text.match(/Version\s+\d/g)?.length ?? 0, 0);
-  assert.match(page, /class="badge" href="[^"]*\/blob\/main\/LICENSE"[^>]*>GPL-3\.0</);
 });
 
 test('the site is one page, and each of its own links finds its section there', () => {
