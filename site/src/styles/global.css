@@ -214,10 +214,14 @@ kbd {
   border-top: 1px solid var(--line);
 }
 
-/* A section's opening: a label, a title, a sentence or two. */
+/* A section's opening: a label, a title, a sentence or two. The title keeps
+   the measure; the sentence under it runs the column (.lede). */
 .head {
-  max-width: var(--measure);
   margin-bottom: var(--gap-head);
+}
+
+.head .title {
+  max-width: var(--measure);
 }
 
 .eyebrow {
@@ -234,9 +238,12 @@ kbd {
   line-height: 1.15;
 }
 
+/* The sentence under a title runs the width it has and breaks only where
+   that ends: no measure, and no early breaks to even out the lines. */
 .lede {
   margin-top: 16px;
   font-size: clamp(1rem, 0.96rem + 0.2vw, 1.125rem);
+  text-wrap: wrap;
 }
 
 /* A numbered row: the steps to a first stream, and the host's rules for agents. */
@@ -288,11 +295,13 @@ kbd {
   }
 }
 
+/* The small line under a block runs the width it has and breaks only where
+   that ends, as a title's .lede does. */
 .note {
-  max-width: var(--measure);
   color: var(--text-3);
   font-size: 0.875rem;
   line-height: 1.55;
+  text-wrap: wrap;
 }
 
 .num {
