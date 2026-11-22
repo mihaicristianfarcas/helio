@@ -1,0 +1,20 @@
+# Click to frame as in a game, each stack at its defaults (as defaults.txt):
+# the flash scene drawn every refresh, white while the button is held, so
+# every stack streams at its full rate and no frame is alone. Clicks only.
+# Helio at equal wire (EQ, filled in by the queue).
+apollo   1920x1080@60  20000  vsync nopacing BENCH_PHASES=flash BENCH_FLASH_FPS=1 BENCH_CLICKS=60 BENCH_TAG=cf
+sunshine 1920x1080@60  20000  vsync nopacing BENCH_PHASES=flash BENCH_FLASH_FPS=1 BENCH_CLICKS=60 BENCH_TAG=cf
+helio    1920x1080@60  EQ     vsync nopacing BENCH_PHASES=flash BENCH_FLASH_FPS=1 BENCH_CLICKS=60 BENCH_TAG=cf
+apollo   1920x1080@120 28000  vsync nopacing BENCH_PHASES=flash BENCH_FLASH_FPS=1 BENCH_CLICKS=60 BENCH_TAG=cf
+sunshine 1920x1080@120 28000  vsync nopacing BENCH_PHASES=flash BENCH_FLASH_FPS=1 BENCH_CLICKS=60 BENCH_TAG=cf
+helio    1920x1080@120 EQ     vsync nopacing BENCH_PHASES=flash BENCH_FLASH_FPS=1 BENCH_CLICKS=60 BENCH_TAG=cf
+apollo   2560x1440@60  40000  vsync nopacing BENCH_PHASES=flash BENCH_FLASH_FPS=1 BENCH_CLICKS=60 BENCH_TAG=cf
+sunshine 2560x1440@60  40000  vsync nopacing BENCH_PHASES=flash BENCH_FLASH_FPS=1 BENCH_CLICKS=60 BENCH_TAG=cf
+helio    2560x1440@60  EQ     vsync nopacing BENCH_PHASES=flash BENCH_FLASH_FPS=1 BENCH_CLICKS=60 BENCH_TAG=cf
+apollo   2560x1440@120 57000  vsync nopacing BENCH_PHASES=flash BENCH_FLASH_FPS=1 BENCH_CLICKS=60 BENCH_TAG=cf
+sunshine 2560x1440@120 57000  vsync nopacing BENCH_PHASES=flash BENCH_FLASH_FPS=1 BENCH_CLICKS=60 BENCH_TAG=cf
+helio    2560x1440@120 EQ     vsync nopacing BENCH_PHASES=flash BENCH_FLASH_FPS=1 BENCH_CLICKS=60 BENCH_TAG=cf
+apollo   3840x2160@60  80000  vsync nopacing BENCH_PHASES=flash BENCH_FLASH_FPS=1 BENCH_CLICKS=60 BENCH_TAG=cf
+helio    3840x2160@60  EQ     vsync nopacing BENCH_PHASES=flash BENCH_FLASH_FPS=1 BENCH_CLICKS=60 BENCH_TAG=cf
+apollo   3840x2160@120 113000 vsync nopacing BENCH_PHASES=flash BENCH_FLASH_FPS=1 BENCH_CLICKS=60 BENCH_TAG=cf
+helio    3840x2160@120 EQ     vsync nopacing BENCH_PHASES=flash BENCH_FLASH_FPS=1 BENCH_CLICKS=60 BENCH_TAG=cf

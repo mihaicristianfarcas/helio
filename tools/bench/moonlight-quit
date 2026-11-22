@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+# moonlight-quit: quits the app a Moonlight host (Sunshine, Apollo) is
+# streaming, with the request Moonlight's own Quit sends.
+#
+#   tools/bench/moonlight-quit HOST
+#
+# Moonlight's Quit is one HTTPS request to the host, `/cancel`, signed with
+# the client's certificate; this sends it with the certificate and key
+# Moonlight keeps in its settings, so the host sees Moonlight quitting.
+# `Moonlight quit NAME` does the same once it has found the host, but in a
+# session's first seconds its host list (several entries for one address)
+# shows the host offline, and it waits on: no use for starts-mac, which ends
+# a session five seconds in.
+#
+# The certificate and key are copied for the request into a folder only you
+# can read, and deleted when it is sent. Prints the host's reply; exits 0
+# when the host says it quit the app.
+set -euo pipefail
+host=$1
+keys=$(mktemp -d)
+trap 'rm -rf "$keys"' EXIT
+python3 -I - "$keys" <<'EOF'
+import os, plistlib, sys
+with open(os.path.expanduser("~/Library/Preferences/com.moonlight-stream.Moonlight.plist"), "rb") as f:
+    d = plistlib.load(f)
+for name in ("certificate", "key"):
+    fd = os.open(os.path.join(sys.argv[1], name + ".pem"), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    os.write(fd, d[name])
+    os.close(fd)
+with open(os.path.join(sys.argv[1], "uniqueid"), "w") as f:
+    f.write(d["uniqueid"])
+EOF
+reply=$(curl -sk --max-time 20 --cert "$keys/certificate.pem" --key "$keys/key.pem" \
+    "https://$host:47984/cancel?uniqueid=$(cat "$keys/uniqueid")&uuid=$(uuidgen)")
+echo "$reply"
+grep -q '<cancel>1</cancel>' <<<"$reply"

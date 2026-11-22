@@ -1,0 +1,11 @@
+# L4 with the noise scene: it fills the bitrate, so the drop to 20 Mbit/s
+# constrains every stack (the counter scene put 2-3 Mbit/s on the wire).
+# B6 L4: a link that loses capacity mid-stream (60 Mbit/s, 20 from second 10
+# to 30, then 60 again) under a stream of about 40 Mbit/s, 40 s of the
+# counter scene from second 4; a clean run is the control.
+apollo   2560x1440@60   40000  vsync nopacing BENCH_PHASES=noise BENCH_SECONDS=40 BENCH_TAG=L4n-clean
+sunshine 2560x1440@60   40000  vsync nopacing BENCH_PHASES=noise BENCH_SECONDS=40 BENCH_TAG=L4n-clean
+helio    2560x1440@60   EQ     vsync nopacing BENCH_PHASES=noise BENCH_SECONDS=40 BENCH_TAG=L4n-clean
+apollo   2560x1440@60   40000  vsync nopacing BENCH_IMPAIR=drop-60-20 BENCH_PHASES=noise BENCH_SECONDS=40 BENCH_TAG=L4n-drop-60-20
+sunshine 2560x1440@60   40000  vsync nopacing BENCH_IMPAIR=drop-60-20 BENCH_PHASES=noise BENCH_SECONDS=40 BENCH_TAG=L4n-drop-60-20
+helio    2560x1440@60   EQ     vsync nopacing BENCH_IMPAIR=drop-60-20 BENCH_PHASES=noise BENCH_SECONDS=40 BENCH_TAG=L4n-drop-60-20

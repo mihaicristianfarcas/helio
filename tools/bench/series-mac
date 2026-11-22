@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+# series-mac: a series of run-mac runs, in rotating order.
+#
+#   tools/bench/series-mac REPS OUTROOT < PLAN
+#
+# PLAN has a run per line, `STACK WxH@FPS KBPS vsync|novsync nopacing|pacing
+# [NAME=VALUE...]`, the last words setting run-mac's environment for that run
+# alone (BENCH_HOST_MODE=2560x1440@120; BENCH_TAG=cap ends the run's folder
+# name, to tell apart lines that differ only there); `#` starts a comment.
+# Each repetition runs every line once, and repetition r starts at line r:
+# no setting always runs first, or always right after the same other, and a
+# slow drift (the room warming, the network getting busier) falls on every
+# stack alike.
+#
+# A run's folder is OUTROOT/rREP-STACK-MODE-KBPS-VSYNC-PACING. A run that
+# fails is listed in OUTROOT/failed.txt and the series goes on; one summary
+# line per run goes to OUTROOT/progress.txt. tools/bench/preflight runs first
+# and its findings stay in OUTROOT (preflight.txt, rig.txt).
+set -uo pipefail
+reps=$1 root=$2
+here=$(cd "$(dirname "$0")" && pwd)
+mkdir -p "$root"
+# The rig is checked once, before the first run, and what was read goes into
+# every run's folder (run-mac copies BENCH_RIG). BENCH_NO_PREFLIGHT=1 skips
+# the check, for a trial that is not published.
+if [ "${BENCH_NO_PREFLIGHT:-0}" != 1 ]; then
+    # Not from the plan on standard input: its SSH would read the plan away.
+    if ! "$here/preflight" "$root" </dev/null >"$root/preflight.txt" 2>&1; then
+        cat "$root/preflight.txt" >&2
+        echo "series-mac: the pre-flight failed (above); nothing ran" >&2
+        exit 1
+    fi
+    export BENCH_RIG=$root/rig.txt
+fi
+mapfile -t plan < <(sed -e 's/#.*//' -e '/^[[:space:]]*$/d')
+n=${#plan[@]}
+for ((r = 1; r <= reps; r++)); do
+    for ((i = 0; i < n; i++)); do
+        read -r stack mode kbps vs fp extra <<<"${plan[$(((i + r - 1) % n))]}"
+        vs=${vs:-vsync} fp=${fp:-nopacing}
+        read -ra extra <<<"${extra:-}"
+        tag=
+        for kv in "${extra[@]}"; do [[ $kv == BENCH_TAG=* ]] && tag=-${kv#BENCH_TAG=}; done
+        out="$root/r$r-$stack-${mode/@/-}-$kbps-$vs-$fp$tag"
+        if env "${extra[@]}" "$here/run-mac" "$stack" "$mode" "$kbps" "$out" "$vs" "$fp" >"$out.log" 2>&1; then
+            echo "$(date +%T) ok $(basename "$out") $(tr '\n' ' ' <"$out/flash.txt" 2>/dev/null | cut -c1-80)" >>"$root/progress.txt"
+        else
+            echo "$(basename "$out")" >>"$root/failed.txt"
+            echo "$(date +%T) FAILED $(basename "$out")" >>"$root/progress.txt"
+        fi
+    done
+done
+echo "$(date +%T) series done" >>"$root/progress.txt"

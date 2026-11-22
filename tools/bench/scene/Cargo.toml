@@ -1,0 +1,19 @@
+[package]
+name = "bench-scene"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+# The same window and GPU crates as Helio's client, so the scene builds
+# wherever the client does.
+[dependencies]
+pollster = "1"
+wgpu = "30"
+winit = "0.30"
+
+[profile.release]
+debug = false
+
+# Not a workspace member: a measuring tool must never gate a workspace-wide
+# `cargo test`.
+[workspace]

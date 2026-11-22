@@ -1,0 +1,85 @@
+#!/usr/bin/env python3
+"""film-clicks: click to photon from a slow-motion film of the clicker's LED
+and the client's screen.
+
+    tools/bench/film-clicks VIDEO --fps 240 --led X,Y,W,H --screen X,Y,W,H [--out CSV]
+
+X,Y,W,H are fractions of the frame (0.1,0.6,0.05,0.05): a box around the
+Pi's LED (tools/bench/pi/clicker.py) and a box inside the client's screen
+showing the host's `flash` scene. ffmpeg measures each box's mean brightness
+in every frame (crop + signalstats); a box is lit above the midpoint of its
+darkest and brightest. Each time the LED lights, the click's latency is the
+time to the first frame after it where the screen is lit, in frames divided
+by --fps: the capture rate, not the file's playback rate (a phone's
+slow-motion file may play back slower than it filmed).
+
+The camera's frame is the resolution: 4.2 ms at 240 fps, the same for every
+click and every stack, so medians over many clicks compare to about that.
+A click whose screen was already lit, or that lit nothing within 400 ms, is
+left out and counted.
+"""
+import argparse
+import subprocess
+import statistics as st
+import sys
+
+
+def means(video, box):
+    x, y, w, h = box
+    vf = f"crop=iw*{w}:ih*{h}:iw*{x}:ih*{y},signalstats,metadata=print:key=lavfi.signalstats.YAVG:file=-"
+    p = subprocess.run(["ffmpeg", "-v", "error", "-i", video, "-map", "0:v:0", "-vf", vf, "-f", "null", "-"],
+                       capture_output=True, text=True, check=True)
+    return [float(line.split("=", 1)[1]) for line in p.stdout.splitlines() if "YAVG" in line]
+
+
+def lit(values):
+    lo, hi = min(values), max(values)
+    mid = (lo + hi) / 2
+    return [v > mid for v in values], hi - lo
+
+
+def box(s):
+    v = [float(x) for x in s.split(",")]
+    if len(v) != 4:
+        raise argparse.ArgumentTypeError("X,Y,W,H")
+    return v
+
+
+def main():
+    a = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    a.add_argument("video")
+    a.add_argument("--fps", type=float, required=True, help="frames per second the camera filmed")
+    a.add_argument("--led", type=box, required=True)
+    a.add_argument("--screen", type=box, required=True)
+    a.add_argument("--out")
+    o = a.parse_args()
+    led, led_span = lit(means(o.video, o.led))
+    scr, scr_span = lit(means(o.video, o.screen))
+    n = min(len(led), len(scr))
+    rows, skipped = [], 0
+    limit = int(0.4 * o.fps)
+    for i in range(1, n):
+        if led[i] and not led[i - 1]:
+            if scr[i]:
+                skipped += 1
+                continue
+            j = next((k for k in range(i + 1, min(n, i + limit)) if scr[k]), None)
+            if j is None:
+                skipped += 1
+                continue
+            rows.append((i, j, (j - i) * 1000 / o.fps))
+    ms = [r[2] for r in rows]
+    if o.out:
+        with open(o.out, "w") as f:
+            f.write("led_frame,screen_frame,latency_ms\n")
+            f.writelines(f"{i},{j},{m:.2f}\n" for i, j, m in rows)
+    if not ms:
+        sys.exit(f"no clicks found (LED contrast {led_span:.0f}, screen contrast {scr_span:.0f}): check the boxes")
+    q = sorted(ms)
+    print(f"frames {n} clicks {len(ms)} skipped {skipped} median {st.median(ms):.1f} "
+          f"p95 {q[int((len(q) - 1) * 0.95)]:.1f} min {q[0]:.1f} max {q[-1]:.1f} ms "
+          f"(one frame = {1000 / o.fps:.1f} ms)")
+
+
+if __name__ == "__main__":
+    main()

@@ -8,7 +8,7 @@ changes themselves — code style, comments, docs, commits — are in
 ## The repository
 
 ```
-Cargo.toml            the workspace (every crate below but tools/rawinput-probe)
+Cargo.toml            the workspace (every crate below but tools/rawinput-probe and tools/bench/scene)
 helio-app/            the app's window (GPUI), This computer   ─┐
 helio-client/         the client: session, stream, platforms   │ the app
 helio-cli/            `helio`, the command line                │
@@ -185,6 +185,77 @@ normal use.
 Per-second statistics: `RUST_LOG=info,helio_client::stats=debug` on the client
 (`lost_frames` and `recoveries` in that line are cumulative), and the host's
 `helio-host.log`.
+
+## Benchmarks
+
+`tools/bench` measures Helio against Moonlight streaming from Sunshine and
+from Apollo, from the client's side and the same way for each: a Mac
+client, a Windows host. The results, the machines they were taken on and
+what the figures leave out are in [benchmarks.md](benchmarks.md).
+
+| Tool | Runs on | Does |
+|---|---|---|
+| `scene/` | the host | The picture every stack streams, drawn by one shader: a flash while the mouse button is held, a frame counter, noise in every pixel. Not a workspace member: `cargo build --release` in its folder |
+| `bench-host.ps1` | the host | The host's side of a run, over SSH: which host runs, the scene, the display's mode, Sunshine's and Apollo's LAN encryption, and samples of the GPU, its encoder, power and the host's processes |
+| `probe-mac/main.swift` | the client | `bench-probe`: posts clicks and times each flash, or reads the counter in every frame macOS composites; `film` clicks with nothing recording, lighting the Caps Lock LED with each click, for a camera |
+| `run-mac` | the client | One run: the host, the client full screen, each scene in turn, the client quit as a person would |
+| `moonlight-quit` | the client | Quits the app a Moonlight host streams with the request Moonlight's own Quit sends, signed with Moonlight's client certificate (copied for it into a folder only you can read, then deleted) |
+| `calibrate` | anywhere | Helio's bitrate setting that puts Moonlight's rate on the wire, for each mode, from a calibration series (`plans/calibrate.txt`) |
+| `series-mac` | the client | A plan's runs, a number of times, each repetition starting one line later |
+| `local-mac` | the client | The probe against the scene drawn on the client itself, with no stream: what the measurement takes by itself (the scene built on the client too) |
+| `plans/` | | The series behind benchmarks.md, a run per line |
+| `starts-mac`, `soak-mac` | the client | Starts and ends a stream N times; one stream for N minutes, read every minute |
+| `rig`, `preflight` | the client | What both machines are and how they are set, read from them (versions, display modes, links, power, logging), saved in every run; and whether that is the rig a series names, checked before its first run |
+| `impair`, `profiles/` | the client | A link that loses, delays or narrows, made in the Mac's network stack (dummynet) the same way for every stack; a profile per file. Needs a sudoers rule for `dnctl` and `pfctl` |
+| `check-link`, `rtt` | the client | Known answers for the link: the wire-rate counter against iperf3, and each profile's loss, delay and capacity as measured; `rtt` times TCP connections to the host (a round trip each) |
+| `analyze`, `analyze-soak`, `compare`, `report` | anywhere | A row of figures per run or medians per setting (click to frame, frames shown, hitches, freezes, damaged frames, wire rate, load); a soak's minutes; two settings' difference with a 95% interval; a series as benchmarks.md's tables |
+| `test_tools.py` | anywhere | Known answers for `analyze` and `compare`: synthetic runs whose figures are known |
+| `pi/clicker.py`, `pi/install-gadget` | a Raspberry Pi 5 | The Pi as the client's USB mouse, its LED lit with each click, for filming |
+| `film-clicks` | anywhere | Click to photon from a film of an LED lit with each click (the Pi's, or the Caps Lock key's from `bench-probe film`) and the client's screen (FFmpeg) |
+
+To set one up:
+
+1. On the host: Helio Host with hosting on, Sunshine and Apollo installed,
+   and an OpenSSH server. Copy `tools/bench/bench-host.ps1`,
+   `tools/set-resolution.ps1` and `tools/bench/scene` into one folder,
+   build the scene there, and make a `runs` folder beside them.
+2. On the client: Helio and Moonlight in `/Applications`, each paired with
+   the host (Moonlight with Sunshine and with Apollo, under a name for
+   each), and the probe built:
+
+   ```sh
+   mkdir -p target/bench
+   swiftc -O -o target/bench/bench-probe tools/bench/probe-mac/main.swift
+   ```
+
+   The program you start it from (the terminal) needs **Screen Recording**
+   and **Accessibility** in **System Settings → Privacy & Security**.
+3. Describe the bench in the environment, then run a plan and read it:
+
+   ```sh
+   export BENCH_HOST=192.168.1.20 BENCH_SSH="ssh user@192.168.1.20" BENCH_HOST_DIR='C:\path\to\bench'
+   export BENCH_IFACE=en7 HELIO_HOST_NAME=gaming-pc MOONLIGHT_SUNSHINE=gaming-pc-sunshine MOONLIGHT_APOLLO=gaming-pc-apollo
+   tools/bench/series-mac 5 runs/defaults < tools/bench/plans/defaults.txt
+   tools/bench/analyze --table runs/defaults/*/
+   tools/bench/compare runs/defaults/*-helio-2560x1440-120-44000-*/ -- runs/defaults/*-apollo-2560x1440-120-57000-*/
+   ```
+
+| Variable | Does |
+|---|---|
+| `BENCH_HOST` | The host's address, which Moonlight paired with; Helio dials it too (`--via`) |
+| `BENCH_SSH` | A command that reaches the host's shell |
+| `BENCH_HOST_DIR` | The host's folder from step 1 |
+| `BENCH_IFACE` | The client's network interface to the host, whose bytes are counted |
+| `HELIO_HOST_NAME`, `MOONLIGHT_SUNSHINE`, `MOONLIGHT_APOLLO` | The host's name in Helio, and in Moonlight for Sunshine and for Apollo |
+| `BENCH_CLICKS`, `BENCH_SECONDS`, `BENCH_WARMUP` | Clicks a run (40), seconds each frame read takes (20), seconds after the stream starts before the first scene (5) |
+| `BENCH_PHASES` | The scenes a run shows, of `flash,counter,noise` (all three); or `film`, the flash with `bench-probe film`, the Mac speaking `BENCH_FILM_CUE` before the clicks and "Stop filming" after |
+| `BENCH_IMPAIR` | A profile of `profiles/` applied after the warm-up and cleared after the scenes |
+| `BENCH_PROBE_SOURCE=window` | The probe captures only the client's full-screen window instead of the display |
+| `BENCH_FLASH_FPS=1` | The flash scene draws every refresh, as a game does, instead of once per click |
+| `BENCH_CAP=1` | The scenes that draw every refresh are capped at the stream's frame rate |
+| `BENCH_SCENE_ARGS` | More arguments for the counter and noise scenes, commas between them: `--present,immediate,--heavy,1200` is a game that keeps the GPU busy |
+| `BENCH_HOST_MODE`, `BENCH_HOST_MODE_AFTER` | The host monitor's mode for a run (`2560x1440@120`), and the one to put back after it |
+| `BENCH_TAG` | In a plan, ends the run's folder name: it tells apart lines that differ only in their variables |
 
 ## Releases
 

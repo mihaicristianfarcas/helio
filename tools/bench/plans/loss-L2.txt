@@ -1,0 +1,26 @@
+# B6 L2: click to frame while 1% of packets are lost, on a still picture
+# and on one that moves (as in a game). A clean run of each is the control.
+apollo   1920x1080@60   20000  vsync nopacing BENCH_PHASES=flash BENCH_TAG=L2-clean-still
+sunshine 1920x1080@60   20000  vsync nopacing BENCH_PHASES=flash BENCH_TAG=L2-clean-still
+helio    1920x1080@60   EQ     vsync nopacing BENCH_PHASES=flash BENCH_TAG=L2-clean-still
+apollo   2560x1440@120  57000  vsync nopacing BENCH_PHASES=flash BENCH_TAG=L2-clean-still
+sunshine 2560x1440@120  57000  vsync nopacing BENCH_PHASES=flash BENCH_TAG=L2-clean-still
+helio    2560x1440@120  EQ     vsync nopacing BENCH_PHASES=flash BENCH_TAG=L2-clean-still
+apollo   1920x1080@60   20000  vsync nopacing BENCH_PHASES=flash BENCH_FLASH_FPS=1 BENCH_CLICKS=60 BENCH_TAG=L2-clean-moving
+sunshine 1920x1080@60   20000  vsync nopacing BENCH_PHASES=flash BENCH_FLASH_FPS=1 BENCH_CLICKS=60 BENCH_TAG=L2-clean-moving
+helio    1920x1080@60   EQ     vsync nopacing BENCH_PHASES=flash BENCH_FLASH_FPS=1 BENCH_CLICKS=60 BENCH_TAG=L2-clean-moving
+apollo   2560x1440@120  57000  vsync nopacing BENCH_PHASES=flash BENCH_FLASH_FPS=1 BENCH_CLICKS=60 BENCH_TAG=L2-clean-moving
+sunshine 2560x1440@120  57000  vsync nopacing BENCH_PHASES=flash BENCH_FLASH_FPS=1 BENCH_CLICKS=60 BENCH_TAG=L2-clean-moving
+helio    2560x1440@120  EQ     vsync nopacing BENCH_PHASES=flash BENCH_FLASH_FPS=1 BENCH_CLICKS=60 BENCH_TAG=L2-clean-moving
+apollo   1920x1080@60   20000  vsync nopacing BENCH_IMPAIR=loss-1 BENCH_PHASES=flash BENCH_TAG=L2-loss-1-still
+sunshine 1920x1080@60   20000  vsync nopacing BENCH_IMPAIR=loss-1 BENCH_PHASES=flash BENCH_TAG=L2-loss-1-still
+helio    1920x1080@60   EQ     vsync nopacing BENCH_IMPAIR=loss-1 BENCH_PHASES=flash BENCH_TAG=L2-loss-1-still
+apollo   2560x1440@120  57000  vsync nopacing BENCH_IMPAIR=loss-1 BENCH_PHASES=flash BENCH_TAG=L2-loss-1-still
+sunshine 2560x1440@120  57000  vsync nopacing BENCH_IMPAIR=loss-1 BENCH_PHASES=flash BENCH_TAG=L2-loss-1-still
+helio    2560x1440@120  EQ     vsync nopacing BENCH_IMPAIR=loss-1 BENCH_PHASES=flash BENCH_TAG=L2-loss-1-still
+apollo   1920x1080@60   20000  vsync nopacing BENCH_IMPAIR=loss-1 BENCH_PHASES=flash BENCH_FLASH_FPS=1 BENCH_CLICKS=60 BENCH_TAG=L2-loss-1-moving
+sunshine 1920x1080@60   20000  vsync nopacing BENCH_IMPAIR=loss-1 BENCH_PHASES=flash BENCH_FLASH_FPS=1 BENCH_CLICKS=60 BENCH_TAG=L2-loss-1-moving
+helio    1920x1080@60   EQ     vsync nopacing BENCH_IMPAIR=loss-1 BENCH_PHASES=flash BENCH_FLASH_FPS=1 BENCH_CLICKS=60 BENCH_TAG=L2-loss-1-moving
+apollo   2560x1440@120  57000  vsync nopacing BENCH_IMPAIR=loss-1 BENCH_PHASES=flash BENCH_FLASH_FPS=1 BENCH_CLICKS=60 BENCH_TAG=L2-loss-1-moving
+sunshine 2560x1440@120  57000  vsync nopacing BENCH_IMPAIR=loss-1 BENCH_PHASES=flash BENCH_FLASH_FPS=1 BENCH_CLICKS=60 BENCH_TAG=L2-loss-1-moving
+helio    2560x1440@120  EQ     vsync nopacing BENCH_IMPAIR=loss-1 BENCH_PHASES=flash BENCH_FLASH_FPS=1 BENCH_CLICKS=60 BENCH_TAG=L2-loss-1-moving

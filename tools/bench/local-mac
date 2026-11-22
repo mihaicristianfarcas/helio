@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+# local-mac: bench-probe against tools/bench/scene drawn on this Mac itself,
+# with no stream and no host: what the measurement takes by itself (a posted
+# click reaching an app, the app's frame, compositing while the screen is
+# captured, ScreenCaptureKit), which is in every stack's figures alike.
+#
+#   tools/bench/local-mac FPS OUT
+#
+# Writes OUT as run-mac writes a run (meta.txt, flash.csv, counter.csv, the
+# scene's logs), with stack=local, so tools/bench/analyze reads it:
+# - flash: BENCH_CLICKS clicks, each one's time to the flash;
+# - counter, at FPS: every composited frame read for BENCH_SECONDS; of the
+#   frames the scene presented, the share the capture saw.
+#
+# Optional: BENCH_CLICKS (40), BENCH_SECONDS (20), BENCH_PHASES (flash,counter);
+# BENCH_FLASH_FPS=1, the flash scene drawn every refresh (a click in a game)
+# instead of once per click (a click on a still desktop); BENCH_CAP=1, the
+# scenes drawn at most FPS frames a second. The scene runs full screen on the
+# main display; nothing else should be over it. Needs Screen Recording and
+# Accessibility for the terminal, as run-mac does.
+set -euo pipefail
+F=${1:?usage: local-mac FPS OUT}
+out=${2:?usage: local-mac FPS OUT}
+root=$(cd "$(dirname "$0")/../.." && pwd)
+probe=$root/target/bench/bench-probe
+scene=$root/tools/bench/scene/target/release/bench-scene
+clicks=${BENCH_CLICKS:-40}
+secs=${BENCH_SECONDS:-20}
+phases=" $(echo "${BENCH_PHASES:-flash,counter}" | tr ',' ' ') "
+for f in "$probe" "$scene"; do [ -x "$f" ] || { echo "build $f first (docs/development.md#benchmarks)" >&2; exit 1; }; done
+mkdir -p "$out"
+tag=$(basename "$out")
+
+cap=
+[ "${BENCH_CAP:-0}" = 1 ] && cap="--cap $F"
+flash_extra=
+[ "${BENCH_FLASH_FPS:-0}" = 1 ] && flash_extra="--fps $F $cap"
+# The panel's pixels, for the record.
+display=$(system_profiler SPDisplaysDataType 2>/dev/null | sed -n 's/.*Resolution: \([0-9]*\) x \([0-9]*\).*/\1x\2/p' | head -1)
+echo "stack=local mode=${display:-display}@$F kbps=0 vsync=- pacing=- clicks=$clicks seconds=$secs scene_args=${cap// /_} flash_args=${flash_extra// /_} phases=$(echo $phases | tr ' ' '+') macos=$(sw_vers -productVersion)" >"$out/meta.txt"
+
+# SCENE_ARGS... SECONDS: the scene full screen until it quits by itself
+# (`--seconds`, so its log is flushed whole), the probe started once it draws.
+run_scene() {
+    local phase=$1 seconds=$2; shift 2
+    "$scene" "$@" --seconds "$seconds" --log "$out/$tag-$phase-scene.csv" >/dev/null 2>&1 &
+    scene_pid=$!
+    # Full screen takes a moment on macOS (the window moves to its own Space).
+    sleep 3
+}
+
+if [[ $phases == *" flash "* ]]; then
+    # Clicks come 450-850 ms apart: the scene outlasts the slowest series by
+    # a few seconds, then quits.
+    run_scene flash $(((clicks * 85 + 99) / 100 + 9)) --scene flash $flash_extra
+    "$probe" click "$clicks" "$out/flash.csv" | tee "$out/flash.txt"
+    wait "$scene_pid" 2>/dev/null || true
+fi
+if [[ $phases == *" counter "* ]]; then
+    run_scene counter $((secs + 6)) --scene counter --fps "$F" $cap
+    # A full-screen window on a MacBook sits below the camera housing: 16:10.
+    # The counter's two rows still fall in their bands if it covers the whole
+    # panel instead.
+    "$probe" frames "$secs" 16:10 "$out/counter.csv" | tee "$out/counter.txt"
+    wait "$scene_pid" 2>/dev/null || true
+fi

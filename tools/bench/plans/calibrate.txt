@@ -1,0 +1,28 @@
+# Calibration of "equal wire" (the benchmarks' rule 4): the noise scene only,
+# each stack at the mode's default bitrate (Moonlight's, which Helio shares),
+# and Helio at a lower setting, to find the setting that puts Moonlight's wire
+# rate on the wire. Helio's setting is the encoder's rate with FEC parity on
+# top; Moonlight's is the wire's (Sunshine takes parity, audio and a margin
+# out of it). Sunshine streams the host's monitor: no 3840x2160 (its limit).
+apollo   1920x1080@60  20000  vsync nopacing BENCH_PHASES=noise BENCH_TAG=cal
+sunshine 1920x1080@60  20000  vsync nopacing BENCH_PHASES=noise BENCH_TAG=cal
+helio    1920x1080@60  20000  vsync nopacing BENCH_PHASES=noise BENCH_TAG=cal
+helio    1920x1080@60  15000  vsync nopacing BENCH_PHASES=noise BENCH_TAG=cal
+apollo   1920x1080@120 28000  vsync nopacing BENCH_PHASES=noise BENCH_TAG=cal
+sunshine 1920x1080@120 28000  vsync nopacing BENCH_PHASES=noise BENCH_TAG=cal
+helio    1920x1080@120 28000  vsync nopacing BENCH_PHASES=noise BENCH_TAG=cal
+helio    1920x1080@120 21000  vsync nopacing BENCH_PHASES=noise BENCH_TAG=cal
+apollo   2560x1440@60  40000  vsync nopacing BENCH_PHASES=noise BENCH_TAG=cal
+sunshine 2560x1440@60  40000  vsync nopacing BENCH_PHASES=noise BENCH_TAG=cal
+helio    2560x1440@60  40000  vsync nopacing BENCH_PHASES=noise BENCH_TAG=cal
+helio    2560x1440@60  31000  vsync nopacing BENCH_PHASES=noise BENCH_TAG=cal
+apollo   2560x1440@120 57000  vsync nopacing BENCH_PHASES=noise BENCH_TAG=cal
+sunshine 2560x1440@120 57000  vsync nopacing BENCH_PHASES=noise BENCH_TAG=cal
+helio    2560x1440@120 57000  vsync nopacing BENCH_PHASES=noise BENCH_TAG=cal
+helio    2560x1440@120 44000  vsync nopacing BENCH_PHASES=noise BENCH_TAG=cal
+apollo   3840x2160@60  80000  vsync nopacing BENCH_PHASES=noise BENCH_TAG=cal
+helio    3840x2160@60  80000  vsync nopacing BENCH_PHASES=noise BENCH_TAG=cal
+helio    3840x2160@60  62000  vsync nopacing BENCH_PHASES=noise BENCH_TAG=cal
+apollo   3840x2160@120 113000 vsync nopacing BENCH_PHASES=noise BENCH_TAG=cal
+helio    3840x2160@120 113000 vsync nopacing BENCH_PHASES=noise BENCH_TAG=cal
+helio    3840x2160@120 88000  vsync nopacing BENCH_PHASES=noise BENCH_TAG=cal

@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+# rig: what the client Mac and the Windows host are, and how they are set, as
+# key=value lines, read from the machines each time it runs.
+#
+#   tools/bench/rig [COMMIT]
+#
+# The benchmark page's "Test setup" is made from these lines, never typed:
+# tools/bench/preflight saves them in every series' folder, and run-mac in
+# every run's. COMMIT, if given, is looked for in Helio on both machines (the
+# app carries its commit as text). The host's half is `bench-host.ps1 rig`.
+#
+# Environment: BENCH_SSH, BENCH_HOST_DIR, BENCH_IFACE (as run-mac).
+set -uo pipefail
+commit=${1:-}
+root=$(cd "$(dirname "$0")/../.." && pwd)
+probe=$root/target/bench/bench-probe
+app=/Applications/Helio.app
+read -ra ssh <<<"$BENCH_SSH"
+
+hw=$(system_profiler SPHardwareDataType 2>/dev/null)
+field() { awk -F': ' -v k="$1" '$1 ~ k { print $2; exit }' <<<"$hw"; }
+echo "client_date=$(date +%FT%T%z)"
+echo "client_model=$(field 'Model Name') ($(field 'Model Identifier'))"
+echo "client_chip=$(field 'Chip')"
+echo "client_memory=$(field 'Memory')"
+echo "client_os=macOS $(sw_vers -productVersion) ($(sw_vers -buildVersion))"
+"$probe" display 2>/dev/null || echo "client_display=unknown (bench-probe not built)"
+echo "client_link=$BENCH_IFACE: $(ifconfig "$BENCH_IFACE" 2>/dev/null | sed -n 's/^[[:space:]]*media: //p')"
+wifi=$(networksetup -listallhardwareports | awk '/Hardware Port: Wi-Fi/ { getline; print $2 }')
+echo "client_wifi=$(networksetup -getairportpower "${wifi:-en0}" 2>/dev/null | awk '{ print tolower($NF) }')"
+echo "client_power=$(pmset -g batt | sed -n "s/^Now drawing from '\(.*\)'/\1/p")"
+echo "client_low_power=$(pmset -g | awk '/^ *(lowpowermode|powermode) / { print $2; exit }')"
+echo "client_display_sleep_prevented=$(pmset -g assertions | awk '/PreventUserIdleDisplaySleep/ { print $2; exit }')"
+echo "client_version_helio=$(defaults read "$app/Contents/Info.plist" CFBundleShortVersionString 2>/dev/null)"
+[ -n "$commit" ] && echo "client_helio_commit_found=$(LC_ALL=C grep -a -c "$commit" "$app/Contents/MacOS/Helio" 2>/dev/null)"
+echo "client_version_moonlight=$(defaults read /Applications/Moonlight.app/Contents/Info.plist CFBundleShortVersionString 2>/dev/null)"
+echo "client_rust_log=$(launchctl getenv RUST_LOG)${RUST_LOG:+ shell:$RUST_LOG}"
+if launchctl print "gui/$(id -u)/dev.mihaicristian.helio.host" >/dev/null 2>&1; then
+    echo "client_helio_host_loaded=yes"
+else
+    echo "client_helio_host_loaded=no"
+fi
+# Anything that records the screen, or a stream or scene left from a run.
+live=$(pgrep -lf 'Moonlight.app/Contents/MacOS/Moonlight|bin/helio stream|bench-probe|bench-scene|screencapture|OBS.app|QuickTime Player' |
+    grep -v -e pgrep -e "tools/bench/rig" | awk '{ print $2 }' | xargs -n1 basename 2>/dev/null | sort -u | tr '\n' ' ')
+echo "client_live=${live% }"
+echo "client_disk_free_gb=$(df -g "$root/target" | awk 'NR == 2 { print $4 }')"
+# The traffic shaper is clean when no pipe is configured (tools/bench/impair).
+if sudo -n /usr/sbin/dnctl list >/dev/null 2>&1; then
+    echo "client_impairment=$(sudo -n /usr/sbin/dnctl list 2>/dev/null | grep -c '^[0-9]') pipes"
+else
+    echo "client_impairment=unknown (no sudo rule for dnctl)"
+fi
+"${ssh[@]}" "powershell -NoProfile -ExecutionPolicy Bypass -File $BENCH_HOST_DIR\\bench-host.ps1 rig $commit" 2>&1 |
+    tr -d '\r' | grep -E '^host_'

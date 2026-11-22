@@ -1,0 +1,42 @@
+#!/usr/bin/env perl
+# rtt: round trips to the host, as the time a TCP connection takes to open.
+#
+#   tools/bench/rtt HOST PORT [N]
+#
+# Prints min/avg/max/stddev in ms, as ping does, over N (100) connections 50 ms
+# apart. Opening a connection is one round trip (SYN out, SYN-ACK back), and
+# needs no change to the host's firewall: any port the host listens on will
+# do (Helio Host's pairing port, 47801). check-link uses it for the delay
+# profiles' known answers.
+#
+# Perl, not Python: macOS's local network privacy refuses the command-line
+# Python's connections on the LAN ("No route to host") and lets the system's
+# Perl through.
+use strict;
+use warnings;
+use IO::Socket::INET;
+use Time::HiRes qw(time sleep);
+
+my ($host, $port, $n) = @ARGV;
+die "usage: rtt HOST PORT [N]\n" unless $host && $port;
+$n ||= 100;
+my @xs;
+my $failed = 0;
+for (1 .. $n) {
+    my $t = time;
+    my $s = IO::Socket::INET->new(PeerAddr => $host, PeerPort => $port, Proto => 'tcp', Timeout => 3);
+    if ($s) { push @xs, (time - $t) * 1000; close $s; } else { $failed++; }
+    sleep 0.05;
+}
+die "no connection opened\n" unless @xs;
+my ($min, $max, $sum) = ($xs[0], $xs[0], 0);
+for (@xs) { $min = $_ if $_ < $min; $max = $_ if $_ > $max; $sum += $_; }
+my $avg = $sum / @xs;
+my $var = 0;
+$var += ($_ - $avg)**2 for @xs;
+printf "%d connections, %d failed\n", $n, $failed;
+printf "round-trip min/avg/max/stddev = %.3f/%.3f/%.3f/%.3f ms\n", $min, $avg, $max, sqrt($var / @xs);
+# The median: what a few connections that waited for a lost SYN to be sent
+# again (a second later) do not move.
+my @s = sort { $a <=> $b } @xs;
+printf "round-trip median = %.3f ms\n", @s % 2 ? $s[$#s / 2] : ($s[@s / 2 - 1] + $s[@s / 2]) / 2;

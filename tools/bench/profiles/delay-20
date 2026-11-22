@@ -1,0 +1,3 @@
+# 20 ms added each way: a round trip 40 ms longer.
+down delay 20
+up delay 20
