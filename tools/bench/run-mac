@@ -1,0 +1,265 @@
+#!/usr/bin/env bash
+# run-mac: one benchmark run from a Mac client to a Windows host, with the
+# same steps for every stack.
+#
+#   tools/bench/run-mac STACK WxH@FPS KBPS OUT [vsync|novsync] [nopacing|pacing]
+#
+# STACK is helio, sunshine or apollo (Moonlight is the client of the last
+# two). KBPS is the client's bitrate setting. OUT is a new folder for the run.
+#
+# 1. Only STACK's host runs (bench-host.ps1 stack), so nothing else competes
+#    for the host's encoder or the network.
+# 2. The client starts full screen with every setting given here, none left
+#    to saved preferences: HEVC, 4:2:0, no HDR, stereo sound not played on the
+#    host, relative mouse. Helio connects only to BENCH_HOST (`--via`), the
+#    address Moonlight paired with, so both use the same link.
+# 3. After a warm-up, the host shows each scene of tools/bench/scene in turn:
+#    - flash: bench-probe clicks and times each flash;
+#    - counter, at the stream's frame rate: bench-probe reads every frame, the
+#      client's CPU and memory are sampled, and the bytes arriving on
+#      BENCH_IFACE are counted;
+#    - noise, the most an encoder can be asked: the same, and the host's GPU,
+#      encoder and CPU are sampled.
+# 4. The client quits as a person would (Ctrl-C for helio, Moonlight's Quit),
+#    the scene closes, and the host's logs are copied into OUT.
+#
+# The scene starts once the client logs its first video (Helio's "session
+# started", Moonlight's "Received first video packet"), plus a settling time
+# for the host's displays (BENCH_WARMUP). The pauses after a scene starts are
+# fixed: nothing says when its first frame reached the client.
+#
+# Environment, all required (they describe the bench, so they have no
+# defaults):
+#   BENCH_HOST          the host's address, e.g. 192.168.1.20
+#   BENCH_SSH           a command reaching the host's shell, e.g. "ssh user@192.168.1.20"
+#   BENCH_HOST_DIR      where tools/bench is on the host, e.g. C:\path\to\bench
+#   BENCH_IFACE         the client's interface to the host, e.g. en7
+#   HELIO_HOST_NAME     the host's name in Helio
+#   MOONLIGHT_SUNSHINE, MOONLIGHT_APOLLO   the host's name in Moonlight for each
+# Optional: BENCH_CLICKS (40), BENCH_SECONDS (20), BENCH_WARMUP (5);
+# BENCH_PHASES, the scenes to run, of `flash,counter,noise` (all three), or
+# `film`: the flash scene with bench-probe's `film` clicks (the Caps Lock LED
+# lights with each), for a camera, nothing recording the screen; it speaks
+# BENCH_FILM_CUE before the clicks and "Stop filming" after;
+# BENCH_CAP=1, the scenes that draw continuously capped at the stream's rate;
+# BENCH_FLASH_FPS=1, the flash scene drawn every refresh (a click in a game)
+# instead of once per click (a click on a still desktop);
+# BENCH_SCENE_ARGS, more arguments for the counter and noise scenes, commas
+# between them (a series plan splits its lines on spaces): with
+# `--present,immediate,--heavy,N` they draw as fast as the GPU allows, a
+# stand-in for a demanding game, and their logs give its frame rate; and
+# BENCH_HOST_MODE (WxH@HZ), the host monitor's mode for the run, put back to
+# BENCH_HOST_MODE_AFTER when it ends: Apollo's virtual display is added
+# beside the monitor, and Windows composites both at the primary's rate.
+# BENCH_IMPAIR (a profile in tools/bench/profiles): the link impaired by
+# tools/bench/impair from the end of the warm-up to the end of the last
+# scene, so the session starts and ends on a clean link, and cleared when the
+# run ends, failed or not.
+set -uo pipefail
+
+stack=$1 mode=$2 kbps=$3 out=$4 vs=${5:-vsync} fp=${6:-nopacing}
+W=${mode%%x*}; rest=${mode#*x}; H=${rest%@*}; F=${mode#*@}
+clicks=${BENCH_CLICKS:-40} secs=${BENCH_SECONDS:-20} warmup=${BENCH_WARMUP:-5}
+scene_extra=${BENCH_SCENE_ARGS:-}
+scene_extra=${scene_extra//,/ }
+[ "${BENCH_CAP:-0}" = 1 ] && scene_extra="$scene_extra --cap $F"
+scene_extra=${scene_extra# }
+flash_extra=
+[ "${BENCH_FLASH_FPS:-0}" = 1 ] && flash_extra="--fps $F"
+[ "${BENCH_FLASH_FPS:-0}" = 1 ] && [ "${BENCH_CAP:-0}" = 1 ] && flash_extra="$flash_extra --cap $F"
+phases=${BENCH_PHASES:-flash,counter,noise}
+phases=" ${phases//,/ } "
+root=$(cd "$(dirname "$0")/../.." && pwd)
+probe=$root/target/bench/bench-probe
+helio=/Applications/Helio.app/Contents/Resources/bin/helio
+moonlight=/Applications/Moonlight.app/Contents/MacOS/Moonlight
+read -ra ssh <<<"$BENCH_SSH"
+tag=$(basename "$out")
+runs="$BENCH_HOST_DIR\\runs"
+mkdir -p "$out"
+
+host() {
+    "${ssh[@]}" "powershell -NoProfile -ExecutionPolicy Bypass -File $BENCH_HOST_DIR\\bench-host.ps1 $*" 2>&1 |
+        tr -d '\r' | grep -vE '^(#< CLIXML|<Objs )'
+}
+scene() { host scene "$(printf %s "$*" | base64)" >/dev/null; }
+host_file() { # copies a host file into OUT
+    "${ssh[@]}" "Get-Content -Raw '$runs\\$1'" 2>/dev/null | tr -d '\r' >"$out/$1"
+}
+# Returns once FILE has a line matching RE, or after S seconds (status 1):
+# tail -F wakes on each write.
+wait_line() {
+    local file=$1 re=$2 s=$3 fd
+    exec {fd}< <(exec tail -n +1 -F "$file" 2>/dev/null)
+    local t=$!
+    ( sleep "$s"; kill "$t" ) 2>/dev/null & local k=$!
+    grep -m1 -qE "$re" <&"$fd"; local r=$?
+    kill "$t" "$k" 2>/dev/null
+    exec {fd}<&-
+    return $r
+}
+now() { perl -MTime::HiRes=time -e 'printf "%.3f\n", time'; }
+rx_bytes() { netstat -ibn -I "$BENCH_IFACE" | awk '$3 ~ /^<Link/ { print $7; exit }'; }
+# Ends `$1`'s process after `$2` seconds unless it ended already.
+bounded_wait() {
+    ( sleep "$2"; kill -9 "$1" 2>/dev/null ) & local k=$!
+    wait "$1" 2>/dev/null; local s=$?
+    kill "$k" 2>/dev/null; wait "$k" 2>/dev/null
+    return $s
+}
+# CPU and memory of the client and of macOS's video decoder service, and the
+# GPU's load, once a second while `$1` runs.
+sample_client() {
+    while kill -0 "$1" 2>/dev/null; do
+        local dec gpu
+        dec=$(pgrep -x VTDecoderXPCService | head -1)
+        gpu=$(ioreg -r -d 1 -w 0 -c IOAccelerator | grep -o '"Device Utilization %"=[0-9]*' | head -1 | cut -d= -f2)
+        echo "$(now),$(ps -o %cpu=,rss= -p "$cpid" | awk '{print $1","$2}'),$(ps -o %cpu=,rss= -p "${dec:-1}" 2>/dev/null | awk '{print $1","$2}'),${gpu:-}"
+        sleep 1
+    done
+}
+# Bytes in per second on BENCH_IFACE while `cmd...` runs, appended to wire.csv.
+counted() {
+    local phase=$1; shift
+    local t0 b0 t1 b1
+    t0=$(now); b0=$(rx_bytes)
+    "$@"
+    t1=$(now); b1=$(rx_bytes)
+    awk -v p="$phase" -v b="$((b1 - b0))" -v t0="$t0" -v t1="$t1" \
+        'BEGIN { printf "%s,%d,%.3f,%.2f\n", p, b, t1 - t0, b * 8 / (t1 - t0) / 1e6 }' >>"$out/wire.csv"
+}
+
+case $stack in
+    helio)
+        args=(stream "$HELIO_HOST_NAME" --via "$BENCH_HOST:47800" --size "${W}x${H}" --fps "$F"
+            --mbps "$((kbps / 1000))" --codec hevc --audio-channels 2 --no-clipboard)
+        [ "$vs" = novsync ] && args+=(--no-vsync)
+        [ "$fp" = pacing ] && args+=(--frame-pacing)
+        client=$helio ;;
+    sunshine | apollo)
+        if [ "$stack" = sunshine ]; then name=$MOONLIGHT_SUNSHINE app=Desktop; else name=$MOONLIGHT_APOLLO app="Virtual Display"; fi
+        args=(stream "$name" "$app" --resolution "${W}x${H}" --fps "$F" --bitrate "$kbps"
+            --display-mode fullscreen --video-codec HEVC --audio-config stereo --no-audio-on-host
+            --no-hdr --no-yuv444 --no-performance-overlay --no-absolute-mouse --no-quit-after)
+        if [ "$vs" = novsync ]; then args+=(--no-vsync); else args+=(--vsync); fi
+        if [ "$fp" = pacing ]; then args+=(--frame-pacing); else args+=(--no-frame-pacing); fi
+        client=$moonlight ;;
+    *) echo "unknown stack $stack" >&2; exit 2 ;;
+esac
+
+{
+    scene_args=$scene_extra flash_args=$flash_extra
+    echo "stack=$stack mode=$mode kbps=$kbps vsync=$vs pacing=$fp clicks=$clicks seconds=$secs scene_args=${scene_args// /_} flash_args=${flash_args// /_} phases=$(echo $phases | tr ' ' '+')"
+    echo "started=$(date -u +%FT%TZ) client=$client ${args[*]}"
+} >"$out/meta.txt"
+echo "phase,bytes,seconds,mbps" >"$out/wire.csv"
+# What the run was taken on: the rig as series-mac read it for the series
+# (BENCH_RIG), or as it is now; every variable this run was given; the
+# scene's source.
+if [ -n "${BENCH_RIG:-}" ] && [ -f "$BENCH_RIG" ]; then
+    cp "$BENCH_RIG" "$out/rig.txt"
+else
+    "$root/tools/bench/rig" "${BENCH_EXPECT_COMMIT:-}" >"$out/rig.txt"
+fi
+{
+    echo "env=$(env | grep -E '^(BENCH_[A-Z_]+|RUST_LOG|HELIO_TEST_[A-Z_]+)=' |
+        grep -vE '^BENCH_(SSH|HOST|HOST_DIR|IFACE|RIG|EXPECT_[A-Z_]+)=' | sort | tr '\n' ' ')"
+    echo "scene_source=$(git -C "$root" rev-parse --short HEAD)$(git -C "$root" diff --quiet HEAD -- tools/bench/scene 2>/dev/null || echo +changes)"
+} >>"$out/meta.txt"
+
+host stack "$stack" | tee -a "$out/meta.txt"
+if [ -n "${BENCH_HOST_MODE:-}" ]; then
+    echo "host_mode=$BENCH_HOST_MODE $(host mode "$BENCH_HOST_MODE" | tr ' ' '_')" >>"$out/meta.txt"
+fi
+if [ "$stack" = helio ]; then
+    # Helio Host answers only paired clients, so there is nothing to ask.
+    sleep 4
+else
+    # Moonlight looks for a host it finds offline only every so often (25 s
+    # seen): start it once the host answers. The host has no event for that.
+    for _ in $(seq 1 60); do
+        curl -s -o /dev/null --max-time 1 "http://$BENCH_HOST:47989/serverinfo" && break
+        sleep 0.5
+    done
+fi
+"$client" "${args[@]}" >"$out/client.log" 2>&1 &
+cpid=$!
+started=$(now)
+if [ "$stack" = helio ]; then
+    wait_line "$out/client.log" 'session started' 60
+else
+    wait_line "$out/client.log" '^Redirecting log output to ' 10
+    ml=$(sed -n 's/^Redirecting log output to //p' "$out/client.log" | head -1)
+    wait_line "$ml" 'Received first video packet' 60
+fi
+echo "first_video_s=$(awk -v a="$started" -v b="$(now)" 'BEGIN { printf "%.2f", b - a }')" >>"$out/meta.txt"
+# The host changes its displays as the stream starts: let them settle.
+sleep "$warmup"
+if ! kill -0 "$cpid" 2>/dev/null; then
+    echo "the client ended during the warm-up:" >&2; tail -5 "$out/client.log" >&2
+    host unscene >/dev/null; exit 1
+fi
+if [ -n "${BENCH_IMPAIR:-}" ]; then
+    trap '"$root/tools/bench/impair" clear >/dev/null 2>&1' EXIT
+    if ! "$root/tools/bench/impair" apply "$BENCH_IMPAIR" >"$out/impair.txt" 2>&1; then
+        echo "the impairment $BENCH_IMPAIR did not apply:" >&2; cat "$out/impair.txt" >&2
+        host unscene >/dev/null; exit 1
+    fi
+    echo "impair=$BENCH_IMPAIR" >>"$out/meta.txt"
+fi
+
+if [[ $phases == *" flash "* ]]; then
+    scene --scene flash $flash_extra --monitor "${W}x${H}@$F" --log $runs\\$tag-flash-scene.csv
+    sleep 3
+    "$probe" click "$clicks" "$out/flash.csv" | tee "$out/flash.txt"
+fi
+
+if [[ $phases == *" film "* ]]; then
+    scene --scene flash $flash_extra --monitor "${W}x${H}@$F" --log $runs\\$tag-film-scene.csv
+    sleep 3
+    say "${BENCH_FILM_CUE:-Start filming}"
+    sleep 2
+    "$probe" film "$clicks" "$out/film.csv" | tee "$out/film.txt"
+    sleep 1
+    say "Stop filming"
+fi
+
+if [[ $phases == *" counter "* ]]; then
+    scene --scene counter --fps $F --monitor "${W}x${H}@$F" $scene_extra --log $runs\\$tag-counter-scene.csv
+    sleep 3
+    sample_client "$cpid" >"$out/client-counter.csv" & s1=$!
+    counted counter "$probe" frames "$secs" "$W:$H" "$out/counter.csv" | tee "$out/counter.txt"
+    kill "$s1" 2>/dev/null
+fi
+
+if [[ $phases == *" noise "* ]]; then
+    scene --scene noise --fps $F --monitor "${W}x${H}@$F" $scene_extra --log $runs\\$tag-noise-scene.csv
+    sleep 3
+    host sample "$secs" "$runs\\$tag-host-noise.csv" >/dev/null & h1=$!
+    sample_client "$cpid" >"$out/client-noise.csv" & s2=$!
+    counted noise "$probe" frames "$secs" "$W:$H" "$out/noise.csv" | tee "$out/noise.txt"
+    kill "$s2" 2>/dev/null
+    wait "$h1"
+fi
+[ -n "${BENCH_IMPAIR:-}" ] && "$root/tools/bench/impair" clear >>"$out/impair.txt" 2>&1
+
+if [ "$stack" = helio ]; then
+    kill -INT "$cpid"
+else
+    # Moonlight's Quit, as moonlight-quit sends it: `Moonlight quit NAME`
+    # finds no host in a session's first seconds (it ended short runs by
+    # timeout). The stream over, Moonlight shows its hosts and stays open.
+    "$root/tools/bench/moonlight-quit" "$BENCH_HOST" >"$out/quit.txt" 2>&1 & q=$!
+    wait_line "$ml" 'Stopping video stream' 20 && echo "stream_stopped=1" >>"$out/meta.txt"
+    bounded_wait "$q" 10
+    kill -TERM "$cpid" 2>/dev/null
+fi
+bounded_wait "$cpid" 20; echo "client exit $?" >>"$out/meta.txt"
+host unscene >/dev/null
+[ -n "${BENCH_HOST_MODE_AFTER:-}" ] && host mode "$BENCH_HOST_MODE_AFTER" >/dev/null
+for f in flash-scene film-scene counter-scene noise-scene host-noise; do
+    ph=${f#host-}; ph=${ph%-scene}
+    case $phases in *" $ph "*) host_file "$tag-$f.csv" ;; esac
+done
+[ "$stack" != helio ] && cp "$ml" "$out/moonlight.log"
+cat "$out/wire.csv" | tail -2

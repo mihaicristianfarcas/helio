@@ -1,0 +1,8 @@
+# Frame pacing on in both clients (Moonlight's --frame-pacing,
+# Helio's --frame-pacing), V-Sync on, defaults otherwise (as defaults.txt).
+apollo   1920x1080@60  20000 vsync pacing
+sunshine 1920x1080@60  20000 vsync pacing
+helio    1920x1080@60  EQ    vsync pacing
+apollo   2560x1440@120 57000 vsync pacing
+sunshine 2560x1440@120 57000 vsync pacing
+helio    2560x1440@120 EQ    vsync pacing

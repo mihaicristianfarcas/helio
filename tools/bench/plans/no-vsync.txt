@@ -1,0 +1,8 @@
+# V-Sync off in both clients, frame pacing off, HEVC, each stack's defaults
+# otherwise. Helio at equal wire (EQ, filled in by the queue).
+helio    1920x1080@60  EQ     novsync nopacing
+apollo   1920x1080@60  20000  novsync nopacing
+sunshine 1920x1080@60  20000  novsync nopacing
+helio    2560x1440@120 EQ     novsync nopacing
+apollo   2560x1440@120 57000  novsync nopacing
+sunshine 2560x1440@120 57000  novsync nopacing

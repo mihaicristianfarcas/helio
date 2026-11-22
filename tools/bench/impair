@@ -1,0 +1,115 @@
+#!/usr/bin/env bash
+# impair: a bad link between this Mac and the host, made in the Mac's own
+# network stack, the same way for every stack under test.
+#
+#   tools/bench/impair apply PROFILE   the link as tools/bench/profiles/PROFILE says
+#   tools/bench/impair clear           the link as it was
+#   tools/bench/impair show            what is applied now
+#
+# Why here: Sunshine and Moonlight have no switches to lose or delay their own
+# packets (Helio has, HELIO_TEST_LOSS and others, for its own before and
+# after), so a comparison needs the impairment on the network. The Windows
+# tools for it were flagged by Defender, so it is done on the Mac.
+#
+# How: macOS's traffic shaper, dummynet (dnctl), fed by packet filter rules
+# (pfctl) in an anchor of their own under Apple's "com.apple/*", which
+# /etc/pf.conf already evaluates for dummynet. Pipe 1 carries what comes
+# from the host (the stream), pipe 2 what goes to it (input, loss reports).
+# The rules match the host's address, so every stack's packets are caught
+# whatever its ports: UDP (all the streams' video, audio and input), ICMP
+# (the delay check) and TCP but SSH, so the runner's control of the host
+# stays clean.
+#
+# dummynet takes a bandwidth, a delay, a random loss rate and a queue size; it
+# has no bursts and no jitter, so profiles of those need Linux's netem and do
+# not exist here.
+#
+# A profile is a text file: lines `down ARGS` and `up ARGS` configure the two
+# pipes with dnctl's arguments (`plr 0.01`, `delay 20`, `bw 20Mbit/s queue
+# 50`); a line `at S down ARGS` changes a pipe S seconds after `apply`
+# returns, for a link that loses capacity mid-run. `#` starts a comment.
+#
+# Needs root for dnctl and pfctl: `sudo -n`, so a sudoers rule allowing exactly
+# those two programs, which the maintainer installs. pf is enabled by
+# reference (`pfctl -E`, released by `clear` with the token it gave), so a pf
+# that was already on stays on. `clear` runs when a run ends, also when it
+# fails: a link left impaired spoils every run after it.
+#
+# Environment: BENCH_HOST (the host's address), BENCH_IFACE (the interface).
+set -euo pipefail
+here=$(cd "$(dirname "$0")" && pwd)
+anchor=com.apple/helio-bench
+state=${TMPDIR:-/tmp}/helio-bench-impair.state
+dnctl() { sudo -n /usr/sbin/dnctl "$@"; }
+pfctl() { sudo -n /sbin/pfctl "$@"; }
+
+rules() {
+    local h=$BENCH_HOST i=$BENCH_IFACE
+    cat <<EOF
+dummynet in quick on $i proto { udp, icmp } from $h to any pipe 1
+dummynet in quick on $i proto tcp from $h port != 22 to any pipe 1
+dummynet out quick on $i proto { udp, icmp } from any to $h pipe 2
+dummynet out quick on $i proto tcp from any to $h port != 22 pipe 2
+EOF
+}
+
+clear() {
+    pfctl -a "$anchor" -F all >/dev/null 2>&1 || true
+    dnctl -q flush 2>/dev/null || true
+    if [ -f "$state" ]; then
+        # A schedule still waiting, and pf's enable reference.
+        local pid token
+        pid=$(sed -n 's/^schedule=//p' "$state")
+        [ -n "$pid" ] && kill "$pid" 2>/dev/null || true
+        token=$(sed -n 's/^token=//p' "$state")
+        [ -n "$token" ] && pfctl -X "$token" >/dev/null 2>&1 || true
+        rm -f "$state"
+    fi
+}
+
+case ${1:-} in
+    apply)
+        name=${2:?usage: impair apply PROFILE}
+        file=$here/profiles/$name
+        [ -f "$file" ] || { echo "no profile $file" >&2; exit 2; }
+        : "${BENCH_HOST:?set BENCH_HOST}" "${BENCH_IFACE:?set BENCH_IFACE}"
+        clear
+        down=$(sed -e 's/#.*//' "$file" | awk '$1 == "down" { $1 = ""; print }')
+        up=$(sed -e 's/#.*//' "$file" | awk '$1 == "up" { $1 = ""; print }')
+        # shellcheck disable=SC2086
+        dnctl pipe 1 config ${down:-}
+        # shellcheck disable=SC2086
+        dnctl pipe 2 config ${up:-}
+        rules | pfctl -a "$anchor" -f - 2>/dev/null
+        token=$(pfctl -E 2>&1 | sed -n 's/^Token : //p')
+        echo "profile=$name" >"$state"
+        echo "token=$token" >>"$state"
+        if grep -qE '^[[:space:]]*at ' "$file"; then
+            (
+                start=$(date +%s)
+                sed -e 's/#.*//' "$file" | awk '$1 == "at"' | while read -r _ s pipe args; do
+                    while [ $(($(date +%s) - start)) -lt "$s" ]; do sleep 0.2; done
+                    n=1; [ "$pipe" = up ] && n=2
+                    # shellcheck disable=SC2086
+                    dnctl pipe $n config $args
+                    echo "$(date +%T) at $s s: $pipe $args" >>"$state.log"
+                done
+            ) >/dev/null 2>&1 &
+            echo "schedule=$!" >>"$state"
+        fi
+        echo "applied $name: down [${down# }] up [${up# }]"
+        ;;
+    clear)
+        clear
+        echo "cleared"
+        ;;
+    show)
+        [ -f "$state" ] && cat "$state"
+        dnctl list 2>/dev/null | grep -E '^[0-9]' || echo "no pipes"
+        pfctl -a "$anchor" -s dummynet 2>/dev/null || true
+        ;;
+    *)
+        echo "usage: tools/bench/impair apply PROFILE | clear | show" >&2
+        exit 2
+        ;;
+esac

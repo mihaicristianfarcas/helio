@@ -1,0 +1,268 @@
+#!/usr/bin/env python3
+"""analyze: one line of figures per benchmark run, from the files run-mac leaves.
+
+    tools/bench/analyze RUN_DIR...          a CSV row per run, on standard output
+    tools/bench/analyze --table RUN_DIR...  medians per stack and setting
+
+What each figure is:
+
+- click_ms: from a posted click to the first composited frame showing the
+  flash (bench-probe click). The first two clicks of a run are left out:
+  the first one brings the scene's window to the front.
+- shown_pct: of the frames the host's scene presented while the client was
+  read, the share the client composited at least once. Below 100, frames
+  were lost on the way (capture, encode, network, decode, present).
+- hitch_pct: of the gaps between one new frame and the next on the client,
+  the share longer than 1.5 frame periods: a stutter a person sees.
+- gap_p99_ms: the 99th percentile of those gaps.
+- freezes_per_min, freeze_median_ms, freeze_max_ms, frozen_pct: gaps between
+  new frames longer than 3 frame periods, which a viewer sees as the picture
+  stopping: how many a minute, their median and longest, and the share of
+  the read time spent in them.
+- damaged_pct: of the composited frames, the share whose counter cannot be
+  read (a cell agrees with its inverse below it: a torn, smeared or
+  half-decoded picture) or reads lower than one already shown (a frame from
+  before a loss, shown again after newer ones). A stack that decodes past a
+  loss shows these where one that waits for recovery freezes: both are
+  reported, neither folded into the other.
+- wire_mbps: bytes arriving on the client's interface per second.
+- client_cpu: the client's process, % of one core (macOS's video decoder
+  service separately as dec_cpu); client_gpu: the GPU's Device Utilization.
+- host_flash_ms: on the host, from the scene's mouse-down event to its
+  present of the flash: the scene's own share of click_ms.
+- scene_fps: frames the host's scene presented per second in the counter
+  phase; with BENCH_SCENE_ARGS making it GPU-bound, the game's frame rate.
+- host_cpu: the host's processes for the stack, % of one core; host_gpu,
+  host_enc: NVIDIA's GPU and encoder load; host_w: board power.
+"""
+import csv
+import os
+import statistics as st
+import sys
+
+
+def pct(xs, q):
+    s = sorted(xs)
+    return s[min(len(s) - 1, int((len(s) - 1) * q + 0.5))] if s else float("nan")
+
+
+def med(xs):
+    return st.median(xs) if xs else float("nan")
+
+
+def meta(run):
+    m = {}
+    for line in open(os.path.join(run, "meta.txt")):
+        for part in line.split():
+            if "=" in part:
+                k, v = part.split("=", 1)
+                m.setdefault(k, v)
+    return m
+
+
+def host_presents(path):
+    """(frame, t_us) of every present in a scene log."""
+    out = []
+    if not os.path.exists(path):
+        return out
+    for line in open(path):
+        if line.startswith("present,"):
+            p = line.strip().split(",")
+            out.append((int(p[3]), int(p[1])))
+    return out
+
+
+def frames(run, tag, phase, fps):
+    path = os.path.join(run, f"{phase}.csv")
+    if not os.path.exists(path):
+        return {}
+    first = {}
+    composited, damaged, highest = 0, 0, -1
+    t_first = t_last = None
+    for r in csv.DictReader(open(path)):
+        c, t = int(r["counter"]), int(r["display_ns"])
+        composited += 1
+        t_first = t if t_first is None else t_first
+        t_last = t
+        if c < 0 or c < highest:
+            damaged += 1
+            continue
+        highest = c
+        first.setdefault(c, t)
+    if len(first) < 2:
+        return {"shown_pct": float("nan")}
+    a, b = min(first), max(first)
+    presented = {f for f, _ in host_presents(os.path.join(run, f"{tag}-{phase}-scene.csv")) if a <= f <= b}
+    seen = {f for f in first if a <= f <= b}
+    vals = sorted(seen)
+    gaps = [(first[y] - first[x]) / 1e6 for x, y in zip(vals, vals[1:])]
+    period = 1000.0 / fps
+    freezes = [g for g in gaps if g > 3 * period]
+    span_ms = (t_last - t_first) / 1e6 if t_last and t_last > t_first else float("nan")
+    return {
+        "shown_pct": 100.0 * len(seen & presented) / len(presented) if presented else float("nan"),
+        "hitch_pct": 100.0 * sum(1 for g in gaps if g > 1.5 * period) / len(gaps) if gaps else float("nan"),
+        "gap_p99_ms": pct(gaps, 0.99),
+        "freezes_per_min": len(freezes) / (span_ms / 60000.0) if span_ms == span_ms else float("nan"),
+        "freeze_median_ms": med(freezes) if freezes else 0.0,
+        "freeze_max_ms": max(freezes) if freezes else 0.0,
+        "frozen_pct": 100.0 * sum(freezes) / span_ms if span_ms == span_ms else float("nan"),
+        "damaged_pct": 100.0 * damaged / composited if composited else float("nan"),
+    }
+
+
+def clicks(run):
+    path = os.path.join(run, "flash.csv")
+    if not os.path.exists(path):
+        return []
+    rows = list(csv.DictReader(open(path)))
+    return [float(r["latency_ms"]) for r in rows if int(r["click"]) >= 2]
+
+
+def scene_log(run, tag, phase):
+    path = os.path.join(run, f"{tag}-{phase}-scene.csv")
+    return [line.strip().split(",") for line in open(path)] if os.path.exists(path) else []
+
+
+def host_flash(run, tag):
+    """Median ms from each mouse-down to the next present, on the host."""
+    out, down = [], None
+    for p in scene_log(run, tag, "flash"):
+        if p[0] == "input" and p[2] == "down":
+            down = int(p[1])
+        elif p[0] == "present" and down is not None:
+            out.append((int(p[1]) - down) / 1000)
+            down = None
+    return med(out[2:])
+
+
+def scene_fps(run, tag):
+    """Median presents per second, the first and last seconds left out."""
+    counts = [int(p[2]) for p in scene_log(run, tag, "counter") if p[0] == "fps"]
+    return med(counts[1:-1]) if len(counts) > 2 else float("nan")
+
+
+def wire(run):
+    out = {}
+    path = os.path.join(run, "wire.csv")
+    if os.path.exists(path):
+        for r in csv.DictReader(open(path)):
+            out[r["phase"]] = float(r["mbps"])
+    return out
+
+
+def client(run, phase):
+    path = os.path.join(run, f"client-{phase}.csv")
+    cpu, dec, gpu, rss = [], [], [], []
+    if os.path.exists(path):
+        for line in open(path):
+            p = line.strip().split(",")
+            try:
+                cpu.append(float(p[1]))
+                rss.append(float(p[2]) / 1024)
+                if p[3]:
+                    dec.append(float(p[3]))
+                if p[5]:
+                    gpu.append(float(p[5]))
+            except (IndexError, ValueError):
+                pass
+    return {"client_cpu": med(cpu), "dec_cpu": med(dec), "client_gpu": med(gpu), "client_mb": max(rss) if rss else float("nan")}
+
+
+HOST_PROCS = {"helio": {"helio-host"}, "sunshine": {"sunshine", "sunshinesvc"}, "apollo": {"sunshine", "sunshinesvc"}}
+
+
+def host(run, tag, stack):
+    path = os.path.join(run, f"{tag}-host-noise.csv")
+    out = {"host_cpu": float("nan"), "host_mb": float("nan"), "host_gpu": float("nan"), "host_enc": float("nan"), "host_w": float("nan")}
+    if not os.path.exists(path):
+        return out
+    elapsed, before, after, g, e, w, mem = None, {}, {}, [], [], [], 0.0
+    for line in open(path):
+        p = [x.strip() for x in line.strip().split(",")]
+        if p[0] == "elapsed":
+            elapsed = float(p[1])
+        elif p[0] in ("before", "after") and p[1] in HOST_PROCS.get(stack, set()):
+            (before if p[0] == "before" else after)[p[2]] = float(p[4] or 0)
+            if p[0] == "after":
+                mem += float(p[5]) / 2**20
+        elif p[0] == "gpu" and len(p) >= 6:
+            try:
+                g.append(float(p[2]))
+                e.append(float(p[3]))
+                w.append(float(p[5]))
+            except ValueError:
+                pass
+    if elapsed:
+        cpu = sum(after[k] - before.get(k, after[k]) for k in after)
+        out["host_cpu"] = 100.0 * cpu / elapsed
+    out.update(host_mb=mem, host_gpu=med(g), host_enc=med(e), host_w=med(w))
+    return out
+
+
+FIELDS = ["run", "stack", "mode", "kbps", "vsync", "pacing", "variant", "clicks", "click_ms", "click_p95", "host_flash_ms",
+          "counter_shown_pct", "counter_hitch_pct", "counter_gap_p99_ms",
+          "counter_freezes_per_min", "counter_freeze_median_ms", "counter_freeze_max_ms", "counter_frozen_pct",
+          "counter_damaged_pct",
+          "noise_shown_pct", "noise_hitch_pct", "noise_gap_p99_ms",
+          "noise_freezes_per_min", "noise_freeze_median_ms", "noise_freeze_max_ms", "noise_frozen_pct",
+          "noise_damaged_pct",
+          "wire_counter_mbps", "wire_noise_mbps", "first_video_s", "scene_fps",
+          "client_cpu", "dec_cpu", "client_gpu", "client_mb", "host_cpu", "host_mb", "host_gpu", "host_enc", "host_w"]
+
+
+def row(run):
+    run = run.rstrip("/")
+    tag = os.path.basename(run)
+    m = meta(run)
+    fps = float(m["mode"].split("@")[1])
+    c = clicks(run)
+    variant = "+".join(x for x in (m.get("flash_args", "") and "flash" + m["flash_args"], m.get("scene_args", ""),
+                                   m.get("host_mode", "") and "host@" + m["host_mode"]) if x)
+    r = {"run": tag, "stack": m["stack"], "mode": m["mode"], "kbps": m["kbps"], "vsync": m["vsync"],
+         "pacing": m["pacing"], "variant": variant or "-", "clicks": len(c), "click_ms": med(c), "click_p95": pct(c, 0.95),
+         "first_video_s": float(m.get("first_video_s", "nan")),
+         "host_flash_ms": host_flash(run, tag), "scene_fps": scene_fps(run, tag)}
+    for phase in ("counter", "noise"):
+        for k, v in frames(run, tag, phase, fps).items():
+            r[f"{phase}_{k}"] = v
+    w = wire(run)
+    r["wire_counter_mbps"] = w.get("counter", float("nan"))
+    r["wire_noise_mbps"] = w.get("noise", float("nan"))
+    r.update(client(run, "noise"))
+    r.update(host(run, tag, m["stack"]))
+    return r
+
+
+def fmt(v):
+    return f"{v:.2f}" if isinstance(v, float) else str(v)
+
+
+def main(argv):
+    table = argv and argv[0] == "--table"
+    runs = argv[1:] if table else argv
+    # A series' folder also holds each run's log beside its folder: only
+    # folders are runs.
+    rows = [row(r) for r in runs if os.path.isdir(r)]
+    if not table:
+        w = csv.writer(sys.stdout)
+        w.writerow(FIELDS)
+        for r in rows:
+            w.writerow([fmt(r.get(f, float("nan"))) for f in FIELDS])
+        return
+    groups = {}
+    for r in rows:
+        groups.setdefault((r["mode"], r["vsync"], r["pacing"], r["variant"], r["stack"], r["kbps"]), []).append(r)
+    cols = [f for f in FIELDS if f not in ("run", "stack", "mode", "kbps", "vsync", "pacing", "variant")]
+    print(",".join(["mode", "vsync", "pacing", "variant", "stack", "kbps", "runs"] + cols))
+    for key in sorted(groups):
+        g = groups[key]
+        vals = []
+        for f in cols:
+            xs = [x[f] for x in g if isinstance(x.get(f), (int, float)) and x[f] == x[f]]
+            vals.append(fmt(float(med(xs))) if xs else "nan")
+        print(",".join(list(map(str, key)) + [str(len(g))] + vals))
+
+
+if __name__ == "__main__":
+    main(sys.argv[1:])

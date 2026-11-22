@@ -1,0 +1,146 @@
+#!/usr/bin/env python3
+"""report: a series' figures as the Markdown tables of docs/benchmarks.md.
+
+    tools/bench/report SERIES_DIR [--clicks-only]
+
+Reads every run folder in SERIES_DIR (run-mac's files, through analyze) and
+prints, per mode and stack:
+
+- click to frame: the median of the runs' medians, with the 95th percentile
+  of all clicks in brackets, and how many runs and clicks;
+- frames shown and hitches on the counter and on noise, freezes, damaged
+  frames; the wire rate on noise; the client's and the host's load
+  (unless --clicks-only);
+- Helio at equal wire against each other stack at the same mode: the
+  difference of the medians of all clicks with its 95% interval (compare's
+  two-level bootstrap), and "matches" where the interval holds zero.
+
+Helio's two settings are told apart by the plan: the mode's default (the
+same setting as Moonlight's) and equal wire (the other one).
+"""
+import importlib.machinery
+import importlib.util
+import os
+import random
+import statistics as st
+import sys
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+
+
+def load(name):
+    loader = importlib.machinery.SourceFileLoader(name, os.path.join(HERE, name))
+    spec = importlib.util.spec_from_loader(name, loader)
+    mod = importlib.util.module_from_spec(spec)
+    loader.exec_module(mod)
+    return mod
+
+
+analyze = load("analyze")
+compare = load("compare")
+
+ORDER = {"helio": 0, "apollo": 1, "sunshine": 2}
+NAMES = {"apollo": "Moonlight + Apollo", "sunshine": "Moonlight + Sunshine"}
+
+
+def mode_key(m):
+    w, rest = m.split("x")
+    h, f = rest.split("@")
+    return (int(w) * int(h), int(f))
+
+
+def nice(m):
+    w, rest = m.split("x")
+    h, f = rest.split("@")
+    return f"{w}x{h}, {f} fps"
+
+
+def med(xs):
+    xs = [x for x in xs if x == x]
+    return st.median(xs) if xs else float("nan")
+
+
+def interval(left, right, rounds=10_000, seed=1):
+    rng = random.Random(seed)
+    a = st.median([x for r in left for x in r])
+    b = st.median([x for r in right for x in r])
+    diffs = sorted(st.median(compare.resample(rng, left)) - st.median(compare.resample(rng, right)) for _ in range(rounds))
+    return a - b, diffs[int(0.025 * rounds)], diffs[int(0.975 * rounds) - 1]
+
+
+def f1(v, unit=""):
+    return "–" if v != v else f"{v:.1f}{unit}"
+
+
+def main(argv):
+    root = argv[0]
+    clicks_only = "--clicks-only" in argv
+    runs = [os.path.join(root, d) for d in sorted(os.listdir(root)) if os.path.isdir(os.path.join(root, d))]
+    rows = []
+    for r in runs:
+        try:
+            row = analyze.row(r)
+        except Exception as e:  # a run that failed early has no meta or no clicks
+            print(f"<!-- skipped {os.path.basename(r)}: {e} -->")
+            continue
+        row["dir"] = r
+        rows.append(row)
+    groups = {}
+    for r in rows:
+        groups.setdefault((r["mode"], r["stack"], int(r["kbps"])), []).append(r)
+    modes = sorted({k[0] for k in groups}, key=mode_key)
+
+    def label(mode, stack, kbps):
+        if stack != "helio":
+            return f"{NAMES[stack]} ({kbps // 1000} Mbit/s)"
+        ks = sorted(k for (m, s, k) in groups if m == mode and s == "helio")
+        if len(ks) > 1 and kbps == ks[0]:
+            return f"Helio at equal wire ({kbps // 1000} Mbit/s)"
+        if len(ks) > 1:
+            return f"Helio, same setting ({kbps // 1000} Mbit/s)"
+        return f"Helio ({kbps // 1000} Mbit/s)"
+
+    print("| Mode | Stack | Runs | Click to frame, ms: median (95th pct) |" +
+          ("" if clicks_only else " Frames shown, counter / noise | Hitches, counter | Freezes a minute, noise | Damaged frames | Wire, noise, Mbit/s | Client CPU, % of a core | Host CPU, % of a core | Host GPU / encoder | Board power |"))
+    print("|---|---|---|---|" + ("" if clicks_only else "---|---|---|---|---|---|---|---|---|"))
+    for m in modes:
+        keys = sorted((k for k in groups if k[0] == m), key=lambda k: (ORDER[k[1]], k[2]))
+        for k in keys:
+            g = groups[k]
+            allc = [x for r in g for x in analyze.clicks(r["dir"])]
+            line = (f"| {nice(m)} | {label(*k)} | {len(g)} | "
+                    f"{f1(med([r['click_ms'] for r in g]))} ({f1(analyze.pct(allc, 0.95))}), {len(allc)} clicks |")
+            if not clicks_only:
+                line += (f" {f1(med([r.get('counter_shown_pct', float('nan')) for r in g]), '%')} / "
+                         f"{f1(med([r.get('noise_shown_pct', float('nan')) for r in g]), '%')} |"
+                         f" {f1(med([r.get('counter_hitch_pct', float('nan')) for r in g]), '%')} |"
+                         f" {f1(med([r.get('noise_freezes_per_min', float('nan')) for r in g]))} |"
+                         f" {f1(med([max(r.get('counter_damaged_pct', 0) or 0, r.get('noise_damaged_pct', 0) or 0) for r in g]), '%')} |"
+                         f" {f1(med([r['wire_noise_mbps'] for r in g]))} |"
+                         f" {f1(med([r['client_cpu'] for r in g]))} |"
+                         f" {f1(med([r['host_cpu'] for r in g]))} |"
+                         f" {f1(med([r['host_gpu'] for r in g]), '%')} / {f1(med([r['host_enc'] for r in g]), '%')} |"
+                         f" {f1(med([r['host_w'] for r in g]), ' W')} |")
+            print(line)
+    print()
+    print("| Mode | Helio, at the setting below, against | Difference, ms (95% interval) | Reads |")
+    print("|---|---|---|---|")
+    for m in modes:
+        hk = sorted(k[2] for k in groups if k[0] == m and k[1] == "helio")
+        if not hk:
+            continue
+        helio = [c for c in (analyze.clicks(r["dir"]) for r in groups[(m, "helio", hk[0])]) if c]
+        for other in ("apollo", "sunshine"):
+            ok = [k for k in groups if k[0] == m and k[1] == other]
+            if not ok or not helio:
+                continue
+            them = [c for c in (analyze.clicks(r["dir"]) for r in groups[ok[0]]) if c]
+            if not them:
+                continue
+            d, lo, hi = interval(helio, them)
+            verdict = "matches" if lo <= 0 <= hi else (f"Helio {-d:.1f} ms faster" if hi < 0 else f"Helio {d:.1f} ms slower")
+            print(f"| {nice(m)} | {label(m, 'helio', hk[0])} against {NAMES[other]} | {d:+.1f} ({lo:+.1f} to {hi:+.1f}) | {verdict} |")
+
+
+if __name__ == "__main__":
+    main(sys.argv[1:])

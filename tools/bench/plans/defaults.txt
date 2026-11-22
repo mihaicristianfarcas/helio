@@ -1,0 +1,27 @@
+# Each stack at its defaults (V-Sync on, frame pacing off), HEVC, at the six
+# modes the page shows. Helio twice: the mode's default bitrate (Moonlight's,
+# which Helio shares), and EQ, the setting that puts Moonlight's wire rate on
+# the wire (calibrate.txt finds it; the queue fills it in). Sunshine streams
+# the host's monitor, which goes to 2560x1440: it has no 3840x2160 runs.
+helio    1920x1080@60  20000  vsync nopacing
+helio    1920x1080@60  EQ     vsync nopacing
+apollo   1920x1080@60  20000  vsync nopacing
+sunshine 1920x1080@60  20000  vsync nopacing
+helio    1920x1080@120 28000  vsync nopacing
+helio    1920x1080@120 EQ     vsync nopacing
+apollo   1920x1080@120 28000  vsync nopacing
+sunshine 1920x1080@120 28000  vsync nopacing
+helio    2560x1440@60  40000  vsync nopacing
+helio    2560x1440@60  EQ     vsync nopacing
+apollo   2560x1440@60  40000  vsync nopacing
+sunshine 2560x1440@60  40000  vsync nopacing
+helio    2560x1440@120 57000  vsync nopacing
+helio    2560x1440@120 EQ     vsync nopacing
+apollo   2560x1440@120 57000  vsync nopacing
+sunshine 2560x1440@120 57000  vsync nopacing
+helio    3840x2160@60  80000  vsync nopacing
+helio    3840x2160@60  EQ     vsync nopacing
+apollo   3840x2160@60  80000  vsync nopacing
+helio    3840x2160@120 113000 vsync nopacing
+helio    3840x2160@120 EQ     vsync nopacing
+apollo   3840x2160@120 113000 vsync nopacing

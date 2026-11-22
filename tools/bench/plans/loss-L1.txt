@@ -1,0 +1,33 @@
+# B6 L1: freezes and damage against random loss, on the counter scene.
+# A clean run of each mode is the control. tools/bench/impair applies the
+# profile after the warm-up (run-mac's BENCH_IMPAIR).
+apollo   1920x1080@60   20000  vsync nopacing BENCH_PHASES=counter BENCH_TAG=L1-clean
+sunshine 1920x1080@60   20000  vsync nopacing BENCH_PHASES=counter BENCH_TAG=L1-clean
+helio    1920x1080@60   EQ     vsync nopacing BENCH_PHASES=counter BENCH_TAG=L1-clean
+apollo   2560x1440@120  57000  vsync nopacing BENCH_PHASES=counter BENCH_TAG=L1-clean
+sunshine 2560x1440@120  57000  vsync nopacing BENCH_PHASES=counter BENCH_TAG=L1-clean
+helio    2560x1440@120  EQ     vsync nopacing BENCH_PHASES=counter BENCH_TAG=L1-clean
+apollo   1920x1080@60   20000  vsync nopacing BENCH_IMPAIR=loss-0.5 BENCH_PHASES=counter BENCH_TAG=L1-loss-0.5
+sunshine 1920x1080@60   20000  vsync nopacing BENCH_IMPAIR=loss-0.5 BENCH_PHASES=counter BENCH_TAG=L1-loss-0.5
+helio    1920x1080@60   EQ     vsync nopacing BENCH_IMPAIR=loss-0.5 BENCH_PHASES=counter BENCH_TAG=L1-loss-0.5
+apollo   2560x1440@120  57000  vsync nopacing BENCH_IMPAIR=loss-0.5 BENCH_PHASES=counter BENCH_TAG=L1-loss-0.5
+sunshine 2560x1440@120  57000  vsync nopacing BENCH_IMPAIR=loss-0.5 BENCH_PHASES=counter BENCH_TAG=L1-loss-0.5
+helio    2560x1440@120  EQ     vsync nopacing BENCH_IMPAIR=loss-0.5 BENCH_PHASES=counter BENCH_TAG=L1-loss-0.5
+apollo   1920x1080@60   20000  vsync nopacing BENCH_IMPAIR=loss-1 BENCH_PHASES=counter BENCH_TAG=L1-loss-1
+sunshine 1920x1080@60   20000  vsync nopacing BENCH_IMPAIR=loss-1 BENCH_PHASES=counter BENCH_TAG=L1-loss-1
+helio    1920x1080@60   EQ     vsync nopacing BENCH_IMPAIR=loss-1 BENCH_PHASES=counter BENCH_TAG=L1-loss-1
+apollo   2560x1440@120  57000  vsync nopacing BENCH_IMPAIR=loss-1 BENCH_PHASES=counter BENCH_TAG=L1-loss-1
+sunshine 2560x1440@120  57000  vsync nopacing BENCH_IMPAIR=loss-1 BENCH_PHASES=counter BENCH_TAG=L1-loss-1
+helio    2560x1440@120  EQ     vsync nopacing BENCH_IMPAIR=loss-1 BENCH_PHASES=counter BENCH_TAG=L1-loss-1
+apollo   1920x1080@60   20000  vsync nopacing BENCH_IMPAIR=loss-2 BENCH_PHASES=counter BENCH_TAG=L1-loss-2
+sunshine 1920x1080@60   20000  vsync nopacing BENCH_IMPAIR=loss-2 BENCH_PHASES=counter BENCH_TAG=L1-loss-2
+helio    1920x1080@60   EQ     vsync nopacing BENCH_IMPAIR=loss-2 BENCH_PHASES=counter BENCH_TAG=L1-loss-2
+apollo   2560x1440@120  57000  vsync nopacing BENCH_IMPAIR=loss-2 BENCH_PHASES=counter BENCH_TAG=L1-loss-2
+sunshine 2560x1440@120  57000  vsync nopacing BENCH_IMPAIR=loss-2 BENCH_PHASES=counter BENCH_TAG=L1-loss-2
+helio    2560x1440@120  EQ     vsync nopacing BENCH_IMPAIR=loss-2 BENCH_PHASES=counter BENCH_TAG=L1-loss-2
+apollo   1920x1080@60   20000  vsync nopacing BENCH_IMPAIR=loss-5 BENCH_PHASES=counter BENCH_TAG=L1-loss-5
+sunshine 1920x1080@60   20000  vsync nopacing BENCH_IMPAIR=loss-5 BENCH_PHASES=counter BENCH_TAG=L1-loss-5
+helio    1920x1080@60   EQ     vsync nopacing BENCH_IMPAIR=loss-5 BENCH_PHASES=counter BENCH_TAG=L1-loss-5
+apollo   2560x1440@120  57000  vsync nopacing BENCH_IMPAIR=loss-5 BENCH_PHASES=counter BENCH_TAG=L1-loss-5
+sunshine 2560x1440@120  57000  vsync nopacing BENCH_IMPAIR=loss-5 BENCH_PHASES=counter BENCH_TAG=L1-loss-5
+helio    2560x1440@120  EQ     vsync nopacing BENCH_IMPAIR=loss-5 BENCH_PHASES=counter BENCH_TAG=L1-loss-5

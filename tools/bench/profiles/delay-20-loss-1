@@ -1,0 +1,3 @@
+# 20 ms added each way, and 1% of packets lost at random each way.
+down delay 20 plr 0.01
+up delay 20 plr 0.01

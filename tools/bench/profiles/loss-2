@@ -1,0 +1,3 @@
+# 2% of packets lost at random, each way.
+down plr 0.02
+up plr 0.02
