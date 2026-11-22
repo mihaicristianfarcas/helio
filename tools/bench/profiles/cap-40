@@ -1,0 +1,3 @@
+# The host-to-client direction capped at 40 Mbit/s, a queue of 50 packets.
+down bw 40Mbit/s queue 50
+up

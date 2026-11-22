@@ -1,0 +1,11 @@
+# The control: the host's display refreshing at the stream's rate
+# and every scene drawn continuously, capped there, as a game capped at the
+# stream's rate is (the flash too: a click in a game).
+# Apollo's monitor (primary, beside its virtual display) is set to the
+# stream's refresh for its runs and put back after; Sunshine sets its own.
+apollo   1920x1080@60  20000 vsync nopacing BENCH_CAP=1 BENCH_HOST_MODE=2560x1440@60 BENCH_HOST_MODE_AFTER=2560x1440@144 BENCH_FLASH_FPS=1 BENCH_TAG=ctl
+sunshine 1920x1080@60  20000 vsync nopacing BENCH_CAP=1 BENCH_FLASH_FPS=1 BENCH_TAG=ctl
+helio    1920x1080@60  EQ    vsync nopacing BENCH_CAP=1 BENCH_FLASH_FPS=1 BENCH_TAG=ctl
+apollo   2560x1440@120 57000 vsync nopacing BENCH_CAP=1 BENCH_HOST_MODE=2560x1440@120 BENCH_HOST_MODE_AFTER=2560x1440@144 BENCH_FLASH_FPS=1 BENCH_TAG=ctl
+sunshine 2560x1440@120 57000 vsync nopacing BENCH_CAP=1 BENCH_FLASH_FPS=1 BENCH_TAG=ctl
+helio    2560x1440@120 EQ    vsync nopacing BENCH_CAP=1 BENCH_FLASH_FPS=1 BENCH_TAG=ctl

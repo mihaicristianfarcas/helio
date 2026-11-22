@@ -1,0 +1,26 @@
+# B6 L3: recovery against round trip: 10, 20 and 40 ms added each way, each
+# with 1% loss, on the counter scene; a clean run is the control.
+apollo   1920x1080@60   20000  vsync nopacing BENCH_PHASES=counter BENCH_TAG=L3-clean
+sunshine 1920x1080@60   20000  vsync nopacing BENCH_PHASES=counter BENCH_TAG=L3-clean
+helio    1920x1080@60   EQ     vsync nopacing BENCH_PHASES=counter BENCH_TAG=L3-clean
+apollo   2560x1440@120  57000  vsync nopacing BENCH_PHASES=counter BENCH_TAG=L3-clean
+sunshine 2560x1440@120  57000  vsync nopacing BENCH_PHASES=counter BENCH_TAG=L3-clean
+helio    2560x1440@120  EQ     vsync nopacing BENCH_PHASES=counter BENCH_TAG=L3-clean
+apollo   1920x1080@60   20000  vsync nopacing BENCH_IMPAIR=delay-10-loss-1 BENCH_PHASES=counter BENCH_TAG=L3-delay-10-loss-1
+sunshine 1920x1080@60   20000  vsync nopacing BENCH_IMPAIR=delay-10-loss-1 BENCH_PHASES=counter BENCH_TAG=L3-delay-10-loss-1
+helio    1920x1080@60   EQ     vsync nopacing BENCH_IMPAIR=delay-10-loss-1 BENCH_PHASES=counter BENCH_TAG=L3-delay-10-loss-1
+apollo   2560x1440@120  57000  vsync nopacing BENCH_IMPAIR=delay-10-loss-1 BENCH_PHASES=counter BENCH_TAG=L3-delay-10-loss-1
+sunshine 2560x1440@120  57000  vsync nopacing BENCH_IMPAIR=delay-10-loss-1 BENCH_PHASES=counter BENCH_TAG=L3-delay-10-loss-1
+helio    2560x1440@120  EQ     vsync nopacing BENCH_IMPAIR=delay-10-loss-1 BENCH_PHASES=counter BENCH_TAG=L3-delay-10-loss-1
+apollo   1920x1080@60   20000  vsync nopacing BENCH_IMPAIR=delay-20-loss-1 BENCH_PHASES=counter BENCH_TAG=L3-delay-20-loss-1
+sunshine 1920x1080@60   20000  vsync nopacing BENCH_IMPAIR=delay-20-loss-1 BENCH_PHASES=counter BENCH_TAG=L3-delay-20-loss-1
+helio    1920x1080@60   EQ     vsync nopacing BENCH_IMPAIR=delay-20-loss-1 BENCH_PHASES=counter BENCH_TAG=L3-delay-20-loss-1
+apollo   2560x1440@120  57000  vsync nopacing BENCH_IMPAIR=delay-20-loss-1 BENCH_PHASES=counter BENCH_TAG=L3-delay-20-loss-1
+sunshine 2560x1440@120  57000  vsync nopacing BENCH_IMPAIR=delay-20-loss-1 BENCH_PHASES=counter BENCH_TAG=L3-delay-20-loss-1
+helio    2560x1440@120  EQ     vsync nopacing BENCH_IMPAIR=delay-20-loss-1 BENCH_PHASES=counter BENCH_TAG=L3-delay-20-loss-1
+apollo   1920x1080@60   20000  vsync nopacing BENCH_IMPAIR=delay-40-loss-1 BENCH_PHASES=counter BENCH_TAG=L3-delay-40-loss-1
+sunshine 1920x1080@60   20000  vsync nopacing BENCH_IMPAIR=delay-40-loss-1 BENCH_PHASES=counter BENCH_TAG=L3-delay-40-loss-1
+helio    1920x1080@60   EQ     vsync nopacing BENCH_IMPAIR=delay-40-loss-1 BENCH_PHASES=counter BENCH_TAG=L3-delay-40-loss-1
+apollo   2560x1440@120  57000  vsync nopacing BENCH_IMPAIR=delay-40-loss-1 BENCH_PHASES=counter BENCH_TAG=L3-delay-40-loss-1
+sunshine 2560x1440@120  57000  vsync nopacing BENCH_IMPAIR=delay-40-loss-1 BENCH_PHASES=counter BENCH_TAG=L3-delay-40-loss-1
+helio    2560x1440@120  EQ     vsync nopacing BENCH_IMPAIR=delay-40-loss-1 BENCH_PHASES=counter BENCH_TAG=L3-delay-40-loss-1

@@ -1,0 +1,93 @@
+#!/usr/bin/env bash
+# soak-mac: one long stream, read the whole way, for what only time shows:
+# a session that ends, frames lost more often as it goes on, memory that
+# grows.
+#
+#   tools/bench/soak-mac STACK WxH@FPS KBPS MINUTES OUT
+#
+# The host shows the `counter` scene for the whole session. Every minute,
+# bench-probe reads 20 s of frames (OUT/frames-MM.csv), the client's CPU and
+# memory are noted, and the host's processes are sampled for 5 s
+# (OUT/host-MM.csv). OUT/minutes.csv gets one row a minute:
+# `minute,client_alive,client_rss_kb`.
+#
+# Same environment as run-mac.
+set -uo pipefail
+stack=$1 mode=$2 kbps=$3 minutes=$4 out=$5
+W=${mode%%x*}; rest=${mode#*x}; H=${rest%@*}; F=${mode#*@}
+root=$(cd "$(dirname "$0")/../.." && pwd)
+probe=$root/target/bench/bench-probe
+helio=/Applications/Helio.app/Contents/Resources/bin/helio
+moonlight=/Applications/Moonlight.app/Contents/MacOS/Moonlight
+read -ra ssh <<<"$BENCH_SSH"
+runs="$BENCH_HOST_DIR\\runs"
+tag=$(basename "$out")
+mkdir -p "$out"
+host() {
+    "${ssh[@]}" "powershell -NoProfile -ExecutionPolicy Bypass -File $BENCH_HOST_DIR\\bench-host.ps1 $*" 2>&1 |
+        tr -d '\r' | grep -vE '^(#< CLIXML|<Objs )'
+}
+wait_line() {
+    local file=$1 re=$2 s=$3 fd
+    exec {fd}< <(exec tail -n +1 -F "$file" 2>/dev/null)
+    local t=$!
+    ( sleep "$s"; kill "$t" ) 2>/dev/null & local k=$!
+    grep -m1 -qE "$re" <&"$fd"; local r=$?
+    kill "$t" "$k" 2>/dev/null
+    exec {fd}<&-
+    return $r
+}
+
+host stack "$stack" >"$out/meta.txt"
+if [ "$stack" = helio ]; then
+    sleep 4
+    "$helio" stream "$HELIO_HOST_NAME" --via "$BENCH_HOST:47800" --size "${W}x${H}" --fps "$F" \
+        --mbps "$((kbps / 1000))" --codec hevc --audio-channels 2 --no-clipboard >"$out/client.log" 2>&1 &
+    cpid=$!
+    wait_line "$out/client.log" 'session started' 60
+else
+    for _ in $(seq 1 60); do curl -s -o /dev/null --max-time 1 "http://$BENCH_HOST:47989/serverinfo" && break; sleep 0.5; done
+    if [ "$stack" = sunshine ]; then name=$MOONLIGHT_SUNSHINE app=Desktop; else name=$MOONLIGHT_APOLLO app="Virtual Display"; fi
+    "$moonlight" stream "$name" "$app" --resolution "${W}x${H}" --fps "$F" --bitrate "$kbps" \
+        --display-mode fullscreen --video-codec HEVC --audio-config stereo --no-audio-on-host \
+        --no-hdr --no-yuv444 --no-performance-overlay --no-absolute-mouse --no-quit-after \
+        --vsync --no-frame-pacing >"$out/client.log" 2>&1 &
+    cpid=$!
+    wait_line "$out/client.log" '^Redirecting log output to ' 10
+    ml=$(sed -n 's/^Redirecting log output to //p' "$out/client.log" | head -1)
+    wait_line "$ml" 'Received first video packet' 60
+fi
+echo "stack=$stack mode=$mode kbps=$kbps minutes=$minutes started=$(date -u +%FT%TZ)" >>"$out/meta.txt"
+sleep 5
+host scene "$(printf %s "--scene counter --fps $F --monitor ${W}x${H}@$F --log $runs\\$tag-scene.csv" | base64)" >/dev/null
+sleep 3
+echo "minute,client_alive,client_rss_kb" >"$out/minutes.csv"
+for ((m = 1; m <= minutes; m++)); do
+    t0=$SECONDS
+    mm=$(printf %02d "$m")
+    alive=0; kill -0 "$cpid" 2>/dev/null && alive=1
+    echo "$m,$alive,$(ps -o rss= -p "$cpid" 2>/dev/null | tr -d ' ')" >>"$out/minutes.csv"
+    [ "$alive" = 1 ] || break
+    host sample 5 "$runs\\$tag-host-$mm.csv" >/dev/null & sp=$!
+    "$probe" frames 20 "$W:$H" "$out/frames-$mm.csv" >/dev/null
+    wait "$sp"  # not a bare wait: that also waits on the client, all session
+    "${ssh[@]}" "Get-Content -Raw '$runs\\$tag-host-$mm.csv'" 2>/dev/null | tr -d '\r' >"$out/host-$mm.csv"
+    # The rest of the minute: the stream runs on with nothing reading it.
+    left=$((60 - (SECONDS - t0)))
+    [ "$left" -gt 0 ] && sleep "$left"
+done
+if [ "$stack" = helio ]; then
+    kill -INT "$cpid"
+else
+    # Moonlight's Quit, as moonlight-quit sends it; the stream over, Moonlight
+    # shows its hosts and stays open.
+    "$root/tools/bench/moonlight-quit" "$BENCH_HOST" >"$out/quit.txt" 2>&1
+    wait_line "$ml" 'Stopping video stream' 20 && echo "stream_stopped=1" >>"$out/meta.txt"
+    kill -TERM "$cpid" 2>/dev/null
+    cp "$ml" "$out/moonlight.log"
+fi
+( sleep 20; kill -9 "$cpid" 2>/dev/null ) & wait "$cpid" 2>/dev/null
+host unscene >/dev/null
+"${ssh[@]}" "Get-Content -Raw '$runs\\$tag-scene.csv'" 2>/dev/null | tr -d '\r' >"$out/scene.csv"
+echo "ended=$(date -u +%FT%TZ)" >>"$out/meta.txt"
+tail -3 "$out/minutes.csv"

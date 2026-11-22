@@ -1,0 +1,176 @@
+#!/usr/bin/env bash
+# check-link: known answers for the link between the host and this Mac, taken
+# before the link's figures are trusted (the benchmarks' rule: a tool that
+# has not reproduced a known answer this session measures nothing).
+#
+#   tools/bench/check-link OUT [PROFILE...]
+#
+# With no PROFILE: the wire-rate counter. The host sends UDP at a known rate
+# and datagram size (iperf3); the bytes the Mac's interface counted (what
+# run-mac reports as the wire rate) are compared with what iperf3 received.
+# They differ only by the headers below the payload (UDP, IP, Ethernet:
+# 42 bytes a datagram, 3% at 1400).
+#
+# With PROFILEs (tools/bench/profiles): each is applied with tools/bench/impair,
+# measured, and cleared, then the clean link is measured again:
+# - every profile: UDP at 50 Mbit/s in 1400-byte datagrams for 60 s, host to
+#   Mac, and the share iperf3 reports lost;
+# - every profile: 100 round trips (tools/bench/rtt: a TCP connection opened
+#   to BENCH_RTT_PORT, 47801 by default, Helio Host's pairing port), against
+#   the clean link's;
+# - cap-* and drop-*: UDP sent faster than the cap, and the rate received each
+#   second.
+# OUT/check-link.txt gets a line per check with what was read and what was
+# expected; OUT keeps iperf3's and rtt's own output.
+#
+# Needs iperf3 on both machines (BENCH_HOST_IPERF: its path on the host), and,
+# for profiles, what tools/bench/impair needs. Environment as run-mac.
+set -uo pipefail
+out=${1:?usage: tools/bench/check-link OUT [PROFILE...]}
+shift
+here=$(cd "$(dirname "$0")" && pwd)
+read -ra ssh <<<"$BENCH_SSH"
+mac=$(ipconfig getifaddr "$BENCH_IFACE")
+mkdir -p "$out"
+report=$out/check-link.txt
+rx_bytes() { netstat -ibn -I "$BENCH_IFACE" | awk '$3 ~ /^<Link/ { print $7; exit }'; }
+
+# NAME RATE SECONDS: host -> Mac UDP, iperf3's server (the Mac) JSON in OUT.
+udp() {
+    local try
+    for try in 1 2 3; do
+        udp_once "$@"
+        grep -q '"intervals":[[:space:]]*\[[[:space:]]*{' "$out/$1.json" && return 0
+        echo "iperf3 test $1 did not run (try $try): $(tail -1 "$out/$1.client.txt")" >>"$out/retries.log"
+        sleep 2
+    done
+}
+# The UDP test once. Under a loss profile its TCP control connection loses
+# packets too, and the host's iperf3 can give up before the test starts:
+# udp tries again.
+udp_once() {
+    local name=$1 rate=$2 secs=$3
+    iperf3 -s -1 -J >"$out/$name.json" 2>&1 &
+    local srv=$!
+    sleep 1
+    local b0 b1
+    b0=$(rx_bytes)
+    "${ssh[@]}" "& '$BENCH_HOST_IPERF' -c $mac -u -b $rate -l 1400 -t $secs" >"$out/$name.client.txt" 2>&1
+    wait "$srv"
+    b1=$(rx_bytes)
+    echo "$((b1 - b0))" >"$out/$name.rx"
+}
+# NAME: 100 round trips 50 ms apart, in OUT.
+pings() { "$here/rtt" "$BENCH_HOST" "${BENCH_RTT_PORT:-47801}" 100 >"$out/$1.ping" 2>&1; }
+rtt() { sed -n 's/.*= [0-9.]*\/\([0-9.]*\)\/.*/\1/p' "$out/$1.ping"; }
+rtt_med() { sed -n 's/^round-trip median = \([0-9.]*\) ms/\1/p' "$out/$1.ping"; }
+
+summary() { # NAME: received bytes, datagrams, lost %, per-second Mbit/s
+    python3 - "$out/$1.json" <<'EOF'
+import json, sys
+d = json.load(open(sys.argv[1]))
+s = d["end"]["sum"]
+# The server's summary counts no bytes for UDP; its intervals do. Its
+# "packets" are the datagrams the sender numbered, lost ones included.
+got = sum(i["sum"]["bytes"] for i in d["intervals"])
+received = s.get("packets", 0) - s.get("lost_packets", 0)
+per = [round(i["sum"]["bits_per_second"] / 1e6, 1) for i in d["intervals"]]
+print(got, received, round(s.get("lost_percent", 0.0), 3), " ".join(map(str, per)))
+EOF
+}
+line() { echo "$*" | tee -a "$report"; }
+
+: >"$report"
+line "check-link $(date +%FT%T%z), host to Mac over $BENCH_IFACE"
+
+# The wire-rate counter.
+udp wire 50M 20
+read -r bytes packets lost _ <<<"$(summary wire)"
+rx=$(cat "$out/wire.rx")
+expect=$((bytes + packets * 42))
+ratio=$(python3 -c "print(round($rx / $expect, 4))")
+ok=$(python3 -c "print('ok' if 0.99 <= $rx / $expect <= 1.02 else 'FAIL')")
+line "$ok wire counter: interface counted $rx bytes; iperf3 received $bytes in $packets datagrams, $expect with headers; ratio $ratio (lost $lost%)"
+# The round trips need something listening on the port (Helio Host's, by
+# default): with nothing there, there is no reading, and that fails.
+pings clean-before
+base=$(rtt clean-before) base_med=$(rtt_med clean-before)
+if [ -n "$base" ]; then
+    line "ok clean round trip: $base ms average of 100, $base_med median"
+else
+    line "FAIL clean round trip: no reading ($(head -1 "$out/clean-before.ping"))"
+fi
+
+for p in "$@"; do
+    "$here/impair" apply "$p" >>"$out/impair.log" 2>&1 || { line "FAIL $p: impair apply failed (impair.log)"; continue; }
+    want_loss=$(sed -e 's/#.*//' "$here/profiles/$p" | awk '$1 == "down" { for (i = 2; i < NF; i++) if ($i == "plr") print $(i + 1) * 100 }')
+    want_delay=$(sed -e 's/#.*//' "$here/profiles/$p" | awk '$1 == "down" || $1 == "up" { for (i = 2; i < NF; i++) if ($i == "delay") s += $(i + 1) } END { print s + 0 }')
+    case $p in
+        cap-* | drop-*)
+            secs=20; [[ $p == drop-* ]] && secs=40
+            udp "$p" 100M "$secs"
+            read -r _ _ lost per <<<"$(summary "$p")"
+            line "-- $p: received Mbit/s each second: $per"
+            # The known answer of a cap is the rate: no second above it (in
+            # payload: 1400 of every 1442 bytes on the wire), and for a drop,
+            # the seconds of the drop at its cap (median within 15%) and well
+            # below the seconds around it.
+            ok=$(python3 - "$here/profiles/$p" $per <<'PY'
+import re, statistics as st, sys
+caps, at = [], []
+for l in open(sys.argv[1]):
+    l = l.split("#")[0].split()
+    if not l: continue
+    t = 0.0
+    if l[0] == "at": t, l = float(l[1]), l[2:]
+    if l[0] == "down" and "bw" in l:
+        caps.append((t, float(re.match(r"[0-9.]+", l[l.index("bw") + 1]).group())))
+per = [float(x) for x in sys.argv[2:]]
+pay = 1400 / 1442
+ok = all(r <= max(c for _, c in caps) * pay * 1.02 for r in per)
+if len(caps) == 3:
+    (_, hi), (t1, lo), (t2, _) = caps
+    during = per[int(t1) + 2:int(t2) - 1]
+    around = per[1:int(t1) - 1] + per[int(t2) + 2:-1]
+    ok = ok and abs(st.median(during) - lo * pay) <= 0.15 * lo * pay and st.median(around) > 1.5 * st.median(during)
+print("ok" if ok else "FAIL")
+PY
+)
+            line "$ok $p rate: each second within the cap$([[ $p == drop-* ]] && echo ", the drop at its cap and below the seconds around it")"
+            ;;
+        *)
+            udp "$p" 50M 60
+            read -r _ _ lost _ <<<"$(summary "$p")"
+            if [ -n "$want_loss" ]; then
+                ok=$(python3 -c "w=$want_loss; print('ok' if abs($lost - w) <= 0.1 * w + 0.05 else 'FAIL')")
+                line "$ok $p loss: $lost% lost, expected $want_loss%"
+            fi
+            ;;
+    esac
+    pings "$p"
+    # A lost SYN is sent again after a second: with loss on, the average is of
+    # the connections that opened at the first try and those that waited, so
+    # profiles with loss are read by the median, which those few do not move.
+    # (Not the minimum: dummynet holds a packet for its delay in 1 ms ticks,
+    # so the luckiest of 100 comes up to a tick early each way.)
+    if [ -n "$want_loss" ]; then r=$(rtt_med "$p") b=$base_med what=median; else r=$(rtt "$p") b=$base what=average; fi
+    # A bandwidth-capped pipe sends on dummynet's clock tick, about a
+    # millisecond more each way: for caps the round trip is noted, not judged.
+    if [[ $p == cap-* || $p == drop-* ]]; then
+        line "-- $p round trip ($what): $r ms, clean $b"
+    elif [ -n "$r" ] && [ -n "$b" ]; then
+        ok=$(python3 -c "print('ok' if abs(($r - $b) - $want_delay) <= 1.0 else 'FAIL')")
+        line "$ok $p round trip ($what): $r ms, clean $b, expected +$want_delay ms"
+    else
+        line "FAIL $p round trip: no reading ($(head -1 "$out/$p.ping"))"
+    fi
+    "$here/impair" clear >>"$out/impair.log" 2>&1
+done
+
+if [ $# -gt 0 ]; then
+    udp clean-after 50M 20
+    read -r _ _ lost _ <<<"$(summary clean-after)"
+    pings clean-after
+    line "$([ "$(python3 -c "print(int($lost < 0.05))")" = 1 ] && echo ok || echo FAIL) cleared: $lost% lost, round trip $(rtt clean-after) ms"
+fi
+grep -q '^FAIL' "$report" && exit 1 || exit 0

@@ -1,0 +1,9 @@
+# A demanding game on the host. The counter and noise scenes draw
+# as fast as the GPU allows with 1200 rounds of work per pixel: 90 fps at
+# 2560x1440 on the host's monitor with no stream (GPU 88-99% busy, NVIDIA's
+# figure), below the stream's 120. What each stack costs the game is the
+# scene's frame rate (scene_fps); what the game costs the stream, the frames
+# shown. Defaults otherwise (as defaults.txt).
+apollo   2560x1440@120 57000 vsync nopacing BENCH_PHASES=counter,noise BENCH_SCENE_ARGS=--present,immediate,--heavy,1200 BENCH_TAG=gpu
+sunshine 2560x1440@120 57000 vsync nopacing BENCH_PHASES=counter,noise BENCH_SCENE_ARGS=--present,immediate,--heavy,1200 BENCH_TAG=gpu
+helio    2560x1440@120 EQ    vsync nopacing BENCH_PHASES=counter,noise BENCH_SCENE_ARGS=--present,immediate,--heavy,1200 BENCH_TAG=gpu

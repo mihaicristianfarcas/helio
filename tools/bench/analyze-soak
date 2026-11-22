@@ -1,0 +1,62 @@
+#!/usr/bin/env python3
+"""analyze-soak: one row a minute from a soak-mac session.
+
+    tools/bench/analyze-soak OUT
+
+Each minute: the share of the frames the host's scene presented during the
+20 s read that the client composited (shown_pct), the share of gaps between
+new frames longer than 1.5 frame periods (hitch_pct), the client's memory,
+and the host's processes' memory for the stack. The last line sums the
+session: minutes the client lived, the median and worst minute, and how much
+each side's memory grew from the first minute to the last.
+"""
+import csv
+import glob
+import os
+import statistics as st
+import sys
+
+out = sys.argv[1].rstrip("/")
+meta = dict(p.split("=", 1) for p in open(os.path.join(out, "meta.txt")).read().split() if "=" in p)
+fps = float(meta["mode"].split("@")[1])
+stack = meta["stack"]
+procs = {"helio": {"helio-host"}}.get(stack, {"sunshine", "sunshinesvc"})
+
+presented = set()
+for line in open(os.path.join(out, "scene.csv")):
+    if line.startswith("present,"):
+        presented.add(int(line.split(",")[3]))
+
+rss = {int(r["minute"]): r["client_rss_kb"] for r in csv.DictReader(open(os.path.join(out, "minutes.csv")))}
+print("minute,shown_pct,hitch_pct,client_mb,host_mb")
+rows = []
+for path in sorted(glob.glob(os.path.join(out, "frames-*.csv"))):
+    m = int(os.path.basename(path)[7:9])
+    first = {}
+    for r in csv.DictReader(open(path)):
+        c = int(r["counter"])
+        if c >= 0:
+            first.setdefault(c, int(r["display_ns"]))
+    if len(first) < 2:
+        continue
+    a, b = min(first), max(first)
+    want = {f for f in presented if a <= f <= b}
+    vals = sorted(first)
+    gaps = [(first[y] - first[x]) / 1e6 for x, y in zip(vals, vals[1:])]
+    shown = 100 * len(set(first) & want) / len(want) if want else float("nan")
+    hitch = 100 * sum(g > 1.5 * 1000 / fps for g in gaps) / len(gaps)
+    host_mb = 0.0
+    hp = os.path.join(out, f"host-{m:02d}.csv")
+    if os.path.exists(hp):
+        for line in open(hp):
+            p = line.strip().split(",")
+            if p[0] == "after" and p[1] in procs:
+                host_mb += float(p[5]) / 2**20
+    client_mb = float(rss.get(m) or "nan") / 1024
+    rows.append((m, shown, hitch, client_mb, host_mb))
+    print(f"{m},{shown:.2f},{hitch:.2f},{client_mb:.1f},{host_mb:.1f}")
+if rows:
+    s = [r[1] for r in rows]
+    print(f"# {stack} {meta['mode']}: {len(rows)} minutes read, {len(rss)} noted; "
+          f"shown median {st.median(s):.2f}% worst {min(s):.2f}%; "
+          f"client memory {rows[0][3]:.0f} -> {rows[-1][3]:.0f} MB; host {rows[0][4]:.0f} -> {rows[-1][4]:.0f} MB")

@@ -1,0 +1,80 @@
+#!/usr/bin/env python3
+"""calibrate: Helio's setting that puts Moonlight's wire rate on the wire, per
+mode, from a calibration series (plans/calibrate.txt).
+
+    tools/bench/calibrate RUN_DIR...
+
+For each mode, Moonlight's wire rate on the noise scene is the median over
+its runs with Sunshine and with Apollo at the mode's default setting.
+Helio's wire rate is close to proportional to its setting (the encoder's
+rate, with FEC parity and the tunnel's headers on top), so its two points
+(the default setting and a lower one) give a line, and the setting on that
+line at Moonlight's rate is printed, rounded to whole Mbit/s as both
+clients take it. Prints a table and, last, plan lines for Helio at equal
+wire.
+"""
+import csv
+import os
+import statistics as st
+import sys
+
+
+def meta(run):
+    m = {}
+    for line in open(os.path.join(run, "meta.txt")):
+        for part in line.split():
+            if "=" in part:
+                k, v = part.split("=", 1)
+                m.setdefault(k, v)
+    return m
+
+
+def noise_mbps(run):
+    path = os.path.join(run, "wire.csv")
+    if not os.path.exists(path):
+        return None
+    for r in csv.DictReader(open(path)):
+        if r["phase"] == "noise":
+            return float(r["mbps"])
+    return None
+
+
+def main(runs):
+    by = {}
+    for run in runs:
+        run = run.rstrip("/")
+        if not os.path.exists(os.path.join(run, "meta.txt")):
+            continue
+        m = meta(run)
+        w = noise_mbps(run)
+        if w is None:
+            continue
+        by.setdefault(m["mode"], {}).setdefault((m["stack"], int(m["kbps"])), []).append(w)
+    lines = []
+    print("mode,setting_kbps,sunshine_mbps,apollo_mbps,helio_same_mbps,helio_points,helio_equal_wire_kbps")
+    for mode in sorted(by, key=lambda x: (int(x.split("x")[0]), int(x.split("@")[1]))):
+        d = by[mode]
+        default = max(k for (s, k) in d if s != "helio") if any(s != "helio" for s, _ in d) else None
+        moon = [x for (s, k), xs in d.items() if s != "helio" and k == default for x in xs]
+        sun = st.median(d.get(("sunshine", default), [float("nan")]))
+        apo = st.median(d.get(("apollo", default), [float("nan")]))
+        helio = sorted((k, st.median(xs)) for (s, k), xs in d.items() if s == "helio")
+        if not moon or len(helio) < 2:
+            print(f"{mode},{default},{sun:.1f},{apo:.1f},,{helio},not enough runs")
+            continue
+        target = st.median(moon)
+        (k0, w0), (k1, w1) = helio[0], helio[-1]
+        slope = (w1 - w0) / (k1 - k0)
+        k = k0 + (target - w0) / slope
+        k = int(round(k / 1000.0)) * 1000
+        same = dict(helio).get(default, float("nan"))
+        pts = " ".join(f"{a}:{b:.1f}" for a, b in helio)
+        print(f"{mode},{default},{sun:.1f},{apo:.1f},{same:.1f},{pts},{k}")
+        lines.append(f"helio {mode} {k}")
+    print()
+    for line in lines:
+        print(line)
+
+
+if __name__ == "__main__":
+    main(sys.argv[1:])

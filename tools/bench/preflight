@@ -1,0 +1,71 @@
+#!/usr/bin/env bash
+# preflight: whether the bench is fit to measure, checked before a series.
+#
+#   tools/bench/preflight OUTDIR
+#
+# Reads both machines (tools/bench/rig), saves what it read in OUTDIR/rig.txt
+# so a later reader sees the rig as it was, and prints a line per check. It
+# exits 1 if any check fails: a series must not start on a rig that differs
+# from the one it names, because its figures would then describe another.
+#
+# What the series expects comes from the environment (bench.env):
+#   BENCH_EXPECT_COMMIT     Helio's commit, on both machines
+#   BENCH_EXPECT_HELIO      Helio's version
+#   BENCH_EXPECT_MOONLIGHT, BENCH_EXPECT_SUNSHINE, BENCH_EXPECT_APOLLO
+#   BENCH_EXPECT_CLIENT_DISPLAY  as `bench-probe display` prints it
+#   BENCH_EXPECT_HOST_DISPLAY    a pattern for the host monitor's mode, WxH@HZ
+# and BENCH_SSH, BENCH_HOST_DIR, BENCH_IFACE as for run-mac.
+set -uo pipefail
+out=${1:?usage: tools/bench/preflight OUTDIR}
+here=$(cd "$(dirname "$0")" && pwd)
+mkdir -p "$out"
+"$here/rig" "${BENCH_EXPECT_COMMIT:-}" >"$out/rig.txt"
+get() { sed -n "s/^$1=//p" "$out/rig.txt" | head -1; }
+all() { sed -n "s/^$1=//p" "$out/rig.txt"; }
+fails=0
+check() { # NAME OK DETAIL
+    if [ "$2" = 1 ]; then echo "ok    $1: $3"; else echo "FAIL  $1: $3"; fails=$((fails + 1)); fi
+}
+is() { [ "$1" = "$2" ] && echo 1 || echo 0; }
+
+check "Helio on the client" "$(is "$(get client_version_helio)" "${BENCH_EXPECT_HELIO:-?}")" "$(get client_version_helio), expected ${BENCH_EXPECT_HELIO:-?}"
+check "Helio on the host" "$(is "$(get host_version_helio)" "${BENCH_EXPECT_HELIO:-?}")" "$(get host_version_helio)"
+check "Helio's commit on the client" "$([ "$(get client_helio_commit_found)" -ge 1 ] 2>/dev/null && echo 1 || echo 0)" "${BENCH_EXPECT_COMMIT:-none given}"
+check "Helio's commit on the host" "$(is "$(get host_helio_commit_found)" True)" "${BENCH_EXPECT_COMMIT:-none given}"
+check "Moonlight" "$(is "$(get client_version_moonlight)" "${BENCH_EXPECT_MOONLIGHT:-?}")" "$(get client_version_moonlight)"
+check "Sunshine" "$(is "$(get host_version_sunshine)" "${BENCH_EXPECT_SUNSHINE:-?}")" "$(get host_version_sunshine)"
+check "Apollo" "$(is "$(get host_version_apollo)" "${BENCH_EXPECT_APOLLO:-?}")" "$(get host_version_apollo)"
+
+running=$(all host_service | grep -c ' Running ')
+check "one host stack at most" "$([ "$running" -le 1 ] && echo 1 || echo 0)" "$(all host_service | tr '\n' ';')"
+check "the client's own Helio Host is out" "$(is "$(get client_helio_host_loaded)" no)" "loaded: $(get client_helio_host_loaded)"
+
+check "client wired" "$(get client_link | grep -q '1000baseT' && echo 1 || echo 0)" "$(get client_link)"
+check "client Wi-Fi off" "$(is "$(get client_wifi)" off)" "$(get client_wifi)"
+eth=$(all host_link | grep -i '^Ethernet')
+check "host wired" "$(grep -q 'Up 1 Gbps' <<<"$eth" && echo 1 || echo 0)" "$eth"
+wl=$(all host_link | grep -i '^Wi-Fi')
+check "host Wi-Fi not connected" "$(grep -q ' Up ' <<<"$wl" && echo 0 || echo 1)" "$wl"
+
+check "client display" "$(is "$(get client_display)" "${BENCH_EXPECT_CLIENT_DISPLAY:-?}")" "$(get client_display)"
+hd=$(all host_display | grep -i nvidia)
+check "host monitor" "$(grep -qE "${BENCH_EXPECT_HOST_DISPLAY:-^$}" <<<"$hd" && echo 1 || echo 0)" "$hd"
+
+check "RUST_LOG unset on the client" "$(is "$(get client_rust_log)" '')" "'$(get client_rust_log)'"
+check "RUST_LOG unset on the host" "$(is "$(get host_rust_log)" '')" "'$(get host_rust_log)'"
+check "client on mains" "$(is "$(get client_power)" 'AC Power')" "$(get client_power)"
+check "client not in low-power mode" "$(is "$(get client_low_power)" 0)" "lowpowermode $(get client_low_power)"
+check "client display kept awake" "$([ "$(get client_display_sleep_prevented)" = 1 ] && echo 1 || echo 0)" \
+    "PreventUserIdleDisplaySleep $(get client_display_sleep_prevented) (run under caffeinate -d)"
+check "nothing left running on the client" "$(is "$(get client_live)" '')" "'$(get client_live)'"
+check "nothing left running on the host" "$(is "$(get host_live)" '')" "'$(get host_live)'"
+check "client disk" "$([ "$(get client_disk_free_gb)" -ge 5 ] && echo 1 || echo 0)" "$(get client_disk_free_gb) GB free"
+check "host disk" "$([ "$(get host_disk_free_gb)" -ge 5 ] && echo 1 || echo 0)" "$(get host_disk_free_gb) GB free"
+imp=$(get client_impairment)
+check "link not impaired" "$([ "$imp" = '0 pipes' ] || [[ $imp == unknown* ]] && echo 1 || echo 0)" "$imp"
+
+if [ "$fails" -gt 0 ]; then
+    echo "$fails check(s) failed: the rig is not the one this series names"
+    exit 1
+fi
+echo "the rig is fit to measure"

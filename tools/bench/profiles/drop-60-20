@@ -1,0 +1,7 @@
+# The host-to-client direction capped at 60 Mbit/s, dropping to 20 at second
+# 10 and back to 60 at second 30; a queue of 50 packets (dummynet's default,
+# an Ethernet device's).
+down bw 60Mbit/s queue 50
+up
+at 10 down bw 20Mbit/s queue 50
+at 30 down bw 60Mbit/s queue 50

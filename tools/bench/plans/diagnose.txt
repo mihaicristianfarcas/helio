@@ -1,0 +1,12 @@
+# Where frames go missing (B5 step 1): every stack at its defaults, with its
+# own account of the frames beside the probe's. Helio with its per-second
+# statistics in the client's log (frames received, decoded, shown; loss);
+# Moonlight always ends its log with "Global video stats" (frames received,
+# decoded, rendered, dropped by pacing). Not published: debug logging is not
+# what users run. Read with the probe's frames shown for the same runs.
+helio    1920x1080@60  20000 vsync nopacing RUST_LOG=info,helio_client::stats=debug BENCH_TAG=diag
+apollo   1920x1080@60  20000 vsync nopacing BENCH_TAG=diag
+sunshine 1920x1080@60  20000 vsync nopacing BENCH_TAG=diag
+helio    2560x1440@120 57000 vsync nopacing RUST_LOG=info,helio_client::stats=debug BENCH_TAG=diag
+apollo   2560x1440@120 57000 vsync nopacing BENCH_TAG=diag
+sunshine 2560x1440@120 57000 vsync nopacing BENCH_TAG=diag

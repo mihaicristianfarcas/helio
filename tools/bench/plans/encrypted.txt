@@ -1,0 +1,11 @@
+# Sunshine and Apollo with lan_encryption_mode = 2 (video and
+# audio encrypted on the LAN, as Helio always is), Helio at the equal wire
+# rate beside them. Defaults otherwise (V-Sync on). Run
+# `bench-host.ps1 encryption on` on the host before the series, and
+# `bench-host.ps1 encryption off` after it.
+apollo   1920x1080@60  20000 vsync nopacing
+sunshine 1920x1080@60  20000 vsync nopacing
+helio    1920x1080@60  EQ    vsync nopacing
+apollo   2560x1440@120 57000 vsync nopacing
+sunshine 2560x1440@120 57000 vsync nopacing
+helio    2560x1440@120 EQ    vsync nopacing

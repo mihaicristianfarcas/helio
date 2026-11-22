@@ -1,0 +1,96 @@
+#!/usr/bin/env bash
+# starts-mac: starts and ends a stream N times, and says how long each start
+# took and whether it worked.
+#
+#   tools/bench/starts-mac STACK WxH@FPS KBPS N OUT
+#
+# Each start: launch the client as run-mac does, wait for its first video
+# (Helio's decoder built from the first keyframe, "decoder (re)built";
+# Moonlight's "Received first video packet"), hold the stream 5 s, end it as
+# a person would, and wait for the client to exit. A start with no video in
+# 30 s counts as failed. OUT/starts.csv gets one row per start:
+# `n,ok,first_video_s,exit_status,ended_s`. Helio ends with Ctrl-C and
+# exit_status is its client's; Moonlight ends with its Quit (moonlight-quit), and
+# exit_status is 0 when its log says the stream stopped within 20 s. ended_s
+# runs to the client's exit (Helio) or the stream's stop (Moonlight).
+#
+# Same environment as run-mac; the host's stack is switched once, at the
+# start. STARTS_GAP is the wait in seconds between one start's end and the
+# next (3 by default: "right after the previous session ended");
+# STARTS_BEFORE, a command run before each start (to put the host's monitor
+# to sleep, say). STARTS_SETTLE is the wait after the stack starts (20 s by
+# default: a Moonlight host tests its encoders when its service starts, and
+# a start in that time is no start a person meets).
+set -uo pipefail
+stack=$1 mode=$2 kbps=$3 n=$4 out=$5
+W=${mode%%x*}; rest=${mode#*x}; H=${rest%@*}; F=${mode#*@}
+here=$(cd "$(dirname "$0")" && pwd)
+helio=/Applications/Helio.app/Contents/Resources/bin/helio
+moonlight=/Applications/Moonlight.app/Contents/MacOS/Moonlight
+read -ra ssh <<<"$BENCH_SSH"
+mkdir -p "$out"
+now() { perl -MTime::HiRes=time -e 'printf "%.3f\n", time'; }
+wait_line() {
+    local file=$1 re=$2 s=$3 fd
+    exec {fd}< <(exec tail -n +1 -F "$file" 2>/dev/null)
+    local t=$!
+    ( sleep "$s"; kill "$t" ) 2>/dev/null & local k=$!
+    grep -m1 -qE "$re" <&"$fd"; local r=$?
+    kill "$t" "$k" 2>/dev/null
+    exec {fd}<&-
+    return $r
+}
+bounded_wait() {
+    ( sleep "$2"; kill -9 "$1" 2>/dev/null ) & local k=$!
+    wait "$1" 2>/dev/null; local s=$?
+    kill "$k" 2>/dev/null; wait "$k" 2>/dev/null
+    return $s
+}
+
+"${ssh[@]}" "powershell -NoProfile -ExecutionPolicy Bypass -File $BENCH_HOST_DIR\\bench-host.ps1 stack $stack" 2>&1 |
+    tr -d '\r' | grep -vE '^(#< CLIXML|<Objs )' >"$out/stack.txt"
+sleep "${STARTS_SETTLE:-20}"
+echo "n,ok,first_video_s,exit_status,ended_s" >"$out/starts.csv"
+for ((i = 1; i <= n; i++)); do
+    log="$out/client-$i.log"
+    [ -n "${STARTS_BEFORE:-}" ] && eval "$STARTS_BEFORE"
+    if [ "$stack" = helio ]; then
+        "$helio" stream "$HELIO_HOST_NAME" --via "$BENCH_HOST:47800" --size "${W}x${H}" --fps "$F" \
+            --mbps "$((kbps / 1000))" --codec hevc --audio-channels 2 --no-clipboard >"$log" 2>&1 &
+        cpid=$!; t0=$(now)
+        wait_line "$log" 'decoder \(re\)built' 30; ok=$?
+    else
+        if [ "$stack" = sunshine ]; then name=$MOONLIGHT_SUNSHINE app=Desktop; else name=$MOONLIGHT_APOLLO app="Virtual Display"; fi
+        "$moonlight" stream "$name" "$app" --resolution "${W}x${H}" --fps "$F" --bitrate "$kbps" \
+            --display-mode fullscreen --video-codec HEVC --audio-config stereo --no-audio-on-host \
+            --no-hdr --no-yuv444 --no-performance-overlay --no-absolute-mouse --no-quit-after \
+            --vsync --no-frame-pacing >"$log" 2>&1 &
+        cpid=$!; t0=$(now)
+        wait_line "$log" '^Redirecting log output to ' 10
+        ml=$(sed -n 's/^Redirecting log output to //p' "$log" | head -1)
+        wait_line "$ml" 'Received first video packet' 30; ok=$?
+    fi
+    t1=$(now)
+    sleep 5
+    if [ "$stack" = helio ]; then
+        kill -INT "$cpid"
+        bounded_wait "$cpid" 20; st=$?
+        t2=$(now)
+    else
+        # Moonlight's Quit, as moonlight-quit sends it: `Moonlight quit`
+        # finds no host in a session's first seconds.
+        "$here/moonlight-quit" "$BENCH_HOST" >"$out/quit-$i.log" 2>&1 & q=$!
+        wait_line "$ml" 'Stopping video stream' 20; st=$?
+        t2=$(now)
+        bounded_wait "$q" 10
+        # The stream is over; Moonlight then shows its hosts and stays open.
+        kill -TERM "$cpid" 2>/dev/null; bounded_wait "$cpid" 3
+        cp "$ml" "$out/moonlight-$i.log" 2>/dev/null
+    fi
+    awk -v i="$i" -v ok="$((ok == 0))" -v a="$t0" -v b="$t1" -v c="$t2" -v s="$st" \
+        'BEGIN { printf "%d,%d,%.2f,%d,%.2f\n", i, ok, ok ? b - a : -1, s, c - b - 5 }' >>"$out/starts.csv"
+    sleep "${STARTS_GAP:-3}"
+done
+ok=$(awk -F, 'NR > 1 && $2 == 1' "$out/starts.csv" | wc -l | tr -d ' ')
+med=$(awk -F, 'NR > 1 && $2 == 1 { print $3 }' "$out/starts.csv" | sort -n | awk '{ v[NR] = $1 } END { if (NR) print v[int((NR + 1) / 2)] }')
+echo "starts $n ok $ok median_first_video_s ${med:-none}"

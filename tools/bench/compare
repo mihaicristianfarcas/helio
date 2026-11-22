@@ -1,0 +1,62 @@
+#!/usr/bin/env python3
+"""compare: how far apart two settings' clicks are, with a 95% interval.
+
+    tools/bench/compare RUN_DIR... -- RUN_DIR...
+
+Prints each side's runs, clicks and median click-to-frame time, and the
+difference of the medians (left minus right) with a 95% bootstrap interval.
+
+The interval resamples runs, then clicks within each resampled run (a
+two-level bootstrap, 10,000 rounds, a fixed seed so it repeats). Clicks in one
+run are not independent: they share the run's phase against the client's
+and the host's refresh, so resampling clicks alone would give an interval
+too narrow. Where the interval holds 0, the two match on this bench.
+
+The first two clicks of a run are left out, as in `analyze`.
+"""
+import csv
+import os
+import random
+import statistics as st
+import sys
+
+ROUNDS = 10_000
+SEED = 1
+
+
+def clicks(run):
+    path = os.path.join(run, "flash.csv")
+    if not os.path.exists(path):
+        return []
+    return [float(r["latency_ms"]) for r in csv.DictReader(open(path)) if int(r["click"]) >= 2]
+
+
+def resample(rng, runs):
+    out = []
+    for _ in runs:
+        run = runs[rng.randrange(len(runs))]
+        out.extend(run[rng.randrange(len(run))] for _ in run)
+    return out
+
+
+def main(argv):
+    if "--" not in argv:
+        sys.exit(__doc__)
+    i = argv.index("--")
+    sides = [[c for c in map(clicks, part) if c] for part in (argv[:i], argv[i + 1:])]
+    if not all(sides):
+        sys.exit("each side needs at least one run with clicks")
+    for name, runs in zip(("left", "right"), sides):
+        allc = [x for r in runs for x in r]
+        print(f"{name}: {len(runs)} runs, {len(allc)} clicks, median {st.median(allc):.2f} ms")
+    a = st.median([x for r in sides[0] for x in r])
+    b = st.median([x for r in sides[1] for x in r])
+    rng = random.Random(SEED)
+    diffs = sorted(st.median(resample(rng, sides[0])) - st.median(resample(rng, sides[1])) for _ in range(ROUNDS))
+    lo, hi = diffs[int(0.025 * ROUNDS)], diffs[int(0.975 * ROUNDS) - 1]
+    verdict = "match" if lo <= 0 <= hi else ("left faster" if hi < 0 else "right faster")
+    print(f"difference {a - b:+.2f} ms, 95% interval [{lo:+.2f}, {hi:+.2f}]: {verdict}")
+
+
+if __name__ == "__main__":
+    main(sys.argv[1:])

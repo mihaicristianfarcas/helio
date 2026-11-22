@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+# install-gadget: makes a Raspberry Pi 5 the USB mouse clicker.py drives,
+# from every boot on, for USER without root. Run once, as root, then reboot:
+#
+#   sudo tools/bench/pi/install-gadget USER
+#
+# 1. The boot configuration puts the USB-C port in peripheral mode
+#    (dtoverlay=dwc2,dr_mode=peripheral under [all] in config.txt;
+#    modules-load=dwc2 in cmdline.txt), each only if it is not there yet.
+# 2. clicker.py goes to /usr/local/lib/bench, and a unit (bench-mouse)
+#    runs its `setup` at every boot, then hands USER the mouse's device
+#    (/dev/hidg0) and the status LED's trigger and brightness. The gadget
+#    must be built again at every boot (configfs lives in memory), and
+#    only root can build it: the unit does, so `clicker.py run` needs no
+#    password.
+#
+# Plugged into a computer by its USB-C port, the Pi takes its power from
+# that port too: the port must give at least 5 V at 3 A, the least a Pi 5
+# runs on (with its own USB ports then limited to 600 mA).
+set -euo pipefail
+user=${1:?usage: install-gadget USER}
+id "$user" >/dev/null
+[ "$(id -u)" = 0 ] || { echo "run as root (sudo)" >&2; exit 1; }
+here=$(cd "$(dirname "$0")" && pwd)
+config=/boot/firmware/config.txt
+cmdline=/boot/firmware/cmdline.txt
+
+if ! grep -qx 'dtoverlay=dwc2,dr_mode=peripheral' "$config"; then
+    printf '\n[all]\ndtoverlay=dwc2,dr_mode=peripheral\n' >>"$config"
+    echo "$config: USB-C port in peripheral mode"
+fi
+if ! grep -qw 'modules-load=dwc2' "$cmdline"; then
+    sed -i '1 s/$/ modules-load=dwc2/' "$cmdline"
+    echo "$cmdline: dwc2 loaded at boot"
+fi
+
+install -d /usr/local/lib/bench
+install -m 0755 "$here/clicker.py" /usr/local/lib/bench/clicker.py
+cat >/etc/systemd/system/bench-mouse.service <<EOF
+[Unit]
+Description=USB mouse for tools/bench/pi/clicker.py
+After=sys-kernel-config.mount
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/bin/python3 /usr/local/lib/bench/clicker.py setup
+# udev makes /dev/hidg0 once the gadget is bound: wait for its queue.
+ExecStartPost=/usr/bin/udevadm settle --timeout=10
+ExecStartPost=/bin/chown $user /dev/hidg0 /sys/class/leds/ACT/trigger /sys/class/leds/ACT/brightness
+
+[Install]
+WantedBy=multi-user.target
+EOF
+systemctl daemon-reload
+systemctl enable bench-mouse.service
+echo "installed: reboot, then /usr/local/lib/bench/clicker.py run N OUT.csv as $user"
