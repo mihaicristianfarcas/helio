@@ -1,10 +1,20 @@
-//! The stream window (main thread): a window of its own that goes full
-//! screen into a Space of its own, as Moonlight's does (Helio's window stays on
-//! the desktop, a swipe or Ctrl+←/→ away), with a layer-hosting view with a
-//! CAMetalLayer, and all keyboard and mouse input.
+//! The stream window (main thread): a window of its own, with a
+//! layer-hosting view with a CAMetalLayer, and all keyboard and mouse input.
+//!
+//! Full screen is a second window, made borderless over the whole screen
+//! (the camera housing's strip included) above the menu bar, that the view
+//! moves into -- as Moonlight's full-screen mode is (`session.cpp`:
+//! `SDL_HINT_VIDEO_MAC_FULLSCREEN_SPACES` off), not a Space of its own.
+//! macOS takes only such a window straight to the display
+//! (`FULL_SCREEN_LEVEL`): on macOS 27 a window in a full-screen Space always
+//! has windows over it (its own title bar's, hidden; the menu bar's strip;
+//! Notification Center's), and the titled window made borderless keeps
+//! layers of its own; either way the window server composites the stream, a
+//! refresh or more later to the glass. Helio's own window stays under the
+//! stream, Ctrl+Option+Shift+X (a window) or +D (minimised) away.
 //!
 //! Feels like Moonlight's fullscreen stream:
-//! - in its Space the menu bar and Dock are hidden outright (not
+//! - full screen, the menu bar and Dock are hidden outright (not
 //!   auto-hidden), so nothing drops down when the pointer reaches the top
 //!   edge;
 //! - the system pointer is captured and hidden while streaming, so hot corners
@@ -20,20 +30,20 @@
 //!   the mouse, +M switches mouse mode, +X full screen, +V types the
 //!   clipboard, +D minimises (Moonlight's chords, Option standing for Alt).
 
-use std::cell::RefCell;
+use std::cell::{Cell, OnceCell, RefCell};
 use std::collections::HashSet;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
 use helio_proto::input::{scancode, Button, InputEvent};
 use objc2::rc::Retained;
-use objc2::runtime::{NSObjectProtocol, ProtocolObject};
+use objc2::runtime::{AnyObject, NSObjectProtocol, ProtocolObject};
 use objc2::{define_class, msg_send, DefinedClass, MainThreadMarker, MainThreadOnly};
 use objc2_app_kit::{
     NSApplication, NSApplicationPresentationOptions, NSBackingStoreType, NSColor, NSCursor,
-    NSEvent, NSEventModifierFlags, NSResponder, NSScreen, NSView, NSWindow,
-    NSWindowCollectionBehavior, NSWindowDelegate, NSWindowStyleMask,
+    NSEvent, NSEventModifierFlags, NSMainMenuWindowLevel, NSNormalWindowLevel, NSResponder,
+    NSScreen, NSView, NSWindow, NSWindowCollectionBehavior, NSWindowDelegate, NSWindowLevel,
+    NSWindowStyleMask,
 };
 use objc2_core_foundation::{CGPoint, CGRect, CGSize};
 use objc2_core_graphics::{CGAssociateMouseAndMouseCursorPosition, CGWarpMouseCursorPosition};
@@ -211,14 +221,11 @@ impl Handler {
                 }
             }
             0x02 => {
-                // D
+                // D. After this event, as X: full screen, the view first
+                // goes back into its titled window.
                 self.release_all();
                 set_capture(self, false);
-                if let Some(mtm) = MainThreadMarker::new() {
-                    if let Some(w) = NSApplication::sharedApplication(mtm).keyWindow() {
-                        w.miniaturize(None);
-                    }
-                }
+                dispatch2::DispatchQueue::main().exec_async(minimise);
             }
             _ => return false,
         }
@@ -670,12 +677,26 @@ impl StreamView {
 
     /// Points kept clear at the top (the notch).
     fn top_inset(&self) -> f64 {
-        // Below the notch: a full-screen window normally sits below it
-        // already, and says so here if it does not.
+        // Full screen, the window covers the camera housing's strip, and the
+        // view's own safe area still says 0 (macOS 27.2): the strip is the
+        // screen's, at its top edge.
+        let housing = self
+            .window()
+            .and_then(|w| {
+                let screen = w.screen()?;
+                let (frame, strip) = (screen.frame(), screen.safeAreaInsets().top);
+                let window = w.frame();
+                Some(
+                    window.origin.y + window.size.height
+                        - (frame.origin.y + frame.size.height - strip),
+                )
+            })
+            .unwrap_or(0.0);
         self.ivars()
             .top_inset_points
             .get()
             .max(self.safeAreaInsets().top)
+            .max(housing)
     }
 
     /// The points the picture is fitted into: the view below the notch.
@@ -717,6 +738,16 @@ impl StreamView {
 
 pub struct WindowIvars {
     pub view: Retained<StreamView>,
+    /// The titled window the stream opens in, and comes back to from full
+    /// screen.
+    home: OnceCell<Retained<NSWindow>>,
+    /// Full screen: the borderless window over the whole screen that the
+    /// view is in (`enter_full_screen`).
+    full: RefCell<Option<Retained<NSWindow>>>,
+    /// That window off screen, between two spells of full screen.
+    spare: RefCell<Option<Retained<NSWindow>>>,
+    /// Minimised from full screen: full screen again when it is back.
+    full_on_return: Cell<bool>,
 }
 
 define_class!(
@@ -730,8 +761,11 @@ define_class!(
 
     unsafe impl NSWindowDelegate for WindowDelegate {
         #[unsafe(method(windowDidBecomeKey:))]
-        fn window_did_become_key(&self, _n: &NSNotification) {
+        fn window_did_become_key(&self, n: &NSNotification) {
             tracing::info!(key = true, "stream window");
+            if let Some(window) = notified_window(n) {
+                self.lift(&window, true);
+            }
             self.ivars().view.with(|h| {
                 if let Some(f) = &h.on_focus {
                     f(true);
@@ -741,8 +775,13 @@ define_class!(
         }
 
         #[unsafe(method(windowDidResignKey:))]
-        fn window_did_resign_key(&self, _n: &NSNotification) {
+        fn window_did_resign_key(&self, n: &NSNotification) {
             tracing::info!(key = false, "stream window");
+            // Another app, or Helio's own window, comes in front of the
+            // stream, and the menu bar and Dock come back.
+            if let Some(window) = notified_window(n) {
+                self.lift(&window, false);
+            }
             // Cmd+Tab away: never leave keys held on the host or the pointer
             // trapped in a window the user has left.
             self.ivars().view.with(|h| {
@@ -753,54 +792,23 @@ define_class!(
             });
         }
 
-        // In its full-screen Space, nothing drops down from the top edge.
-        #[unsafe(method(window:willUseFullScreenPresentationOptions:))]
-        fn window_will_use_full_screen_presentation_options(
-            &self,
-            _window: &NSWindow,
-            _proposed: NSApplicationPresentationOptions,
-        ) -> NSApplicationPresentationOptions {
-            NSApplicationPresentationOptions::FullScreen
-                | NSApplicationPresentationOptions::HideDock
-                | NSApplicationPresentationOptions::HideMenuBar
-        }
-
-        // The request for full screen was taken: no retry needed.
-        #[unsafe(method(windowWillEnterFullScreen:))]
-        fn window_will_enter_full_screen(&self, _n: &NSNotification) {
-            FULLSCREEN_WANTED.store(false, Ordering::Relaxed);
-        }
-
-        // Refused mid-way (another full-screen Space still leaving): again.
-        #[unsafe(method(windowDidFailToEnterFullScreen:))]
-        fn window_did_fail_to_enter_full_screen(&self, _w: &NSWindow) {
-            tracing::info!("the window could not go full screen yet");
-            FULLSCREEN_WANTED.store(true, Ordering::Relaxed);
-            retry_fullscreen(FULLSCREEN_TRIES);
-        }
-
-        // The layout, and the window server's path for the layer, follow
-        // the window into and out of full screen.
-        #[unsafe(method(windowDidEnterFullScreen:))]
-        fn window_did_enter_full_screen(&self, _n: &NSNotification) {
-            self.ivars().view.publish_layout();
-            self.ivars().view.ivars().render.new_path();
-            tracing::info!(fullscreen = true, "window mode");
-        }
-
-        #[unsafe(method(windowDidExitFullScreen:))]
-        fn window_did_exit_full_screen(&self, _n: &NSNotification) {
-            self.ivars().view.publish_layout();
-            self.ivars().view.ivars().render.new_path();
-            tracing::info!(fullscreen = false, "window mode");
-        }
-
         // Another display may refresh at another rate, and take the layer
         // another way.
         #[unsafe(method(windowDidChangeScreen:))]
-        fn window_did_change_screen(&self, _n: &NSNotification) {
+        fn window_did_change_screen(&self, n: &NSNotification) {
+            if let Some(window) = notified_window(n).filter(|w| self.is_full(w)) {
+                cover_screen(&window);
+            }
             self.ivars().view.publish_layout();
             self.ivars().view.ivars().render.new_path();
+        }
+
+        // Minimised from full screen (+D): back to it.
+        #[unsafe(method(windowDidDeminiaturize:))]
+        fn window_did_deminiaturize(&self, _n: &NSNotification) {
+            if self.ivars().full_on_return.replace(false) {
+                self.enter_full_screen();
+            }
         }
 
         #[unsafe(method(windowShouldClose:))]
@@ -824,12 +832,208 @@ define_class!(
 
 impl WindowDelegate {
     pub fn new(mtm: MainThreadMarker, view: Retained<StreamView>) -> Retained<Self> {
-        let this = Self::alloc(mtm).set_ivars(WindowIvars { view });
+        let this = Self::alloc(mtm).set_ivars(WindowIvars {
+            view,
+            home: OnceCell::new(),
+            full: RefCell::new(None),
+            spare: RefCell::new(None),
+            full_on_return: Cell::new(false),
+        });
         unsafe { msg_send![super(this), init] }
+    }
+
+    /// The window the view is in: the full-screen one, or its titled one.
+    fn current(&self) -> Option<Retained<NSWindow>> {
+        self.ivars()
+            .full
+            .borrow()
+            .clone()
+            .or_else(|| self.ivars().home.get().cloned())
+    }
+
+    fn is_full(&self, window: &NSWindow) -> bool {
+        self.ivars()
+            .full
+            .borrow()
+            .as_deref()
+            .is_some_and(|f| std::ptr::eq(f, window))
+    }
+
+    /// Into full screen, or back into the titled window.
+    pub fn toggle_full_screen(&self) {
+        if self.ivars().full.borrow().is_some() {
+            self.leave_full_screen();
+        } else {
+            self.enter_full_screen();
+        }
+    }
+
+    /// Move the view into a new borderless window over the whole screen,
+    /// above the menu bar; the titled window waits off screen. A new
+    /// window, not the titled one made borderless: that one keeps layers of
+    /// its frame's, and the window server then composites the stream.
+    fn enter_full_screen(&self) {
+        let Some(home) = self.ivars().home.get() else {
+            return;
+        };
+        if self.ivars().full.borrow().is_some() {
+            return;
+        }
+        let mtm = self.mtm();
+        let Some(screen) = home.screen().or_else(|| NSScreen::mainScreen(mtm)) else {
+            return;
+        };
+        let spare = self.ivars().spare.borrow_mut().take();
+        let full = spare.unwrap_or_else(|| {
+            let full: Retained<NSWindow> =
+                StreamNSWindow::new(mtm, screen.frame(), NSWindowStyleMask::Borderless)
+                    .into_super();
+            unsafe { full.setReleasedWhenClosed(false) };
+            full.setTitle(&home.title());
+            full.setBackgroundColor(Some(&NSColor::blackColor()));
+            full.setOpaque(true);
+            full.setAcceptsMouseMovedEvents(true);
+            full
+        });
+        full.setFrame_display(screen.frame(), false);
+        // Above the menu bar at once, even before it has the keyboard (Helio
+        // not yet the active app): what the user started covers the screen.
+        full.setLevel(FULL_SCREEN_LEVEL);
+        full.setDelegate(Some(ProtocolObject::from_ref(self)));
+        let view = &self.ivars().view;
+        // Off a window it was shown in: a layer of its own here.
+        if home.isVisible() {
+            fresh_layer(view);
+        }
+        full.setContentView(Some(view));
+        *self.ivars().full.borrow_mut() = Some(full.clone());
+        full.makeKeyAndOrderFront(None);
+        full.makeFirstResponder(Some(view));
+        home.orderOut(None);
+        self.changed_mode(true);
+    }
+
+    /// Move the view back into its titled window; the full-screen one waits
+    /// off screen for the next time (`spare`).
+    fn leave_full_screen(&self) {
+        let Some(full) = self.ivars().full.borrow_mut().take() else {
+            return;
+        };
+        let Some(home) = self.ivars().home.get() else {
+            return;
+        };
+        // Its closing is not the stream's end (`windowWillClose:`).
+        full.setDelegate(None);
+        self.lift(&full, false);
+        let view = &self.ivars().view;
+        fresh_layer(view);
+        home.setContentView(Some(view));
+        home.makeKeyAndOrderFront(None);
+        home.makeFirstResponder(Some(view));
+        full.orderOut(None);
+        *self.ivars().spare.borrow_mut() = Some(full);
+        self.changed_mode(false);
+    }
+
+    /// The full-screen window with the keyboard: above the menu bar, the
+    /// menu bar and Dock hidden outright. Without it: among other windows,
+    /// so that another app or Helio's own window can come in front.
+    fn lift(&self, window: &NSWindow, key: bool) {
+        if !self.is_full(window) {
+            return;
+        }
+        window.setLevel(if key {
+            FULL_SCREEN_LEVEL
+        } else {
+            NSNormalWindowLevel
+        });
+        let options = if key {
+            NSApplicationPresentationOptions::HideDock
+                | NSApplicationPresentationOptions::HideMenuBar
+        } else {
+            NSApplicationPresentationOptions::Default
+        };
+        NSApplication::sharedApplication(self.mtm()).setPresentationOptions(options);
+    }
+
+    /// The window server's path for the layer is judged afresh in its new
+    /// window (the layout follows the view's resize).
+    fn changed_mode(&self, full: bool) {
+        self.ivars().view.ivars().render.new_path();
+        tracing::info!(fullscreen = full, "window mode");
+    }
+
+    /// Into the Dock: full screen, from the titled window, full screen again
+    /// when it is back (a borderless window cannot be minimised, and one
+    /// that can is composited).
+    fn minimise(&self) {
+        if self.ivars().full.borrow().is_some() {
+            self.leave_full_screen();
+            self.ivars().full_on_return.set(true);
+        }
+        if let Some(window) = self.current() {
+            window.miniaturize(None);
+        }
+    }
+
+    /// Off the screen for good: the full-screen window closed, the titled
+    /// one left for its owner to close.
+    fn close_full_screen(&self) {
+        let full = self.ivars().full.borrow_mut().take();
+        let spare = self.ivars().spare.borrow_mut().take();
+        for window in full.into_iter().chain(spare) {
+            window.setDelegate(None);
+            window.orderOut(None);
+            window.close();
+        }
     }
 }
 
-// A borderless window refuses key status by default; this one must take it.
+/// Give the stream view a new layer, and the renderer with it, before the
+/// view moves to another window. A layer moved from the window it was shown
+/// in to a full-screen one is still drawn, but macOS no longer reports its
+/// drawables on the glass (`presentedTime` 0, macOS 27.2): 1 of 118 in a
+/// test window, 117 of 118 with a new layer. The renderer, its path to the
+/// glass and its statistics need those reports.
+fn fresh_layer(view: &StreamView) {
+    let layer = CAMetalLayer::new();
+    layer.setOpaque(true);
+    if let Some(old) = view.layer() {
+        layer.setContentsScale(old.contentsScale());
+    }
+    view.setLayer(Some(&layer));
+    view.setWantsLayer(true);
+    view.ivars().render.replace_layer(layer);
+}
+
+/// Fit the full-screen window to its screen.
+fn cover_screen(window: &NSWindow) {
+    if let Some(screen) = window.screen() {
+        window.setFrame_display(screen.frame(), true);
+    }
+}
+
+/// The window a window notification is about.
+fn notified_window(n: &NSNotification) -> Option<Retained<NSWindow>> {
+    n.object()?.downcast::<NSWindow>().ok()
+}
+
+/// The stream window's style in a window.
+const WINDOWED_STYLE: NSWindowStyleMask = NSWindowStyleMask::Titled
+    .union(NSWindowStyleMask::Closable)
+    .union(NSWindowStyleMask::Miniaturizable)
+    .union(NSWindowStyleMask::Resizable);
+
+/// The full-screen window's level while it has the keyboard: above the menu
+/// bar's. Lower, a window of the system's lies over it -- Notification
+/// Center's, transparent and over the whole screen, at 23 (listed by
+/// `CGWindowListCopyWindowInfo` on macOS 27.2) -- and the window server
+/// composites the stream to draw it. With `mac-present` full screen on an
+/// M4 Pro's 120 Hz panel at 3600x2338, macOS 27.2.1, nothing recording,
+/// decoded to glass on average: 24.4 ms at 60 fps and 27.4 ms at 120 in a
+/// full-screen Space; 6.9 and 12.6 ms in this window.
+const FULL_SCREEN_LEVEL: NSWindowLevel = NSMainMenuWindowLevel + 1;
+
 define_class!(
     #[unsafe(super(NSWindow, NSResponder, NSObject))]
     #[thread_kind = MainThreadOnly]
@@ -837,6 +1041,8 @@ define_class!(
     pub struct StreamNSWindow;
 
     impl StreamNSWindow {
+        // A borderless window (full screen) refuses key status by default;
+        // this one must take it.
         #[unsafe(method(canBecomeKeyWindow))]
         fn can_become_key_window(&self) -> bool {
             true
@@ -846,8 +1052,39 @@ define_class!(
         fn can_become_main_window(&self) -> bool {
             true
         }
+
+        // The green button, View > Enter Full Screen and Ctrl+Option+Shift+X
+        // all come here: Helio's full screen, never a Space.
+        #[unsafe(method(toggleFullScreen:))]
+        fn toggle_full_screen(&self, _sender: Option<&AnyObject>) {
+            let delegate = self.delegate();
+            let delegate: Option<&AnyObject> = delegate.as_deref().map(|d| d.as_ref());
+            if let Some(d) = delegate.and_then(|d| d.downcast_ref::<WindowDelegate>()) {
+                d.toggle_full_screen();
+            }
+        }
+
+        // Full screen (borderless), the window is its whole screen, whatever
+        // AppKit fits it to (another scaling, say).
+        #[unsafe(method(constrainFrameRect:toScreen:))]
+        fn constrain_frame_rect(&self, frame: NSRect, screen: Option<&NSScreen>) -> NSRect {
+            match screen {
+                Some(screen) if !self.styleMask().contains(NSWindowStyleMask::Titled) => {
+                    screen.frame()
+                }
+                _ => unsafe { msg_send![super(self), constrainFrameRect: frame, toScreen: screen] },
+            }
+        }
     }
 );
+
+impl StreamNSWindow {
+    fn new(mtm: MainThreadMarker, rect: NSRect, style: NSWindowStyleMask) -> Retained<Self> {
+        unsafe {
+            msg_send![Self::alloc(mtm), initWithContentRect: rect, styleMask: style, backing: NSBackingStoreType::Buffered, defer: false]
+        }
+    }
+}
 
 /// Screen geometry that decides the stream mode.
 #[derive(Debug, Clone, Copy)]
@@ -919,6 +1156,8 @@ fn panel_pixels(screen: &NSScreen) -> Option<(f64, f64)> {
 pub struct Window {
     pub window: Retained<NSWindow>,
     pub view: Retained<StreamView>,
+    /// The layer the stream starts with: the view gets a new one when it
+    /// moves between its windows (`fresh_layer`), the renderer with it.
     pub layer: Retained<CAMetalLayer>,
     _delegate: Retained<WindowDelegate>,
     /// The monitor that hears key-ups AppKit keeps from the view
@@ -974,8 +1213,8 @@ impl Window {
             top_inset: 0.0,
             panel: None,
         });
-        // A window either way: full screen, it then goes into a Space of its
-        // own (below).
+        // A titled window either way: full screen, the view then moves into a
+        // window over the whole screen (below).
         let w = (stream.0 as f64 / info.scale).min(info.frame.size.width * 0.9);
         let h = (stream.1 as f64 / info.scale).min(info.frame.size.height * 0.9);
         let rect = NSRect::new(
@@ -985,15 +1224,9 @@ impl Window {
             ),
             NSSize::new(w, h),
         );
-        let style = NSWindowStyleMask::Titled
-            | NSWindowStyleMask::Closable
-            | NSWindowStyleMask::Miniaturizable
-            | NSWindowStyleMask::Resizable;
         let inset = 0.0;
-        let window: Retained<StreamNSWindow> = unsafe {
-            msg_send![StreamNSWindow::alloc(mtm), initWithContentRect: rect, styleMask: style, backing: NSBackingStoreType::Buffered, defer: false]
-        };
-        let window: Retained<NSWindow> = window.into_super();
+        let window: Retained<NSWindow> =
+            StreamNSWindow::new(mtm, rect, WINDOWED_STYLE).into_super();
         unsafe { window.setReleasedWhenClosed(false) };
         window.setTitle(&objc2_foundation::NSString::from_str(title));
         window.setBackgroundColor(Some(&NSColor::blackColor()));
@@ -1008,9 +1241,10 @@ impl Window {
             CGSize::new(rect.size.width, rect.size.height),
         ));
         layer.setContentsScale(info.scale);
-        // Opaque, and nothing else in the window: lets the compositor send the
-        // layer straight to the display ("direct to display"), which saves a
-        // whole refresh of latency against a composited layer.
+        // Opaque, and nothing else in the window: with nothing over the window
+        // either (full screen, `FULL_SCREEN_LEVEL`), lets the compositor send
+        // the layer straight to the display ("direct to display"), which
+        // saves a whole refresh of latency against a composited layer.
         layer.setOpaque(true);
         // Layer-hosting: set the layer before wantsLayer.
         view.setLayer(Some(&layer));
@@ -1018,20 +1252,21 @@ impl Window {
         window.setContentView(Some(&view));
 
         let delegate = WindowDelegate::new(mtm, view.clone());
+        let _ = delegate.ivars().home.set(window.clone());
         window.setDelegate(Some(ProtocolObject::from_ref(&*delegate)));
 
+        // Keeps the green button a full-screen one (`toggleFullScreen:`).
         window.setCollectionBehavior(NSWindowCollectionBehavior::FullScreenPrimary);
 
         let app = NSApplication::sharedApplication(mtm);
-        window.makeKeyAndOrderFront(None);
-        window.makeFirstResponder(Some(&view));
+        if fullscreen {
+            delegate.enter_full_screen();
+        } else {
+            window.makeKeyAndOrderFront(None);
+            window.makeFirstResponder(Some(&view));
+        }
         #[allow(deprecated)]
         app.activateIgnoringOtherApps(true);
-        if fullscreen {
-            FULLSCREEN_WANTED.store(true, Ordering::Relaxed);
-            window.toggleFullScreen(None);
-            retry_fullscreen(FULLSCREEN_TRIES);
-        }
         view.publish_layout();
         let key_ups = RefCell::new(watch_command_key_ups(&view));
         Window {
@@ -1043,15 +1278,22 @@ impl Window {
         }
     }
 
+    /// The window the stream is in now: the full-screen one, or `window`.
+    pub fn current(&self) -> Retained<NSWindow> {
+        self._delegate
+            .current()
+            .unwrap_or_else(|| self.window.clone())
+    }
+
     pub fn close(&self) {
-        FULLSCREEN_WANTED.store(false, Ordering::Relaxed);
         if let Some(monitor) = self.key_ups.borrow_mut().take() {
             // SAFETY: a monitor `addLocalMonitorForEventsMatchingMask` gave,
             // removed once (taken).
             unsafe { NSEvent::removeMonitor(&monitor) };
         }
         self.view.with(|h| set_capture(h, false));
-        // Either way: Ctrl+Alt+Shift+X may have made a window full screen.
+        self._delegate.close_full_screen();
+        // Either way: Ctrl+Alt+Shift+X may have made the stream full screen.
         if let Some(mtm) = MainThreadMarker::new() {
             NSApplication::sharedApplication(mtm)
                 .setPresentationOptions(NSApplicationPresentationOptions::Default);
@@ -1059,47 +1301,6 @@ impl Window {
         self.window.orderOut(None);
         self.window.close();
     }
-}
-
-/// A stream window asked for full screen and has not started into it (or
-/// was refused on the way).
-/// macOS ignores the request while another full-screen Space is still on its
-/// way out (a stream started just as one ended), and the stream would then
-/// run in a window: composited, a refresh or two later to the glass.
-static FULLSCREEN_WANTED: AtomicBool = AtomicBool::new(false);
-/// How often, 400 ms apart, the request is repeated.
-const FULLSCREEN_TRIES: u32 = 10;
-
-fn retry_fullscreen(tries: u32) {
-    let Ok(when) = dispatch2::DispatchTime::try_from(Duration::from_millis(400)) else {
-        return;
-    };
-    let _ = dispatch2::DispatchQueue::main().after(when, move || {
-        if !FULLSCREEN_WANTED.load(Ordering::Relaxed) {
-            return;
-        }
-        let Some(mtm) = MainThreadMarker::new() else {
-            return;
-        };
-        for window in NSApplication::sharedApplication(mtm).windows().iter() {
-            let stream = window
-                .contentView()
-                .and_then(|v| v.downcast::<StreamView>().ok())
-                .is_some();
-            if stream
-                && window.isVisible()
-                && !window.styleMask().contains(NSWindowStyleMask::FullScreen)
-            {
-                tracing::info!("asking for full screen again");
-                window.toggleFullScreen(None);
-            }
-        }
-        if tries > 1 {
-            retry_fullscreen(tries - 1);
-        } else {
-            FULLSCREEN_WANTED.store(false, Ordering::Relaxed);
-        }
-    });
 }
 
 /// How long after the stream window takes the keyboard back it takes the
@@ -1142,10 +1343,8 @@ fn for_stream_windows(mut f: impl FnMut(&NSWindow, &StreamView, bool)) {
 }
 
 /// Moonlight's Ctrl+Alt+Shift+X: the key stream window into or out of full
-/// screen (a Space of its own).
+/// screen.
 pub fn toggle_fullscreen() {
-    // The user's choice from here on.
-    FULLSCREEN_WANTED.store(false, Ordering::Relaxed);
     let Some(mtm) = MainThreadMarker::new() else {
         return;
     };
@@ -1161,6 +1360,23 @@ pub fn toggle_fullscreen() {
         return;
     }
     window.toggleFullScreen(None);
+}
+
+/// Moonlight's Ctrl+Alt+Shift+D: the key window into the Dock -- the stream
+/// window through its delegate, which knows whether it is full screen.
+fn minimise() {
+    let Some(mtm) = MainThreadMarker::new() else {
+        return;
+    };
+    let Some(window) = NSApplication::sharedApplication(mtm).keyWindow() else {
+        return;
+    };
+    let delegate = window.delegate();
+    let delegate: Option<&AnyObject> = delegate.as_deref().map(|d| d.as_ref());
+    match delegate.and_then(|d| d.downcast_ref::<WindowDelegate>()) {
+        Some(d) => d.minimise(),
+        None => window.miniaturize(None),
+    }
 }
 
 /// Warp the (captured, hidden) system pointer to the window's centre, so it is

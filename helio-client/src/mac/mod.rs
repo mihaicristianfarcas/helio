@@ -241,7 +241,7 @@ impl Session {
         }
         window.view.set_handler(handler);
         window.view.with(|h| window::set_capture(h, true));
-        window::centre_pointer(&window.window);
+        window::centre_pointer(&window.current());
 
         let gamepads = {
             let controls = stream.controls();
@@ -299,19 +299,19 @@ impl Session {
 
     /// Close the window as its close button does (tests).
     pub fn perform_close(&self) {
-        self.window.window.performClose(None);
+        self.window.current().performClose(None);
     }
 
     /// Take the window off the screen without closing it (tests: a window
     /// gone some way that did not end the stream).
     pub fn order_out(&self) {
-        self.window.window.orderOut(None);
+        self.window.current().orderOut(None);
     }
 
     /// Bring the window to the front, out of the Dock if it is there. Main
     /// thread.
     pub fn show(&self) {
-        let w = &self.window.window;
+        let w = self.window.current();
         if w.isMiniaturized() {
             w.deminiaturize(None);
         }
@@ -326,7 +326,7 @@ impl Session {
     /// not on screen, not in the Dock, and not because the app is hidden.
     /// Main thread.
     pub fn window_gone(&self) -> bool {
-        let w = &self.window.window;
+        let w = self.window.current();
         let hidden = MainThreadMarker::new()
             .is_some_and(|mtm| objc2_app_kit::NSApplication::sharedApplication(mtm).isHidden());
         !hidden && !w.isVisible() && !w.isMiniaturized()
