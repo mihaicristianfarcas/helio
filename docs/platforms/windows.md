@@ -136,9 +136,16 @@ with it (the app listens for `TaskbarCreated`).
 
 ### A session, on Windows
 
-- **The display.** A SudoVDA virtual display is added in the client's exact
-  mode, made primary with the display-configuration (CCD) API, and — unless
-  the client or the settings keep them — the host's own monitors are turned
+- **The display.** A SudoVDA virtual display is added at the client's
+  size, refreshing at the lowest multiple of the client's rate that reaches
+  120 Hz (120 Hz for 60 fps, 119.88 Hz for 59.94; the stream and the capture
+  keep the client's rate), as Apollo's "double refresh rate" setting does.
+  A game with V-Sync queues its frames ahead on the display's refresh, so
+  each one waits 8.3 ms, not 16.7: at 1920x1080 at 60 fps the benchmarks'
+  scene presented a frame every 8.46 ms, against 16.6 ms on a 60 Hz virtual
+  display (RTX 3070 Ti, Windows 11). It is made primary with the
+  display-configuration (CCD) API, and — unless the client or the
+  settings keep them — the host's own monitors are turned
   off, so the virtual display is the whole desktop and windows and games
   open where the client can see them (Sunshine's "deactivate other
   displays", Apollo's default). That arrangement is saved in Windows'

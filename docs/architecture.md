@@ -132,10 +132,13 @@ process runs:
 
 ## A frame, from the host's screen to the client's
 
-1. **Display.** The session gets a display at exactly the client's mode —
-   a virtual one on Windows, macOS, GNOME and KDE, made primary, the host's
-   own monitors off (unless asked otherwise; KDE keeps them on) so windows
-   open where the client can see them.
+1. **Display.** The session gets a display at exactly the client's
+   resolution — a virtual one on Windows, macOS, GNOME and KDE, made
+   primary, the host's own monitors off (unless asked otherwise; KDE keeps
+   them on) so windows open where the client can see them. It refreshes at
+   the client's rate, except on Windows, where it refreshes at the lowest
+   multiple of it reaching 120 Hz, so a game's frames queue ahead of the
+   display for less time ([platforms/windows.md](platforms/windows.md#a-session-on-windows)).
 2. **Capture**, paced to the negotiated frame rate — the client display's
    own, to the millihertz (59.94 Hz is not 60), as Sunshine takes
    Moonlight's: never faster, and a still desktop re-encoded at max(fps/5,

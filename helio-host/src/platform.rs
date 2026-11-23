@@ -1,8 +1,10 @@
 //! The Windows host's side of a session (see `session`): a SudoVDA virtual
-//! display at the client's mode, made the whole desktop (without SudoVDA, the
-//! host's main display as it is); Desktop Duplication of it, the pointer
-//! drawn in; NVENC, or Media Foundation's H.264 encoder where there is no
-//! NVENC; SendInput; WASAPI loopback; ViGEm pads; the app a session opens.
+//! display at the client's resolution, refreshing at a multiple of its rate
+//! (`negotiate::display_refresh_mhz`), made the whole desktop (without
+//! SudoVDA, the host's main display as it is); Desktop Duplication of it,
+//! the pointer drawn in; NVENC, or Media Foundation's H.264 encoder where
+//! there is no NVENC; SendInput; WASAPI loopback; ViGEm pads; the app a
+//! session opens.
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -189,10 +191,11 @@ impl Platform {
         }
     }
 
-    /// The display to stream: a virtual one at the client's mode (reused when
-    /// it is already up at that mode). Where SudoVDA can be had, sessions only
-    /// ever stream a virtual display made for the client, never the host's
-    /// own monitors; without it, the host's main display.
+    /// The display to stream: a virtual one at the client's resolution and a
+    /// multiple of its rate (reused when it is already up at that mode).
+    /// Where SudoVDA can be had, sessions only ever stream a virtual display
+    /// made for the client, never the host's own monitors; without it, the
+    /// host's main display.
     pub fn display(
         &mut self,
         n: &Negotiated,
@@ -202,11 +205,14 @@ impl Platform {
     ) -> Result<Display, AckStatus> {
         let (width, height, fps_mhz) = (n.width, n.height, n.fps_mhz);
         self.display.set_isolate(!keep_host_displays);
-        // SudoVDA takes millihertz: the client's 59.94 is the display's.
+        // SudoVDA takes millihertz: the client's 59.94 is the display's, at
+        // a multiple reaching 120 Hz (`display_refresh_mhz`). The macOS and
+        // Linux hosts' virtual displays keep the stream's rate: the gain was
+        // measured on Windows, and only there.
         let mode = DisplayMode {
             width,
             height,
-            refresh_mhz: fps_mhz,
+            refresh_mhz: crate::negotiate::display_refresh_mhz(fps_mhz),
         };
         match self.display.activate(mode) {
             Ok(active) => {

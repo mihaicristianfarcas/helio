@@ -85,6 +85,37 @@ fn requested_mhz(req: &SessionStart) -> u32 {
     }
 }
 
+/// The refresh a virtual display is made at for a stream at `fps_mhz`: the
+/// lowest whole multiple of the stream's rate that reaches 120 Hz, or falls
+/// short of it by under a hertz (60 fps: 120 Hz; 59.94: 119.88; 120 and
+/// faster: the stream's own). The stream and the capture keep the stream's
+/// rate.
+///
+/// A game with V-Sync on the host renders a few frames ahead of the
+/// display, each a refresh long, so on a 60 Hz display a click waits for
+/// several 16.7 ms frames before the capture sees it. Measured on an RTX
+/// 3070 Ti host, Windows 11, 1920x1080 at 60 fps, a full-screen scene with
+/// V-Sync, streamed to a MacBook Pro whose screen was recorded: on a 60 Hz
+/// virtual display the scene presented every 16.6 ms, against 6.9 ms beside
+/// Apollo's (the host's own 144 Hz monitor still in the desktop) and 8.3 ms
+/// under Sunshine (the 120 Hz monitor itself), and a click in it took 80 ms
+/// to reach the client's screen; at 120 Hz it presents every 8.46 ms and the
+/// click takes 54 ms, against Moonlight's 55 ms with Apollo and 59 ms with
+/// Sunshine. Apollo offers the same as a setting, off by default
+/// (`process.cpp`, `double_refreshrate`). Only the Windows host makes its
+/// virtual display this way: the gain was measured there.
+#[cfg(any(windows, test))]
+pub fn display_refresh_mhz(fps_mhz: u32) -> u32 {
+    if fps_mhz == 0 {
+        return 0;
+    }
+    fps_mhz * (DISPLAY_MIN_MHZ - 999).div_ceil(fps_mhz)
+}
+
+/// The slowest refresh `display_refresh_mhz` makes a virtual display at.
+#[cfg(any(windows, test))]
+const DISPLAY_MIN_MHZ: u32 = 120_000;
+
 /// The best codec both sides have: AV1, then HEVC, then H.264.
 pub fn codec_for(
     requested: u8,
@@ -109,6 +140,27 @@ pub fn codec_for(
 mod tests {
     use super::*;
     use helio_proto::control::{app, codec};
+
+    #[test]
+    fn a_60_fps_stream_gets_a_120_hz_virtual_display() {
+        assert_eq!(display_refresh_mhz(60_000), 120_000);
+        assert_eq!(display_refresh_mhz(59_940), 119_880);
+        assert_eq!(display_refresh_mhz(30_000), 120_000);
+    }
+
+    #[test]
+    fn a_stream_at_120_fps_or_faster_keeps_its_own_rate() {
+        assert_eq!(display_refresh_mhz(120_000), 120_000);
+        assert_eq!(display_refresh_mhz(143_972), 143_972);
+        assert_eq!(display_refresh_mhz(240_000), 240_000);
+    }
+
+    #[test]
+    fn a_rate_between_takes_the_next_multiple_past_120_hz() {
+        assert_eq!(display_refresh_mhz(50_000), 150_000);
+        assert_eq!(display_refresh_mhz(90_000), 180_000);
+        assert_eq!(display_refresh_mhz(0), 0);
+    }
 
     fn request(codecs: u8, w: u16, h: u16, hz: u32, kbps: u32) -> SessionStart {
         SessionStart {
