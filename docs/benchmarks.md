@@ -376,7 +376,6 @@ average of a run's middle 24-26 seconds; A and B were run back to back.
 | Change | Measured |
 |---|---|
 | Client: receives batched (`recvmsg_x`, 32 at a time) | first packet to complete frame 2.4-2.6 ms -> 1.1-1.2 ms; the same with batches of 8 or 4 as with none: Wi-Fi hands over bursts |
-| Client: full screen asked again when macOS refuses it (a stream started just as another left its Space) | such sessions ran in a window, decode to glass 22-28 ms; now full screen, 8-10 ms |
 | Client: SIMD Annex-B split, the AVCC sample written straight into the block buffer | decode 2.36-2.51 -> 2.24-2.36 ms |
 | Client: reassembly into reused buffers (no allocation per datagram) | see the table above |
 | Host: sends batched, 16 datagrams per call (USO on Windows, GSO on Linux, `sendmsg_x` on macOS); packetizing into one reused buffer | helio-host.exe 24-25% of a core -> 13-18%, frame delivery unchanged (1.6 ms) |

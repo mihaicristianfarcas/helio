@@ -158,6 +158,9 @@ pub struct RenderShared {
     /// Decoded frames not yet shown: the newest only, or with frame pacing
     /// a short queue shown one per refresh.
     pending: Mutex<VecDeque<(DecodedFrame, FrameTiming)>>,
+    /// A new layer for the renderer to draw into from its next frame
+    /// (`replace_layer`).
+    next_layer: Mutex<Option<HandedLayer>>,
     timings: Mutex<Vec<FrameTiming>>,
     frame_ready: Condvar,
     new_frame: AtomicBool,
@@ -189,6 +192,7 @@ impl RenderShared {
     pub fn new(stats: Arc<StatsCollector>, vsync: bool, paced: bool) -> Arc<RenderShared> {
         Arc::new(RenderShared {
             pending: Mutex::new(VecDeque::with_capacity(PACING_QUEUE_MAX + 1)),
+            next_layer: Mutex::new(None),
             timings: Mutex::new(Vec::with_capacity(16)),
             frame_ready: Condvar::new(),
             new_frame: AtomicBool::new(false),
@@ -379,6 +383,16 @@ impl RenderShared {
     /// the window server's path for the layer is judged afresh.
     pub fn new_path(&self) {
         self.glass.0.lock().forget_path();
+    }
+
+    /// Draw into `layer` from the next frame on, the current frame again
+    /// first (main thread; the stream window's view moved to another
+    /// window with it, `window::fresh_layer`).
+    pub fn replace_layer(&self, layer: Retained<CAMetalLayer>) {
+        *self.next_layer.lock() = Some(HandedLayer(layer));
+        self.new_path();
+        self.dirty.store(true, Ordering::Release);
+        self.frame_ready.notify_all();
     }
 
     pub fn set_layout(&self, l: Layout) {
@@ -598,12 +612,7 @@ fn pipeline(
 impl Renderer {
     pub fn new(layer: Retained<CAMetalLayer>, vsync: bool, scale: f64) -> Result<Renderer, String> {
         let device = MTLCreateSystemDefaultDevice().ok_or("no Metal device")?;
-        layer.setDevice(Some(&device));
-        layer.setPixelFormat(SDR_FORMAT);
-        layer.setFramebufferOnly(true);
-        layer.setDisplaySyncEnabled(vsync);
-        // How many of them may queue for the glass is `wait_for_glass`'s.
-        layer.setMaximumDrawableCount((if vsync { DRAWABLES } else { 2 }) as usize);
+        set_up_layer(&layer, &device, vsync);
         let library = device
             .newLibraryWithSource_options_error(&NSString::from_str(SHADERS), None)
             .map_err(|e| format!("shaders: {e}"))?;
@@ -1063,7 +1072,12 @@ impl Renderer {
     }
 
     /// Keep the layer's drawable in step with the layout the window published.
-    fn sync_size(&self, shared: &RenderShared) {
+    fn sync_size(&mut self, shared: &RenderShared) {
+        if let Some(HandedLayer(layer)) = shared.next_layer.lock().take() {
+            set_up_layer(&layer, &self.device, shared.vsync);
+            configure_layer(&layer, self.hdr);
+            self.layer = layer;
+        }
         let l = *shared.layout.lock();
         if l.drawable_w > 0.0 && l.drawable_h > 0.0 {
             let cur = self.layer.drawableSize();
@@ -1075,6 +1089,26 @@ impl Renderer {
             }
         }
     }
+}
+
+/// A layer handed from the main thread to the render thread, which alone
+/// draws into it from then on.
+struct HandedLayer(Retained<CAMetalLayer>);
+
+// SAFETY: a CAMetalLayer's drawables and properties may be used from any
+// thread (the render thread draws into its first layer the same way); the
+// main thread lets go of this one once handed over.
+unsafe impl Send for HandedLayer {}
+
+/// A layer set up for the renderer's device: V-Sync, its drawables, and SDR
+/// until `configure_layer` says otherwise.
+fn set_up_layer(layer: &CAMetalLayer, device: &ProtocolObject<dyn MTLDevice>, vsync: bool) {
+    layer.setDevice(Some(device));
+    layer.setPixelFormat(SDR_FORMAT);
+    layer.setFramebufferOnly(true);
+    layer.setDisplaySyncEnabled(vsync);
+    // How many of them may queue for the glass is `wait_for_glass`'s.
+    layer.setMaximumDrawableCount((if vsync { DRAWABLES } else { 2 }) as usize);
 }
 
 /// Frames the pacing queue holds at most (older ones are dropped).

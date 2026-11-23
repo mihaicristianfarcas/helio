@@ -6,11 +6,15 @@ measurements here are from an M4 Pro).
 ## Helio, the client
 
 - **Window.** A stream opens in a window of its own. Full screen (the
-  default) it goes into a Space of its own, as Moonlight's does: Helio's own
-  window stays on the desktop a swipe away, and the Dock and menu bar stay
-  hidden in the stream's Space. Ctrl+Option+Shift+X switches between full
-  screen and a window. If macOS refuses full screen (a stream started just
-  as another left its Space), Helio asks again until it gets it.
+  default) it covers the whole screen, the strip beside the camera included
+  (the picture stays below it), above the menu bar and Dock, which stay
+  hidden while the stream has the keyboard: Moonlight's full-screen mode,
+  not a Space of its own. On macOS 27 a window in a full-screen Space always
+  has system windows over it, and macOS composites the picture, a refresh
+  or more later to the screen. Helio's own window stays under the stream;
+  switching to another app brings that app in front. Ctrl+Option+Shift+X
+  switches between full screen and a window; Ctrl+Option+Shift+D puts the
+  stream in the Dock, full screen again when it comes back.
 - **Picture.** VideoToolbox decodes in real time — one frame in, one frame
   out, no buffering — and the pixel buffer is bound to Metal without a copy
   (`CVMetalTextureCache`). Without frame pacing the newest frame is drawn at

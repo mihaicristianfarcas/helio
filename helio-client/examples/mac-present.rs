@@ -15,10 +15,12 @@
 //! `--jitter-ms N` (each frame handed over up to N ms late, as a network
 //! delivers them), `--overlay` (the statistics overlay), `--cover AT,FOR` (a
 //! small window over the stream from AT seconds for FOR, as a recorder's
-//! controls or a dialog would be). Prints a line a second, the renderer's
-//! changes of path (`RUST_LOG=helio_client::mac::glass=trace` for every
-//! drawable's trip to the glass), and a summary of the seconds after the
-//! first two (the window going full screen).
+//! controls or a dialog would be), `--toggle AT,...` (full screen to a window
+//! and back at those seconds, as Ctrl+Option+Shift+X does). Prints a line a
+//! second, the renderer's changes of path
+//! (`RUST_LOG=helio_client::mac::glass=trace` for every drawable's trip to
+//! the glass), and a summary of the seconds after the first two (the window
+//! going full screen).
 
 #[cfg(target_os = "macos")]
 fn main() {
@@ -73,6 +75,7 @@ mod mac {
         jitter_ms: u64,
         overlay: bool,
         cover: Option<(f64, f64)>,
+        toggles: Vec<f64>,
     }
 
     fn options() -> Options {
@@ -86,6 +89,7 @@ mod mac {
             jitter_ms: 0,
             overlay: false,
             cover: None,
+            toggles: Vec::new(),
         };
         let mut args = std::env::args().skip(1);
         while let Some(a) = args.next() {
@@ -107,6 +111,12 @@ mod mac {
                     let v = value();
                     let (at, secs) = v.split_once(',').expect("--cover AT,FOR");
                     o.cover = Some((at.parse().expect("AT"), secs.parse().expect("FOR")));
+                }
+                "--toggle" => {
+                    o.toggles = value()
+                        .split(',')
+                        .map(|at| at.parse().expect("--toggle AT,..."))
+                        .collect();
                 }
                 _ => panic!("unknown option {a}"),
             }
@@ -258,7 +268,7 @@ mod mac {
     }
 
     /// A small window over the full-screen stream from `at` seconds for
-    /// `secs`: borderless, above it in its Space, taking no clicks.
+    /// `secs`: borderless, above it, taking no clicks.
     fn cover(at: f64, secs: f64) {
         later(at, |mtm| {
             let rect = NSRect::new(NSPoint::new(160.0, 160.0), NSSize::new(320.0, 64.0));
@@ -366,6 +376,12 @@ mod mac {
         }
         if let Some((at, secs)) = o.cover {
             cover(at, secs);
+        }
+        for &at in &o.toggles {
+            later(at, |_| {
+                println!("      full screen <-> a window");
+                helio_client::mac::toggle_fullscreen();
+            });
         }
         let secs = o.secs;
         std::thread::Builder::new()
