@@ -29,7 +29,7 @@ switch, off until you turn it on) it lets them play this one, through
   ([benchmarks](docs/benchmarks.md#against-moonlight--apollo)).
 - **Post-quantum**: every packet travels in pq-boringtun (WireGuard with
   ML-KEM-768), and pairing is a hybrid SPAKE2 + ML-KEM PIN exchange.
-- **A virtual display at the client's exact mode** on Windows, macOS and
+- **A virtual display at the client's exact resolution** on Windows, macOS and
   Linux (GNOME and KDE under Wayland) hosts, so nothing is scaled or
   letterboxed. On Windows, turning hosting on installs its driver (SudoVDA)
   and the controllers' (ViGEmBus).
