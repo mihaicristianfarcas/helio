@@ -10,7 +10,7 @@ post-quantum WireGuard tunnel.
 - **Install:** [download for macOS, Windows or Linux](https://helio.mihaicristian.dev/#install),
   [Homebrew](docs/install.md#with-homebrew-macos), or
   [build from source](docs/install.md#building-from-source).
-- **Latency:** [glass to glass](docs/benchmarks.md#glass-to-glass).
+- **Against Moonlight:** [frames shown, starts and clicks, measured](docs/benchmarks.md).
 - **What to trust:** [how it's built and verified](docs/verification.md),
   and its [known limitations](#known-limitations).
 
@@ -23,10 +23,10 @@ switch, off until you turn it on) it lets them play this one, through
 - **Moonlight-class streaming**: HEVC or H.264, hardware encode and decode,
   HDR and YUV 4:4:4, loss repaired by reference invalidation, frame pacing
   at the client display's exact rate, stereo to 7.1 sound, controllers with
-  rumble. At 3024x1890, 120 fps and 100 Mbit/s it showed 115.6 fps, against
-  110.0 for Moonlight + Apollo (a fork of Sunshine with the same video
-  path) on the same machines
-  ([benchmarks](docs/benchmarks.md#against-moonlight--apollo)).
+  rumble. At 2560x1440 and 120 fps it showed 97% of the host's frames,
+  against 83–86% for Moonlight with Sunshine or Apollo, on the same two
+  computers at the same rate on the wire, while the client's screen was
+  recorded ([benchmarks](docs/benchmarks.md#frames-shown)).
 - **Post-quantum**: every packet travels in pq-boringtun (WireGuard with
   ML-KEM-768), and pairing is a hybrid SPAKE2 + ML-KEM PIN exchange.
 - **A virtual display at the client's exact mode** on Windows, macOS and
