@@ -137,6 +137,8 @@ your computer: no port is open for streaming or pairing,
 nothing is published for finding the host from the internet, and it is not
 announced on the local network. Helio, the client, opens none of these.
 
+![Settings → Hosting in Helio on a Mac: the switch that lets your devices play this Mac, what hosting needs (Screen Recording allowed, Accessibility not yet), the host's name, and its network settings](images/helio-hosting-settings.jpg)
+
 From a terminal it is `helio host`, which runs what the switch runs
 ([cli.md](cli.md#helio-host--this-computer-as-a-host)):
 
@@ -265,6 +267,8 @@ Each paired device has permissions on the host, as Apollo gives each of its
 clients: whether it may see the screen, which input the host takes from it,
 which way the clipboard goes, and more. Set them in Helio, This computer →
 **Devices** (the button beside each device). A change applies at once, to a stream that is running too.
+
+![What a paired device may do, in Helio's This computer → Devices: whether it may see the screen, start apps and take over, and use the keyboard, mouse and controllers, each a switch](images/helio-device-permissions.jpg)
 
 | Permission | Lets the device | Name (`helio host permissions`) |
 |---|---|---|
