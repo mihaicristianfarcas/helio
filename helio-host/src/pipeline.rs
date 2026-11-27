@@ -20,7 +20,7 @@
 use std::sync::atomic::{AtomicBool, AtomicU16, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::thread::JoinHandle;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use crossbeam_channel::{bounded, Receiver, Sender};
 use helio_encode::FrameKind;
@@ -51,7 +51,8 @@ pub struct VideoStats {
     pub repeated: AtomicU64,
     pub idrs: AtomicU64,
     pub recoveries: AtomicU64,
-    /// Capture to encoded, per frame: handed over once `fps` samples are in.
+    /// Capture to encoded, per frame: handed over a second's worth at a
+    /// time (`handover_due`).
     pub encode_us: Mutex<Option<Histogram>>,
 }
 
@@ -248,12 +249,27 @@ impl Cadence {
     }
 }
 
+/// How long the encode times gather before they go to the session's
+/// once-a-second report, at the latest.
+const HANDOVER_EVERY: Duration = Duration::from_secs(1);
+
+/// Whether the encode times gathered so far go to the session's report: a
+/// second's worth, as many as the frame rate or a second's, whichever comes
+/// first. The count alone left a report with nothing whenever fewer frames
+/// went out than the rate: a still desktop is re-encoded at a fifth of it
+/// (`Cadence`), so four reports in five read a host latency of 0.0 ms.
+fn handover_due(samples: usize, fps: u32, gathering: Duration) -> bool {
+    samples > 0 && (samples >= fps as usize || gathering >= HANDOVER_EVERY)
+}
+
 /// Hands encoded frames to the send thread, and counts them.
 pub struct FrameOut {
     frames: Sender<OutFrame>,
     stats: Arc<VideoStats>,
     fps: u32,
     hist: Histogram,
+    /// When `hist` started gathering.
+    since: Instant,
 }
 
 impl FrameOut {
@@ -263,6 +279,7 @@ impl FrameOut {
             stats,
             fps: fps.max(1),
             hist: Histogram::new("capture->encoded"),
+            since: Instant::now(),
         }
     }
 
@@ -316,11 +333,12 @@ impl FrameOut {
             // The sender is wedged. The client will see a gap and recover.
             tracing::warn!("send queue stalled; frame discarded");
         }
-        if self.hist.count() >= self.fps as usize {
+        if handover_due(self.hist.count(), self.fps, self.since.elapsed()) {
             *self.stats.encode_us.lock() = Some(std::mem::replace(
                 &mut self.hist,
                 Histogram::new("capture->encoded"),
             ));
+            self.since = Instant::now();
         }
     }
 }
@@ -328,6 +346,24 @@ impl FrameOut {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_second_of_frames_at_the_full_rate_is_handed_over_at_once() {
+        assert!(handover_due(120, 120, Duration::from_millis(990)));
+        assert!(!handover_due(119, 120, Duration::from_millis(990)));
+    }
+
+    #[test]
+    fn fewer_frames_than_the_rate_are_handed_over_after_a_second() {
+        // A still desktop at 120 fps: 24 re-encodes a second.
+        assert!(!handover_due(23, 120, Duration::from_millis(999)));
+        assert!(handover_due(24, 120, Duration::from_secs(1)));
+    }
+
+    #[test]
+    fn a_second_with_no_frames_hands_over_nothing() {
+        assert!(!handover_due(0, 120, Duration::from_secs(5)));
+    }
 
     #[test]
     fn a_fractional_rate_paces_to_the_nanosecond() {
