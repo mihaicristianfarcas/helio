@@ -56,6 +56,7 @@ use helio_proto::control::{
 use helio_proto::fec::FecPolicy;
 use helio_proto::input::{InputEvent, SequenceGate, MAX_EVENTS_PER_PACKET};
 use helio_proto::permission::{self, Permissions};
+use helio_proto::telemetry::Histogram;
 use helio_transport::{Endpoint, Peer, PeerId};
 use parking_lot::Mutex;
 
@@ -432,6 +433,18 @@ struct Active {
     permissions: Permissions,
     /// An agent's session.
     agent: Option<AgentRun>,
+    /// The host latency last reported, kept for a report that has no new
+    /// encode times ([`host_latency_ms`]).
+    host_ms: f64,
+}
+
+/// The host latency a once-a-second report gives, in milliseconds: the
+/// median of the encode times handed over since the last report, or, when
+/// none were, the last figure. The pipeline hands them over a second at a
+/// time on its own clock (`pipeline::handover_due`), so a report can fall
+/// between two handovers; it would otherwise read 0.0 ms.
+fn host_latency_ms(handed_over: Option<&Histogram>, last: f64) -> f64 {
+    handed_over.map_or(last, |h| h.percentiles().0 as f64 / 1000.0)
 }
 
 pub struct SessionManager {
@@ -815,6 +828,7 @@ impl SessionManager {
             recipients,
             permissions,
             agent: agent_run,
+            host_ms: 0.0,
         });
         self.platform.started(&req);
     }
@@ -1462,14 +1476,12 @@ impl SessionManager {
             return;
         };
         self.last_stats = Instant::now();
+        let hist = a.video.stats.encode_us.lock().take();
+        a.host_ms = host_latency_ms(hist.as_ref(), a.host_ms);
+        let host_ms = a.host_ms;
         let v = &a.video.stats;
         let s = &a.video.send_stats;
         let take = |c: &std::sync::atomic::AtomicU64| c.swap(0, Ordering::Relaxed);
-        let hist = v.encode_us.lock().take();
-        let host_ms = hist
-            .as_ref()
-            .map(|h| h.percentiles().0 as f64 / 1000.0)
-            .unwrap_or(0.0);
         let lat = hist.map(|h| h.report()).unwrap_or_default();
         let l = self.last_loss;
         // Names first: the status below locks the client list too, and a
@@ -1555,5 +1567,20 @@ fn codec_name(bit: u8) -> &'static str {
         control::codec::HEVC => "HEVC",
         control::codec::AV1 => "AV1",
         _ => "H.264",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_report_between_two_handovers_keeps_the_last_host_latency() {
+        assert_eq!(host_latency_ms(None, 9.6), 9.6);
+        let mut handed_over = Histogram::new("capture->encoded");
+        for us in [8_000, 9_000, 10_000] {
+            handed_over.record(us);
+        }
+        assert_eq!(host_latency_ms(Some(&handed_over), 9.6), 9.0);
     }
 }
