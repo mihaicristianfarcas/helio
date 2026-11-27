@@ -33,6 +33,8 @@ conversation with the agent about one host, listed in the sidebar under
 Idle). You and the model take turns: ask it something, have it do
 something, look over its shoulder, do a bit yourself, ask again.
 
+![An agent session in Helio on a Mac: the agent asks for a go-ahead to empty the Recycle Bin, beside the Windows desktop it saw after its last step, and its plan](images/helio-agent-session.jpg)
+
 - **The model answers in words** (Markdown) and **uses the host when a
   message needs it**. A turn's actions fold into one line ("Used the
   computer, 6 actions") that opens to each action, its result and the
