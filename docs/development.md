@@ -256,6 +256,8 @@ To set one up:
 | `BENCH_SCENE_ARGS` | More arguments for the counter and noise scenes, commas between them: `--present,immediate,--heavy,1200` is a game that keeps the GPU busy |
 | `BENCH_HOST_MODE`, `BENCH_HOST_MODE_AFTER` | The host monitor's mode for a run (`2560x1440@120`), and the one to put back after it |
 | `BENCH_TAG` | In a plan, ends the run's folder name: it tells apart lines that differ only in their variables |
+| `BENCH_HELIO` | Another build's `helio` for Helio's runs, to check against an older client (default: `/Applications/Helio.app`'s) |
+| `BENCH_HELIO_KEEP_DISPLAYS=1` | Helio's runs stream with `--keep-host-displays`: the host's monitors stay on |
 
 ## Releases
 
