@@ -23,7 +23,7 @@ const base = import.meta.env.BASE_URL.replace(/\/?$/, '/');
 const canonical = Astro.site ? new URL(Astro.url.pathname, Astro.site) : null;
 const card = `${base}og.jpg`;
 const cardUrl = Astro.site ? new URL(card, Astro.site).href : card;
-const cardAlt = 'Helio: remote desktop and game streaming, its Hosts window on macOS and Windows.';
+const cardAlt = 'Helio: remote desktop and game streaming. A stream in Helio’s window on a Mac, with its statistics, in front of the host’s Overview of that session.';
 ---
 
 <!doctype html>
