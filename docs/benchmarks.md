@@ -1,15 +1,291 @@
 # Benchmarks
 
-What Helio costs, measured: micro-benchmarks of its own code paths, and
-the real stream end to end, against Moonlight + Sunshine/Apollo where that
-means something. The host comparisons so far were measured against Apollo,
-the Sunshine fork whose virtual display Helio Host follows: its capture, NVENC
-settings, FEC and pacing are Sunshine's. Every figure says what it was
-measured on.
+What Helio costs, measured. First Helio 0.10.0 against Moonlight streaming
+from Sunshine and from Apollo, on the same two computers and the same way
+for each; then [Helio's own parts](#helios-own-parts), measured by
+themselves. Every figure says what it was measured on.
 
 ## Test setup
 
-Unless a section says otherwise:
+| | |
+|---|---|
+| Client | 14" MacBook Pro (Mac16,8), Apple M4 Pro, 24 GB, macOS 27.2.1 (26B131); its built-in display, 120 Hz, in a scaled mode drawn at 3600x2338; 1 Gbit/s Ethernet through a USB adapter, Wi-Fi off, on AC power |
+| Host | Windows 11 Pro (build 26200.9974), AMD Ryzen 7 5700X, 16 GB, NVIDIA GeForce RTX 3070 Ti (driver 617.14), High performance power plan; one 2560x1440 144 Hz monitor, switched off; 1 Gbit/s Ethernet |
+| Network | both machines on one home router |
+| Stacks | Helio 0.10.0 as client and host (the same build on both); Moonlight 6.2.0 as the client of Sunshine 2026.914.233613 and of Apollo 0.4.6 |
+| When | Moonlight: 2026-11-20 to 2026-11-22. Helio: 2026-11-23, except where a section says otherwise |
+
+One host stack runs at a time: the other two's services are stopped.
+Every stack streams HEVC, 4:2:0, SDR, stereo sound not played on the host,
+full screen, relative mouse, V-Sync on and frame pacing off (both
+clients' defaults), unless a table says otherwise.
+
+- **Sunshine** streams the physical monitor, switched to the client's
+  mode for the session (`dd_configuration_option = ensure_active`). The
+  monitor goes to 2560x1440 at most, so Sunshine has no 3840x2160 runs.
+- **Apollo** streams its **Virtual Display** app: a display at the
+  client's mode, as Helio Host's. The monitor stays in the desktop beside
+  it, at 144 Hz.
+- **Helio Host** adds a virtual display at the client's resolution,
+  refreshing at 120 Hz for a 60 fps stream, and switches the monitor off
+  for the session.
+- **Helio** connects to the address Moonlight uses, so both use the same
+  link.
+
+**Equal wire.** At the same bitrate setting Helio puts 27–36% more on the
+wire than Moonlight: Helio Host adds forward error correction on top of
+the encoder's bitrate. So Helio runs at the setting that puts Moonlight's
+rate on the wire, measured on the noise scene (series A):
+
+| Mode | Moonlight's setting | On the wire: Moonlight + Apollo / + Sunshine | Helio's setting at equal wire | On the wire: Helio |
+|---|---|---|---|---|
+| 1920x1080, 60 fps | 20 Mbit/s | 20.1 / 20.2 Mbit/s | 14 Mbit/s | 19.2 |
+| 1920x1080, 120 fps | 28 | 30.0 / 30.1 | 20 | 29.1 |
+| 2560x1440, 60 fps | 40 | 38.6 / 38.7 | 30 | 38.4 |
+| 2560x1440, 120 fps | 57 | 55.1 / 55.1 | 45 | 55.7 |
+| 3840x2160, 60 fps | 80 | 81.0 / – | 61 | 80.8 |
+| 3840x2160, 120 fps | 113 | 116.0 / – | 88 | 116.0 |
+
+## How it is measured
+
+**The probe** (`tools/bench/probe-mac`), on the client, clicks at the HID
+level, where a real mouse's clicks enter, and reads every frame the Mac
+composites with ScreenCaptureKit: the time from a click to the frame that
+shows it, and which of the host's frames reached the screen. The host
+shows `tools/bench/scene`, which draws a frame counter and lights the
+screen while a button is held.
+
+Recording the screen makes macOS composite a full-screen window instead
+of handing it straight to the display, so every figure here is **while
+the client's screen is recorded**, the same way for every stack. Helio's
+full-screen window still goes straight to the display for stretches while
+recorded, and the frames it shows then do not reach the recording: at 60
+fps the probe undercounts the frames Helio shows (see [frames
+shown](#frames-shown)).
+
+**What the probe takes by itself**: with no stream, the scene drawn on the
+Mac and clicked through the same probe, a click took 16.2 ms (median of
+10 runs, 15.5–16.6) on 2026-11-20 before the series, and 11.5 ms (6 runs,
+10.2–13.1) on 2026-11-22 after them (`runs/known-answers`,
+`runs/1.0/floor-end`). The streams did not move with it: Moonlight's
+clicks, measured again on 2026-11-22 in the clean runs of the bad-link
+series, read within 2.0 ms of its runs of 2026-11-20 and 21, in both
+directions, at 1920x1080 at 60 fps and 2560x1440 at 120 fps
+(`runs/1.0-fix/cross-day.txt`).
+
+Each table gives the median, and Helio's difference from each other stack
+with its 95% interval (a two-level bootstrap over runs and clicks); where
+the interval holds zero, the table says the two match.
+
+A series is named by the folder its runs were written to, as `runs/1.0/A`:
+under `target/bench/` on the Mac that ran it, and not in the repository.
+The plans that made them are in `tools/bench/plans/`, and the tools in
+[development.md](development.md#benchmarks).
+
+**The two 60 fps fixes.** Helio 0.10.0 differs from its release candidate
+in two ways, both for 60 fps streams: the client's full screen goes
+straight to the display, and Helio Host's virtual display refreshes at 120
+Hz for a 60 fps stream. A section measured on the release candidate says
+so, and why its figures still hold.
+
+## Click to frame, recorded
+
+Series A: six modes, five runs of 38 clicks per stack (Helio:
+`runs/1.0-fix/A`; Moonlight: `runs/1.0/A`). The flash drawn once per
+click, as a click on a still desktop. Median (95th percentile), ms:
+
+| Mode | Helio at equal wire | Moonlight + Apollo | Moonlight + Sunshine | Helio against Apollo | Helio against Sunshine |
+|---|---|---|---|---|---|
+| 1920x1080, 60 fps | 23.6 (38.4) | 28.0 (42.0) | 25.7 (54.5) | **3.0 faster** (1.3 to 6.0) | matches (−0.5, −3.6 to +0.9) |
+| 1920x1080, 120 fps | 25.0 (33.4) | 28.2 (42.1) | 25.6 (46.2) | **4.2 faster** (2.0 to 5.9) | matches (−0.6, −3.5 to +0.7) |
+| 2560x1440, 60 fps | 25.8 (39.0) | 29.6 (40.6) | 26.0 (62.8) | **3.5 faster** (0.6 to 5.1) | matches (−0.7, −3.9 to +3.0) |
+| 2560x1440, 120 fps | 25.4 (33.3) | 28.7 (39.6) | 26.8 (51.9) | **3.7 faster** (2.0 to 6.0) | matches (−1.9, −5.1 to +0.2) |
+| 3840x2160, 60 fps | 30.5 (40.9) | 33.7 (45.8) | – | **3.3 faster** (1.1 to 4.9) | – |
+| 3840x2160, 120 fps | 30.4 (39.2) | 33.7 (46.2) | – | **3.3 faster** (0.7 to 4.5) | – |
+
+Series F: the flash drawn every refresh, as in a game, five runs of 58
+clicks (Helio: `runs/1.0-fix/F`; Moonlight: `runs/1.0/F-all`):
+
+| Mode | Helio at equal wire | Moonlight + Apollo | Moonlight + Sunshine | Helio against Apollo | Helio against Sunshine |
+|---|---|---|---|---|---|
+| 1920x1080, 60 fps | 54.1 (67.0) | 55.0 (70.9) | 59.0 (75.8) | matches (−0.6, −2.9 to +0.8) | **4.5 faster** (3.4 to 7.0) |
+| 1920x1080, 120 fps | 52.2 (62.4) | 52.6 (66.3) | 53.7 (63.7) | matches (−0.8, −3.5 to +1.5) | matches (−1.6, −4.1 to +0.9) |
+| 2560x1440, 60 fps | 57.0 (74.5) | 57.8 (73.4) | 60.1 (78.4) | matches (−1.5, −4.8 to +1.7) | **3.6 faster** (0.8 to 7.5) |
+| 2560x1440, 120 fps | 51.5 (64.9) | 55.8 (66.5) | 55.0 (64.8) | **3.8 faster** (1.2 to 7.0) | **2.0 faster** (0.2 to 5.1) |
+| 3840x2160, 60 fps | 60.7 (75.5) | 60.4 (75.7) | – | matches (+0.5, −2.6 to +3.1) | – |
+| 3840x2160, 120 fps | 58.1 (69.4) | 58.6 (71.2) | – | matches (−0.9, −3.9 to +1.2) | – |
+
+## Frames shown
+
+Of the frames the host drew, the share that reached the client's screen,
+on the counter scene and on noise, while recorded (series A):
+
+| Mode | Helio at equal wire | Moonlight + Apollo | Moonlight + Sunshine |
+|---|---|---|---|
+| 1920x1080, 120 fps | 97.7% / 97.5% | 84.4% / 87.1% | 84.0% / 85.9% |
+| 2560x1440, 120 fps | 97.3% / 96.7% | 86.4% / 86.7% | 83.4% / 83.1% |
+| 3840x2160, 120 fps | 97.7% / 97.6% | 85.6% / 83.8% | – |
+
+At 60 fps the recording misses frames Helio shows: Helio's full-screen
+window goes straight to the display for stretches even while recorded,
+and those frames skip what the recording reads, so the table has no
+60 fps rows. What the two ends count instead: Helio Host encodes 60 new
+pictures a second, and the client presents 60 a second, each one
+reported on the screen by macOS (the host's log over six 1920x1080
+sessions, the client's statistics over two); the recording read 62–99%
+of them, by run, in series A's 60 fps runs.
+
+## Load
+
+Series A, on noise, median of five runs:
+
+| Mode | Client CPU, % of a core: Helio / Apollo's Moonlight / Sunshine's | Host: the stack's CPU, % of a core | Host GPU / encoder | Host board power |
+|---|---|---|---|---|
+| 1920x1080, 60 fps | 14.5 / 26.1 / 25.9 | 6.4 / 4.9 / 3.7 | 10% / 10%, 11% / 10%, 8% / 10% | 99.6 / 99.9 / 98.9 W |
+| 2560x1440, 120 fps | 26.7 / 43.5 / 43.8 | 10.4 / 10.4 / 9.5 | 15% / 33%, 17% / 33%, 15% / 33% | 105.5 / 105.8 / 104.9 W |
+| 3840x2160, 120 fps | 30.5 / 41.2 / – | 8.0 / 15.7 / – | 20% / 65%, 21% / 65% | 142.2 / 140.9 W |
+
+## Under other conditions
+
+At 1920x1080 at 60 fps and 2560x1440 at 120 fps, five runs each, recorded
+(Helio: `runs/1.0-fix`; Moonlight: `runs/1.0`):
+
+| Condition | 1920x1080, 60 fps: Helio against Apollo / Sunshine | 2560x1440, 120 fps |
+|---|---|---|
+| V-Sync off on both clients (`B`) | matches / matches | **3.4 faster** / matches |
+| Encryption on for Sunshine and Apollo (`E`; Helio always encrypts) | **2.6 faster** / matches | **3.6 faster** / matches |
+| Frame pacing on in both clients (`P`) | matches / 3.4 ms slower | matches / 2.6 ms slower |
+
+**Under a demanding game** (`G`): the scene draws as fast as the host's
+GPU allows, with heavy work for every pixel (90 fps at 2560x1440 with no
+stream, the GPU 88–99% busy), streamed at 2560x1440 at 120 fps; no clicks.
+Of the frames the scene drew, the share shown on counter / noise: Helio
+95.7% / 94.0%, Apollo 93.5% / 90.2%, Sunshine 94.1% / 93.2%. Freezes a
+minute on noise: Helio 246.6, Apollo 410.2, Sunshine 281.3.
+
+## Starting a stream
+
+Measured on 2026-11-21, on the release candidate before the two 60 fps
+fixes. At this mode Helio Host is the same in both builds: a
+120 fps stream gets a 120 Hz display either way. The client's full-screen
+window changed between them. From starting the client to its first video
+in the client's log (Helio's decoder built from the first keyframe,
+Moonlight's first video packet), 2560x1440 at 120 fps, the host's monitor
+on (`runs/1.0/S-monitor-on`).
+
+When a session ends, Helio Host keeps its virtual display, with the
+host's monitor off, for 60 s, for a client that comes back
+(`LINGER` in `helio-host/src/platform.rs`). A start in that minute skips
+making the display and taking the monitor out of the desktop. Each
+condition's first start came after the host's service had started, with
+nothing kept; every later start came 3 to 25 s after the session before
+it. So Helio's two kinds of start are apart:
+
+| Before the start | Helio, first start: nothing kept | Helio, the later starts: median (slowest) | Moonlight + Apollo: median (slowest) | Moonlight + Sunshine: median (slowest) |
+|---|---|---|---|---|
+| The monitor awake, 10 s after the last session (20 starts) | 1.14 s | 0.42 s (0.44) | 2.82 s (2.89) | 4.26 s (16.06) |
+| The monitor asleep (10) | 1.02 s | 1.52 s (1.74)* | 2.98 s (3.04) | 4.53 s (4.96) |
+| Right after the last session, 3 s (10) | 1.23 s | 0.42 s (0.43) | 2.84 s (2.88) | 4.24 s (16.60) |
+
+Apollo's and Sunshine's first start of a condition took as long as the
+rest (Apollo 2.84, 2.99 and 2.88 s), except Sunshine's first start after
+its service started (16.06 and 16.60 s, the slowest figures above), so
+one column each covers both. All 120 starts streamed.
+
+\* With the monitor asleep, the second start took 0.41 s and the other
+eight 1.51–1.74 s; the bench's logs do not say whether Helio Host had
+kept the display for them.
+
+## Long sessions
+
+Measured on 2026-11-22, on the release candidate before the two 60 fps
+fixes, where Helio Host is the same at this
+mode, as above: one stream of an hour per stack, 2560x1440 at 120 fps on
+the counter scene, read for 20 s every minute (`runs/1.0/K`). Every stack
+streamed the whole hour, and neither side's memory grew:
+
+| | Helio at equal wire | Moonlight + Apollo | Moonlight + Sunshine |
+|---|---|---|---|
+| Minutes streamed | 60 of 60 | 60 of 60 | 60 of 60 |
+| Frames shown, mean of the minutes | 96.5% | 85.2% | 85.0% |
+| Client memory, first minute → last | 103 → 103 MB | 226 → 225 MB | 225 → 224 MB |
+| Host: the stack's memory, first → last | 124 → 123 MB | 140 → 132 MB | 157 → 130 MB |
+
+## Bad links
+
+The link impaired on the Mac (macOS's dummynet, both directions), the
+same for every stack, checked against known answers before each stack's
+runs (`runs/1.0/L-check`; `runs/1.0-fix/L-check` before Helio's). Three
+runs per setting, recorded (Helio: `runs/1.0-fix/L1`, `L3`; Moonlight:
+`runs/1.0/L1`, `L3`).
+
+**Loss** (`L1`): random loss in both directions, the counter scene.
+Frames shown (hitches in brackets):
+
+| Mode | Stack | Clean | 0.5% | 1% | 2% | 5% |
+|---|---|---|---|---|---|---|
+| 1920x1080, 60 fps | Helio at equal wire* | 93.3% (7.8%) | 96.2% (4.1%) | 100.0% (2.8%) | 93.1% (7.6%) | 99.9% (0.9%) |
+| 1920x1080, 60 fps | Moonlight + Apollo | 65.2% (51.3%) | 85.3% (17.8%) | 88.6% (13.4%) | 87.9% (14.6%) | 86.7% (15.9%) |
+| 1920x1080, 60 fps | Moonlight + Sunshine | 86.4% (16.3%) | 89.3% (12.3%) | 89.8% (11.9%) | 89.0% (13.0%) | 88.5% (13.6%) |
+| 2560x1440, 120 fps | Helio at equal wire | 97.6% (4.6%) | 97.4% (2.5%) | 96.8% (3.3%) | 97.6% (2.4%) | 96.1% (4.2%) |
+| 2560x1440, 120 fps | Moonlight + Apollo | 84.0% (18.7%) | 83.2% (19.7%) | 85.8% (16.1%) | 88.4% (12.9%) | 84.3% (18.0%) |
+| 2560x1440, 120 fps | Moonlight + Sunshine | 86.0% (16.2%) | 86.4% (15.5%) | 84.7% (17.9%) | 86.1% (15.7%) | 85.2% (16.9%) |
+
+At 2560x1440 at 120 fps Helio shows 96–98% of the frames from the clean
+link to 5% loss. Moonlight's frames shown stay where they are on the
+clean link, where recording costs it frames, so the loss it recovers
+from does not show in this figure. \* At 1920x1080 at 60 fps Helio's
+share moves from run to run with the recording, not with the loss (93.3%
+clean, 99.9% at 5%): the recording misses frames Helio shows (see
+[frames shown](#frames-shown)), so the row is a floor.
+
+**Delay with loss** (`L3`): 1% loss with 10, 20 and 40 ms each way.
+Frames shown: Helio 96.6–98.8% at 2560x1440 at 120 fps at every delay,
+and 95.5–97.5%\* at 1920x1080 at 60 fps; Moonlight 84–88% and 70–91%,
+as on the clean link.
+
+**The link narrowing mid-stream** (`L4n`): 60 Mbit/s, then 20 for 20
+seconds, then 60, at 2560x1440 at 60 fps on noise (about 38.5 Mbit/s on
+the clean link, every stack). Over the 40 s read:
+
+| | Helio at equal wire | Moonlight + Apollo | Moonlight + Sunshine |
+|---|---|---|---|
+| Frames shown, clean | 80.7%* | 87.3% | 89.1% |
+| Frames shown, narrowing | 84.8%* | 40.5% | 20.7% |
+| Freezes a minute, narrowing | 17.0 | 55.3 | 32.5 |
+| Arriving at the Mac, narrowing | 24.2 Mbit/s | 42.0 | 44.1 |
+
+\* At 60 fps, while recorded: the recording misses frames Helio shows
+(see [frames shown](#frames-shown)), so Helio's share is a floor.
+
+Helio Host sent less when the link narrowed; Sunshine and Apollo sent
+more than it carried (the Mac's interface counts what arrives before the
+link drops it).
+
+## The host at rest
+
+Each stack's host running with no session, ten minutes each
+(`runs/1.0/idle`, on the release candidate before the two fixes; they
+change only sessions): Helio Host
+0.41% of a core and 60 MB; Sunshine 0.00% and 63 MB; Apollo 0.01% and
+59 MB.
+
+## Not measured
+
+- Picture quality (PSNR, SSIM, VMAF at equal wire): the tools are not
+  built.
+- The direct path, with nothing recording the screen. The method is
+  built: a camera films the Mac's screen and keyboard at 240 frames a
+  second while the probe clicks without recording, lighting the Caps Lock
+  key's LED with each click (`tools/bench/film-clicks`). Helio 0.10.0 is
+  not filmed.
+- Other clients and hosts: Windows and Linux clients, a Linux host.
+
+## Helio's own parts
+
+Helio measured by itself, part by part: micro-benchmarks of its code
+paths, the client's presentation, and the stream's own figures. Unless a
+section says otherwise:
 
 | | |
 |---|---|
@@ -17,8 +293,6 @@ Unless a section says otherwise:
 | Host | Windows 11 25H2 PC, NVIDIA RTX 3070 Ti, SudoVDA; on the same LAN (Wi-Fi at first, then 1 Gbit/s Ethernet) |
 | Stream | 3024x1890 (the MacBook's display below the notch) at 120 fps, 100 Mbit/s, HEVC, 7.1 audio: a demanding Moonlight setting |
 | Content | a full-screen scene of random noise at 60 fps, which fills the bitrate; or moving boxes, for decode damage |
-
-## How to measure
 
 - **Micro-benchmarks** (Criterion, release profile):
 
@@ -182,105 +456,6 @@ alone; the stream's window stays opaque. `mac-present` does not load
 (`glass::blend_alpha_over`) acts once, as Metal makes a pipeline, and
 leaves the stream's renderer's pipelines as they are.
 
-## Against Moonlight + Apollo
-
-Apollo streams with Sunshine's video path and adds the virtual display at
-the client's mode, which is what made it the like-for-like host to measure
-Helio Host against (Sunshine itself streams a physical display). Not measured
-yet: Sunshine's own newer settings (split-frame NVENC on GPUs with two
-encoders), which do not apply to this host's single-encoder RTX 3070 Ti.
-
-2026-09-27, the same settings on both: 3024x1890 at 120 fps,
-100 Mbit/s, HEVC, 7.1 audio, V-Sync and frame pacing on; 60 fps noise on
-the host; the Mac on Wi-Fi to the host on the LAN (the host on Wi-Fi too).
-Moonlight 5.x against Apollo's "Virtual Display" app, its end-of-stream
-"Global video stats"; Helio against Helio Host, the per-second statistics
-averaged over 30 s. The Mac's display was asleep, so neither side's
-presentation times are what a person watching would see; they compare
-with each other.
-
-| | Moonlight + Apollo | Helio + Helio Host |
-|---|---|---|
-| Frames received / decoded | 110.9 fps | 117.6 fps |
-| Frames shown | 110.0 fps | 115.6 fps |
-| Host processing | 5.6 ms | 5.0 ms |
-| Decode | 2.32 ms | 1.6-2.0 ms |
-| Network round trip | 9 ms | 13.6-17.9 ms |
-| Pacing and presentation | 5.4 ms queue + 1.3 ms render (to its present call) | 12.8 ms (decode to glass) |
-
-The round trips are not measured alike. Moonlight's is ENet's smoothed
-estimate on its control channel ("variance: 0 ms"), while the same run logs
-single control messages at 109 ms. Helio's is each second's raw ping
-through the tunnel, queued behind the video. A second run the same evening:
-Moonlight 105.4 fps received, 0.45% of frames lost and 0.79% dropped for
-jitter, "9 ms"; Helio 108.6 fps shown, round trip 24 ms median, 58 ms p90
-under 113 Mbit/s of noise and 10.6 ms with a light scene (8.5 Mbit/s).
-
-Not done: Sunshine's network priority, a qWAVE flow of type AudioVideo
-(WMM's video category on Wi-Fi). qWAVE won't take Helio Host's dual-stack socket
-with an IPv4 client, neither IPv4-mapped (ERROR_NOT_FOUND) nor as IPv4
-(ERROR_INVALID_PARAMETER). Sunshine's sockets are IPv4-only by default.
-It would take an IPv4 socket of its own, or a system QoS policy on the host.
-
-Helio's frame pacing first ran on a `CAMetalDisplayLink`: 20.3 ms decode to
-glass here, because the link hands out its drawable a refresh or more
-ahead of the one it targets. It is now Moonlight's pacer -- a
-`CVDisplayLink` tick, on which the oldest queued frame is drawn and shown
-at the next refresh, a standing queue skipped to its newest -- at 12.8 ms
-and 115.6 of 117.6 frames shown (showing only the newest frame per
-refresh dropped to 105).
-
-## The host on Ethernet (2026-09-28)
-
-The host on 1 Gbit/s Ethernet, the Mac on Wi-Fi, 3024x1890@120, 100 Mbit/s,
-7.1 audio, 60 fps noise, the Mac's display awake, full screen; per-second
-statistics over 20-40 s:
-
-| | Both on Wi-Fi (2026-09-27) | Host on Ethernet |
-|---|---|---|
-| Loss | not recorded alike | 0.00% at 113 Mbit/s |
-| Round trip under load | 24 ms median, 58 ms p90 | 6-10 ms median, 7-22 ms p90 |
-| Frames received | 117.6 fps | 118.2-118.8 fps |
-
-With the display awake, presentation was slower than the asleep-display
-runs above had shown: decode to glass 28.9 ms presenting on decode, 27.7
-ms with frame pacing. At 120 fps on the 120 Hz panel, a burst filled the
-layer's three drawables and nothing drained them, so every frame was shown
-two refreshes late (at 60 fps, which the panel drains, it was 10 ms). Helio
-now draws a frame only when fewer than one (with pacing, two) wait for a
-refresh:
-
-| At 120 fps | Before | After | Frames shown |
-|---|---|---|---|
-| Present on decode: decode to glass | 28.9 ms | 10.1-10.3 ms | 115.6-116.9 of 118.5 |
-| Present on decode: capture to glass | 41.9 ms | 22.3-22.6 ms | |
-| Frame pacing: decode to glass | 27.7 ms | 16.9-17.5 ms | 116.2 of 118.5 |
-| Frame pacing: capture to glass | 39.9 ms | 29.5-29.7 ms | |
-
-A limit of one with pacing showed 101 fps (a refresh tick comes just before
-the previous frame reports being on the glass); two without it, 14.4 ms.
-
-In a window the window server composites each frame, up to two refreshes
-later, so the limit applies only full screen. 3024x1890 with 60 fps noise,
-present on decode:
-
-| In a window | Limit 1 | Limit 2 | Layer's 3 (kept) |
-|---|---|---|---|
-| 60 fps: shown, decode to glass | 40 of 60 (1080p, 34 ms) | 60 of 60, 22.8 ms | 60 of 60, 21.6 ms |
-| 120 fps: shown, decode to glass | | 80 of 118, 31 ms | 118 of 119, 24-26 ms |
-
-Controller rumble, the game's XInputSetState to Helio's haptics call: ~7 ms
-(the two machines' clocks differ by ~207 ms, corrected with time.apple.com).
-
-## Glass to glass
-
-From a change on the host's screen to the same change on the client's
-screen, as a person sees it. It is measured from outside both computers,
-with a photodiode or a 240 fps camera on both screens, so no clock of
-Helio's is involved. Unlike [capture to glass](#capture-to-glass), it
-includes the host compositor's time from an application's present to the
-capture, and the client panel's scanout and pixel response.
-
 ## Capture to glass
 
 The overlay's last line, "Host capture to screen", measures it directly:
@@ -321,50 +496,6 @@ such stall empties the audio buffer (about 2 underruns a minute in the long
 run). AWDL (AirDrop, Continuity) was up on that Mac and is a common cause of
 exactly this pattern; not yet confirmed here by turning it off
 (`sudo ifconfig awdl0 down`, until the next reboot).
-
-## Starting a stream
-
-From launching the client to the first frame, host monitor asleep, Mac on
-Wi-Fi. Helio: 15 consecutive start/stop cycles (10 at 3024×1890@120, 100 Mbps,
-7.1 audio; 5 at 1080p60), Apollo stopped. Moonlight: one start of the Desktop
-app at the same settings.
-
-| | Launch → first frame |
-|---|---|
-| Helio → Helio Host | 5.6–7.0 s, typically 6.1 s; 15 of 15 started |
-| Moonlight → Apollo | ~5 s |
-
-Where Helio Host's time goes (3024×1890@120):
-
-| Step | ms |
-|---|---|
-| Tunnel up | 11 |
-| Virtual display added | 2 |
-| Windows puts it on the desktop | 3,880 |
-| Mode forced, made primary | 210 |
-| Other displays turned off | 600 |
-| Capture and encoder up | 320 |
-
-Windows' 3.9 s is the first display-configuration call after the monitor
-arrives, blocked until Windows has brought it up. Apollo's monitor takes ~3 s
-to become its desktop on this host too.
-
-It is the host's own monitor that costs it. 2026-09-28, the host on
-Ethernet, from the tunnel up to the session started:
-
-| The host's monitor | Virtual display on the desktop | Tunnel → session started |
-|---|---|---|
-| Awake | 153-181 ms | 0.87-1.5 s (13 starts) |
-| Switched off at its button (still connected) | 3,872-3,903 ms | 5.2-6.0 s |
-| Unplugged (headless) | 327-372 ms | 0.62-0.79 s (10 starts) |
-
-Asleep or switched off, the monitor is still on the cable, and Windows
-spends ~3.7 s on it whenever the arrangement changes.
-
-That wait is also why every session failed once Apollo was stopped: SudoVDA
-removes a monitor 3 s after the last ping. Helio Host pinged only between
-display calls, and Apollo's own pings had kept the monitor alive. The
-keepalive now starts before the monitor is added.
 
 ## Optimization pass (2026-09-30)
 

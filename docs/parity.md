@@ -33,7 +33,7 @@ it applies), **no** (not built, with the reason), **n/a** (does not apply).
 
 | Moonlight + Sunshine/Apollo | Helio + Helio Host | Status |
 |---|---|---|
-| 3024x1890 native, 120 fps, 100 Mbit/s | Same; 115.6 fps shown vs Moonlight's 110.0 under full load (against Apollo, Sunshine's video path). Host on Ethernet: 0% loss at 113 Mbit/s, 117 of 118 fps shown, decode to glass 10 ms | done |
+| 1920x1080, 2560x1440 and 3840x2160 at 60 and 120 fps | Same modes. A click in a game matches Moonlight's or beats it at every mode (at equal wire; [click to frame](benchmarks.md#click-to-frame-recorded)); at 120 fps Helio shows 97–98% of the host's frames, Moonlight 83–87% (while the client's screen is recorded; [frames shown](benchmarks.md#frames-shown)) | done |
 | The client display's exact refresh (`clientRefreshRateX100`, 59.94 Hz), the host capturing at it | Same, in millihertz from negotiation to the capture cadence and the encoder; a Windows host's virtual display refreshes at a multiple of it reaching 120 Hz, Apollo's `double_refreshrate` (off by default there), measured in a game at 60 fps ([platforms/windows.md](platforms/windows.md)) | done (no 59.94 Hz display here) |
 | HEVC, H.264 | Same | done |
 | AV1 | Helio Host encodes it with NVENC on GPUs that have it (not the RTX 3070 Ti); Helio decodes it in hardware on a Mac with an AV1 decoder (M3 and later; its Video codec setting offers AV1 there), and with FFmpeg on Windows and Linux (`--codec av1`, untested) | done on a Mac (decoder tested on an M4 Pro); n/a on an RTX 3070 Ti host |
@@ -42,13 +42,13 @@ it applies), **no** (not built, with the reason), **n/a** (does not apply).
 | NVENC: P1, ultra-low latency, single-frame VBV, quarter-resolution two pass, reference invalidation | Same | done |
 | NVENC split-frame encoding on GPUs with two encoders | The driver decides, Sunshine's default | done (one encoder here) |
 | The NVIDIA driver set for streaming (full power for the host, OpenGL/Vulkan through DXGI) | Same, put back when Helio Host stops | done |
-| V-Sync, frame pacing | Moonlight's pacer: display-link tick, oldest queued frame | done |
-| Loss recovery (reference invalidation) | Same, plus adaptive FEC that learns the link's own loss (Sunshine sends a fixed 20%) | done |
-| Automatic bitrate | Adapts to congestion, not to random loss | done |
+| V-Sync, frame pacing | Moonlight's pacer: display-link tick, oldest queued frame. With pacing on in both clients, Helio's click to frame matches Apollo's and is 2.6–3.4 ms longer than Sunshine's ([under other conditions](benchmarks.md#under-other-conditions)) | done |
+| Loss recovery (reference invalidation) | Same, plus adaptive FEC that learns the link's own loss (Sunshine sends a fixed 20%): with 5% of packets lost, Helio still shows 96.1% of the host's frames at 2560x1440 at 120 fps, against Moonlight's 84–85% (while the client's screen is recorded; [bad links](benchmarks.md#bad-links)) | done |
+| Automatic bitrate | Adapts to congestion, not to random loss: on a link that narrows from 60 to 20 Mbit/s for 20 s, Helio Host sends 24 Mbit/s and the client freezes 17 times a minute, against Apollo's 42 Mbit/s and 55 freezes and Sunshine's 44 Mbit/s and 33 ([bad links](benchmarks.md#bad-links)) | done |
 | Statistics overlay (Ctrl-Alt-Shift-S) | Same, plus host capture to glass | done |
 | Connection warnings | Same thresholds in spirit; no false warning at start | done (seen rendering) |
 | Full screen / window (Ctrl-Alt-Shift-X) | Same | done |
-| Session start | 0.9-1.5 s with the host's monitor awake or unplugged; ~5 s when it is asleep or off, as with Apollo (Windows spends 3.9 s on the sleeping monitor) | done |
+| Session start | About 1.1 s to the first video (1.02–1.23 s over three starts with nothing kept), and 0.42 s for a client back within 60 s, when Helio Host has kept its virtual display; Apollo 2.8–3.0 s and Sunshine 4.2–4.5 s either way (medians, 2560x1440 at 120 fps; [starting a stream](benchmarks.md#starting-a-stream)) | done |
 | A still desktop re-encoded so it sharpens | At a fifth of the frame rate (Sunshine: half): Helio needs no steady stream of frames | done |
 
 ## Audio
