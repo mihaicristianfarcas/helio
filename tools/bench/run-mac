@@ -71,7 +71,8 @@ phases=${BENCH_PHASES:-flash,counter,noise}
 phases=" ${phases//,/ } "
 root=$(cd "$(dirname "$0")/../.." && pwd)
 probe=$root/target/bench/bench-probe
-helio=/Applications/Helio.app/Contents/Resources/bin/helio
+# BENCH_HELIO: another build's `helio`, for a check against an older client.
+helio=${BENCH_HELIO:-/Applications/Helio.app/Contents/Resources/bin/helio}
 moonlight=/Applications/Moonlight.app/Contents/MacOS/Moonlight
 read -ra ssh <<<"$BENCH_SSH"
 tag=$(basename "$out")
@@ -135,6 +136,7 @@ case $stack in
             --mbps "$((kbps / 1000))" --codec hevc --audio-channels 2 --no-clipboard)
         [ "$vs" = novsync ] && args+=(--no-vsync)
         [ "$fp" = pacing ] && args+=(--frame-pacing)
+        [ "${BENCH_HELIO_KEEP_DISPLAYS:-0}" = 1 ] && args+=(--keep-host-displays)
         client=$helio ;;
     sunshine | apollo)
         if [ "$stack" = sunshine ]; then name=$MOONLIGHT_SUNSHINE app=Desktop; else name=$MOONLIGHT_APOLLO app="Virtual Display"; fi
