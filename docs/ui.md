@@ -282,8 +282,9 @@ paired device called NAME). `HELIO_HOST_DATA_DIR` points the app at a test host'
 data folder; `HELIO_HOST_APP_URL`, `HELIO_HOST_APP_CERT` and `HELIO_HOST_APP_TOKEN` at another
 host altogether; `HELIO_HOST_PROGRAM` at the `helio-host` the switch runs.
 `HELIO_UI_DEMO_SCREEN=PATH` gives the sample sessions a screenshot to show.
-`tools/capture-docs-images` makes the README's pictures this way; its GIF
-is a screen recording of a real stream, taken by hand.
+`tools/capture-docs-images` makes the README's screenshots this way. Its
+first picture, `docs/images/helio.jpg`, is the website's link preview
+(`site/scripts/og-card.html`, on the `landing-page` branch).
 
 With `HELIO_UI_DEMO` set, the update check asks GitHub nothing on its own
 (`update` makes up its answer), the app runs beside a copy that is already
