@@ -3,7 +3,7 @@
 Stream a computer's desktop and its games to another computer, inside one
 post-quantum WireGuard tunnel.
 
-![Helio on a Mac: a click on a paired Windows PC in Hosts opens its desktop full screen, in a Space of its own; a swipe back to the Mac shows the session's page, with its mode and how to end it](docs/images/helio-demo.gif)
+![Helio: low-latency remote desktop and game streaming. A stream in Helio's window on a Mac, with its statistics, in front of the host's Overview of that session.](docs/images/helio.jpg)
 
 - **Best tested:** a Mac as the client, streaming a Windows host with an
   NVIDIA GPU and SudoVDA ([the test setup](docs/benchmarks.md#test-setup)).
