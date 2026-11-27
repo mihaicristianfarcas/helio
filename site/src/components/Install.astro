@@ -28,7 +28,7 @@ const panels: Panel[] = [
   {
     system: 'macos',
     name: 'macOS',
-    needs: 'macOS 14 or later',
+    needs: 'macOS 14 or later; tested on macOS 26',
     file: FILES.macArm,
     detail: 'Apple silicon',
     steps: [
@@ -40,7 +40,7 @@ const panels: Panel[] = [
   {
     system: 'windows',
     name: 'Windows',
-    needs: 'Windows 10 or 11, 64-bit',
+    needs: 'Windows 10 or 11, 64-bit; tested on Windows 11',
     file: FILES.windows,
     steps: [
       'Open the installer. It installs Helio for you, with no administrator needed.',
