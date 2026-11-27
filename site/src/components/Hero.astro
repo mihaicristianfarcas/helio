@@ -1,22 +1,28 @@
 ---
 //! The page's opening, as zeron.sh opens its own: what Helio is, one
-//! sentence, the downloads (Install.astro) and the repository; then the app on both of the best-tested pair's
-//! desktops, as each composites it (scripts/capture-hero.sh): the Mac, the
-//! client, in front of the Windows host.
+//! sentence, the downloads (Install.astro) and the repository; then a real
+//! stream (scripts/capture-hero.sh): Helio's window on the Mac, the client,
+//! in front of the host's Overview of that same session.
 import { Image } from 'astro:assets';
 import Icon from './Icon.astro';
 import SystemMark from './SystemMark.astro';
-import macos from '../assets/hero/macos.webp';
-import windows from '../assets/hero/windows.webp';
+import stream from '../assets/hero/stream.webp';
+import host from '../assets/hero/host.webp';
 import { RELEASE_NOTES, REPO, VERSION } from '../lib/repo';
 import { short, stars } from '../lib/stars';
 
 const count = await stars();
-const alt = (desktop: string) =>
-  `Helio on ${desktop}, on its default wallpaper: the Hosts page with three paired hosts, two online, and one more found on the network.`;
 const shots = [
-  { src: windows, alt: alt('Windows 11'), place: 'back' },
-  { src: macos, alt: alt('macOS'), place: 'front' },
+  {
+    src: host,
+    alt: 'Helio on the host, gaming-pc, on Windows 11’s wallpaper: This computer → Overview, streaming to macbook at 2240 × 1480, 120 fps in HEVC, 93 frames a second sent, a host latency of 10.9 ms.',
+    place: 'back',
+  },
+  {
+    src: stream,
+    alt: 'Helio on a Mac, streaming gaming-pc in a window: the host’s desktop on Windows 11’s wallpaper, with the stream’s statistics over it.',
+    place: 'front',
+  },
 ];
 ---
 
