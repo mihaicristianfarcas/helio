@@ -1,10 +1,18 @@
 #!/usr/bin/env bash
-# The README's screenshots in docs/images/, from the app's demo mode
-# (HELIO_UI_DEMO, docs/ui.md). macOS; the window is captured as it is
-# (screencapture), so the terminal needs Screen Recording.
+# The documentation's screenshots in docs/images/, from the app's demo mode
+# (HELIO_UI_DEMO, docs/ui.md), taken as the website's are: the window in the
+# app's dark appearance, 1120x740 points, in the middle of macOS Tahoe's
+# default wallpaper, captured from the screen, so what shows through the
+# glass is that wallpaper. The app's own snapshot step draws the window
+# alone, with nothing behind the glass, which turns its dark pages grey.
 #
-#   cargo build -p helio-app
+#   cargo build --release -p helio-app
 #   HELIO_UI_DEMO_SCREEN=/path/to/agent-screen.png tools/capture-docs-images
+#
+# macOS 26 on a Retina screen with at least 1431x950 points free from the top
+# left. The terminal needs Screen Recording (screencapture), and Accessibility
+# for System Events to place the window. Leave the screen alone while it
+# runs: the picture is the screen.
 #
 # HELIO_UI_DEMO_SCREEN is what the sample agent session shows under "What the
 # agent sees": a real screenshot of a Windows desktop holding the files the
@@ -12,27 +20,84 @@
 # site/src/assets/hero/agent-screen.webp). Without it the panel is empty, so this
 # refuses to run. HELIO_APP names the program, for a build elsewhere.
 #
-# Each window is 1200x800 points: at the default 940x620 the pictures look
-# crowded. The data folders are empty and temporary, marked as past setup, so
-# nothing of this computer's hosts or settings reaches a picture, and under
-# HELIO_UI_DEMO the window names no version, so a picture does not date with
-# the next release.
+# The wallpaper is a borderless window of its own behind Helio, so this Mac's
+# wallpaper and windows stay out of the picture; it parks the pointer on
+# itself, so no row looks hovered. The data folders are empty and temporary,
+# marked as past setup, so nothing of this computer's hosts or settings
+# reaches a picture, and under HELIO_UI_DEMO the window names no version, so a
+# picture does not date with the next release.
 set -euo pipefail
 REPO=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-APP=${HELIO_APP:-$REPO/target/debug/helio-app}
+APP=${HELIO_APP:-$REPO/target/release/helio-app}
 : "${HELIO_UI_DEMO_SCREEN:?point it at a screenshot for the agent session (see the top of this file)}"
 export HELIO_UI_DEMO_SCREEN
+# Tahoe's light wallpaper, square; its middle 16:9 is what a screen shows.
+HEIC=/System/Library/ExtensionKit/Extensions/NeptuneOneWallpaper.appex/Contents/Resources/TahoeLight.heic
+[ -f "$HEIC" ] || { echo "no $HEIC: this needs macOS 26" >&2; exit 1; }
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
 
+sips -s format png --cropToHeightWidth 3384 6016 "$HEIC" --out "$TMP/wall.png" >/dev/null
+cat >"$TMP/wall.swift" <<'SWIFT'
+// wall IMAGE X Y W H: the picture as a borderless window (points, from the
+// top left), drawn to cover it, until killed.
+import AppKit
+let a = CommandLine.arguments
+let image = NSImage(contentsOfFile: a[1])!
+let (x, y, w, h) = (Double(a[2])!, Double(a[3])!, Double(a[4])!, Double(a[5])!)
+let screen = NSScreen.main!.frame
+CGWarpMouseCursorPosition(CGPoint(x: x + 6, y: y + h - 6))
+let app = NSApplication.shared
+app.setActivationPolicy(.accessory)
+// A borderless window can take the front only as the key window.
+class Wall: NSWindow { override var canBecomeKey: Bool { true } }
+let window = Wall(contentRect: NSRect(x: x, y: screen.height - y - h, width: w, height: h),
+                  styleMask: .borderless, backing: .buffered, defer: false)
+let scale = max(w / image.size.width, h / image.size.height)
+let view = NSImageView(frame: NSRect(x: (w - image.size.width * scale) / 2,
+                                     y: (h - image.size.height * scale) / 2,
+                                     width: image.size.width * scale, height: image.size.height * scale))
+view.image = image
+view.imageScaling = .scaleProportionallyUpOrDown
+let holder = NSView(frame: NSRect(x: 0, y: 0, width: w, height: h))
+holder.addSubview(view)
+window.contentView = holder
+window.isOpaque = true
+window.hasShadow = false
+app.activate(ignoringOtherApps: true)
+window.makeKeyAndOrderFront(nil)
+app.run()
+SWIFT
+swiftc -O -o "$TMP/wall" "$TMP/wall.swift"
+
+# The screen taken, in points: below the menu bar, 1350x900, which a Retina
+# screen makes 2700x1800 pixels; the window 115 and 80 points in, so the
+# wallpaper frames it evenly.
+X=81 Y=50 W=1350 H=900
 shot() { # name steps
     local data
     data=$(mktemp -d "$TMP/data.XXXX")
     echo 'onboarded = true' >"$data/settings.toml"
-    HELIO_DATA_DIR=$data HELIO_HOST_DATA_DIR=$data/host HELIO_APPEARANCE=light \
-        HELIO_UI_DEMO="$2,size=1200x800,snapshot=$REPO/docs/images/$1.png,quit" "$APP" >/dev/null 2>&1
+    "$TMP/wall" "$TMP/wall.png" $X $Y $W $H &
+    local wall=$!
+    HELIO_DATA_DIR=$data HELIO_HOST_DATA_DIR=$data/host HELIO_APPEARANCE=dark \
+        HELIO_UI_DEMO="$2,size=1120x740" "$APP" >/dev/null 2>&1 &
+    local app=$!
+    # Nothing tells a script when a window has drawn its demo steps: these
+    # waits are what the steps take on an M-series Mac, with room to spare.
+    sleep 4
+    osascript \
+        -e "tell application \"System Events\" to tell (first process whose unix id is $app) to set position of window 1 to {$((X + 115)), $((Y + 80))}" \
+        -e "tell application \"System Events\" to set frontmost of (first process whose unix id is $app) to true" >/dev/null
+    sleep 2
+    screencapture -x -R$X,$Y,$W,$H "$TMP/$1.png"
+    kill "$app" "$wall"
+    wait "$app" "$wall" 2>/dev/null || true
+    sips -s format jpeg -s formatOptions 88 "$TMP/$1.png" --out "$REPO/docs/images/$1.jpg" >/dev/null
     echo "$1"
 }
 
 shot helio-host-overview "hosting=on,host-sample,host=overview"
 shot helio-agent-session "agents=sample-ask"
+shot helio-device-permissions "hosting=on,host-sample,host=devices,permissions=macbook"
+shot helio-hosting-settings "hosting=on,host-sample,settings=hosting"

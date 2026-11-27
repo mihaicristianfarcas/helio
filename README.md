@@ -18,7 +18,7 @@ post-quantum WireGuard tunnel.
 switch, off until you turn it on) it lets them play this one, through
 **Helio Host**, the host. Both run on macOS, Windows and Linux.
 
-![This computer in Helio during a session](docs/images/helio-host-overview.png)
+![This computer → Overview in Helio on a Mac, during a session: the stream's figures, a device asking to pair, and the host's details](docs/images/helio-host-overview.jpg)
 
 - **Moonlight-class streaming**: HEVC or H.264, hardware encode and decode,
   HDR and YUV 4:4:4, loss repaired by reference invalidation, frame pacing
@@ -45,7 +45,7 @@ switch, off until you turn it on) it lets them play this one, through
   from any MCP client — held to rules the host enforces
   ([docs/ai-agents.md](docs/ai-agents.md)).
 
-![An agent session in Helio](docs/images/helio-agent-session.png)
+![An agent session in Helio on a Mac: the agent asks for a go-ahead to empty the Recycle Bin, beside the Windows desktop it saw after its last step, and its plan](docs/images/helio-agent-session.jpg)
 
 ## Getting started
 
