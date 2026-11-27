@@ -1,8 +1,10 @@
 ---
 //! AI agents on your hosts (docs/ai-agents.md): the agent's session as Helio
-//! shows it, the end of that session (the app's sample, helio-app/src/chat/
-//! sample.rs) with its request for a go-ahead in the window's own words, and
-//! three of the rules the host holds it to.
+//! shows it, the end of that session as its chat draws it (the app's
+//! sample, helio-app/src/chat/sample.rs, and view.rs: your messages in
+//! bubbles on the right, the agent's steps and reply as plain text, its
+//! request for a go-ahead in the window's own words), and three of the
+//! rules the host holds it to.
 import { Image } from 'astro:assets';
 import Card from './Card.astro';
 import Icon from './Icon.astro';
@@ -33,12 +35,19 @@ import session from '../assets/windows/agent.webp';
   <Card slot="cards" title="It asks first">
     It stops for your go-ahead before anything risky, like deleting files, sending messages or installing software.
     <div slot="visual" class="thread" aria-hidden="true">
-      <ul class="acts">
-        <li><Icon name="check" size={14} /><code>left_click (402, 188)</code></li>
-        <li><Icon name="check" size={14} /><code>key ctrl+left_click (402, 214)</code></li>
-        <li><Icon name="check" size={14} /><code>key Delete</code><span>moved to the Recycle Bin</span></li>
-      </ul>
-      <p class="you">Empty it too.</p>
+      <div class="history">
+        <p class="you">Yes, both. Keep the recordings.</p>
+        <div class="acts">
+          <p class="acts-title"><Icon name="cursor-click" size={13} /> Used the computer, 3 actions</p>
+          <ul>
+            <li><Icon name="check" size={12} /><code>left_click (402, 188)</code></li>
+            <li><Icon name="check" size={12} /><code>key ctrl+left_click (402, 214)</code></li>
+            <li><Icon name="check" size={12} /><code>key Delete</code><span>moved to the Recycle Bin</span></li>
+          </ul>
+        </div>
+        <p class="reply">Done: both are in the <strong>Recycle Bin</strong>. The recordings are where they were.</p>
+        <p class="you">Empty it too.</p>
+      </div>
       <div class="ask">
         <p class="ask-title"><Icon name="hand" size={18} /> The agent asks for your go-ahead</p>
         <div class="ask-row">
@@ -73,49 +82,70 @@ import session from '../assets/windows/agent.webp';
     border-radius: 12px 0 0 0;
   }
 
-  /* The session's last lines, held to the card's foot as a chat is. */
-  .thread {
+  /* The session's last lines, held to the card's foot as a chat is: the
+     request whole at the bottom, what came before it above. */
+  .thread,
+  .history {
     display: flex;
-    flex: 1;
     flex-direction: column;
     justify-content: flex-end;
     gap: 10px;
     min-height: 0;
-    padding: 0 28px 24px;
     overflow: hidden;
+  }
+
+  .thread {
+    flex: 1;
+    padding: 0 28px 24px;
   }
 
   /* Where the card is a share of the screen's height, the oldest lines run
      off the top on a short screen, under a fade, as in a thread scrolled to
-     its end: the agent's steps are cut, never gone. The fade takes the
-     place of the gap under the card's text. */
+     its end. The fade starts under the card's own gap below its text, and
+     is tall enough that the line it cuts reads as going, not as crowding
+     the text; the request is outside it, so it is never faded, even where
+     it is all the card has room for (1280x720). */
   @media (min-width: 861px) {
-    .thread {
-      margin-top: -24px;
-      -webkit-mask-image: linear-gradient(transparent, #000 28px);
-      mask-image: linear-gradient(transparent, #000 28px);
+    .history {
+      -webkit-mask-image: linear-gradient(transparent, #000 40px);
+      mask-image: linear-gradient(transparent, #000 40px);
     }
   }
 
+  /* Its steps, as the window folds them: a line saying what it used, the
+     actions under it on a rule. */
   .acts {
-    display: grid;
     flex-shrink: 0;
-    gap: 4px;
-    margin: 0;
-    padding: 0;
-    list-style: none;
+    min-width: 0;
     font-size: 0.75rem;
+  }
+
+  .acts-title {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--text-3);
+  }
+
+  .acts ul {
+    display: grid;
+    gap: 3px;
+    margin: 2px 0 0 6px;
+    padding: 0 0 0 12px;
+    border-left: 1px solid var(--line-2);
+    list-style: none;
   }
 
   .acts li {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 7px;
     min-width: 0;
     color: var(--text-3);
+    white-space: nowrap;
   }
 
-  .acts :global(svg) {
+  .acts li :global(svg) {
     flex-shrink: 0;
     color: var(--sky-4);
   }
@@ -127,14 +157,30 @@ import session from '../assets/windows/agent.webp';
     color: var(--text-2);
   }
 
+  .reply,
   .you {
     flex-shrink: 0;
-    align-self: flex-end;
-    padding: 7px 12px;
-    border-radius: 12px;
-    background: rgb(var(--sky-5-rgb) / 0.18);
-    color: var(--text);
     font-size: 0.875rem;
+    line-height: 1.45;
+  }
+
+  /* The agent's reply is the thread's own text, as in the app; yours is a
+     bubble on the right (helio-app/src/chat/view.rs). */
+  .reply {
+    color: var(--text);
+  }
+
+  .reply strong {
+    font-weight: 600;
+  }
+
+  .you {
+    align-self: flex-end;
+    max-width: 82%;
+    padding: 8px 12px;
+    border-radius: 12px;
+    background: rgb(var(--sky-5-rgb) / 0.22);
+    color: var(--text);
   }
 
   .ask {
