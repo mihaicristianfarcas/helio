@@ -68,11 +68,13 @@ switch, off until you turn it on) it lets them play this one, through
 
 | | Client | Host |
 |---|---|---|
-| macOS 14+ | Helio.app: the best-tested client | Helio Host, inside Helio.app: works; stereo, or 5.1/7.1 with a surround output ([macOS](docs/platforms/macos.md#sound-in-surround)); no controllers |
-| Windows 10/11 | Helio.exe: works; less tested than macOS | Helio Host, a Windows service: the best-tested host (best with an NVIDIA GPU; without one, H.264 in software; turning hosting on installs SudoVDA for the virtual display, on x64 PCs) |
+| macOS | Helio.app: the best-tested client | Helio Host, inside Helio.app: works; stereo, or 5.1/7.1 with a surround output ([macOS](docs/platforms/macos.md#sound-in-surround)); no controllers |
+| Windows | Helio.exe: works; less tested than macOS | Helio Host, a Windows service: the best-tested host (best with an NVIDIA GPU; without one, H.264 in software; turning hosting on installs SudoVDA for the virtual display, on x64 PCs) |
 | Linux | works under X11 and Wayland; tested in a container | works under X11 and Wayland; a virtual display on GNOME and KDE, elsewhere the screen as it is, scaled; no controllers |
 
-What is verified and what is not, and how:
+Helio needs macOS 14 or later, or 64-bit Windows 10 or 11. It has been
+tested on macOS 26 and Windows 11 25H2; the older versions are not
+verified yet. What is verified and what is not, and how:
 [docs/verification.md](docs/verification.md). Feature by feature against
 Moonlight + Sunshine: [docs/parity.md](docs/parity.md).
 

@@ -1,7 +1,9 @@
 # macOS
 
-Helio and Helio Host both run on macOS 14 or later (Apple silicon and Intel; the
-measurements here are from an M4 Pro).
+Helio and Helio Host both need macOS 14 or later, on Apple silicon or Intel.
+They have been tested on macOS 26 on Apple silicon (an M4 Pro, where the
+measurements here were taken); macOS 14 and 15, and Intel Macs, are not
+verified yet.
 
 ## Helio, the client
 

@@ -8,10 +8,16 @@ system has it ready to [download](#from-the-website) from
 on a Mac it also installs with [Homebrew](#with-homebrew-macos), and
 everywhere it builds from this repository with Rust.
 
-| | macOS 14+ | Windows 10/11 | Linux |
+| | macOS | Windows | Linux |
 |---|---|---|---|
 | Helio | [Download](#on-macos), [Homebrew](#with-homebrew-macos) or [build](#helio-on-macos) | [Download](#on-windows) or [build](#helio-on-windows) | [Download](#on-linux) or [build](#helio-on-linux) |
 | To host | [Hosting on macOS](#hosting-on-macos) | [Hosting on Windows](#hosting-on-windows) | [Hosting on Linux](#hosting-on-linux) |
+
+Helio needs macOS 14 or later (Apple silicon or Intel), or 64-bit
+Windows 10 or 11; on Linux, see [Helio on Linux](#on-linux). It has been
+tested on macOS 26 on Apple silicon and on Windows 11 25H2. macOS 14 and
+15, Intel Macs and Windows 10 are not verified yet
+([verification.md](verification.md#what-is-and-isnt-verified)).
 
 Then [pair them](#pairing).
 

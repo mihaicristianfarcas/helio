@@ -1,7 +1,9 @@
 # Windows
 
 Helio Host on Windows is the host Helio was built around: what Sunshine is to
-Moonlight, with Apollo's virtual display. Helio also runs on Windows 10 and 11.
+Moonlight, with Apollo's virtual display. Helio, the client, runs there too. Both
+need 64-bit Windows 10 or 11, and have been tested on Windows 11 25H2;
+Windows 10 is not verified yet.
 
 ## Hosting: Helio Host
 
@@ -9,7 +11,7 @@ Moonlight, with Apollo's virtual display. Helio also runs on Windows 10 and 11.
 
 | | Why |
 |---|---|
-| Windows 10 or 11, 64-bit | |
+| Windows 10 or 11, 64-bit | Tested on Windows 11 25H2; Windows 10 is not verified yet |
 | An NVIDIA GPU with NVENC, and its driver | Encoding. NVENC is loaded from the driver (`nvEncodeAPI64.dll`) at runtime: no CUDA toolkit or Video Codec SDK is needed to build or run. Without it, Helio Host encodes H.264 in software ([below](#without-nvenc-or-sudovda)) |
 | [SudoVDA](https://github.com/SudoMaker/SudoVDA) (SudoMaker Virtual Display Adapter) | A virtual display at each client's mode. Turning hosting on installs it if the PC has none, on x64 PCs (it is built for x64 only) ([below](#the-drivers-hosting-installs)). Helio Host and Apollo cannot stream at the same time (they share the driver). Without it, Helio Host streams the host's main display ([below](#without-nvenc-or-sudovda)) |
 | [ViGEmBus](https://github.com/nefarius/ViGEmBus) | Controllers: each of the client's pads becomes a virtual Xbox 360 pad. Turning hosting on installs it if the PC has none ([below](#the-drivers-hosting-installs)) |
