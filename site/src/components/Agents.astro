@@ -1,197 +1,198 @@
 ---
-//! AI agents on your hosts (docs/ai-agents.md): the real windows, what you
-//! keep control of, clef's screen checks, and the host's own rules. The two
-//! pictures are one moment of one session, side by side: the agent's window
-//! in Helio on the client, and the very screen on the host it shows
-//! (scripts/capture-hero.sh).
+//! AI agents on your hosts (docs/ai-agents.md): the agent's session as Helio
+//! shows it, the end of that session (the app's sample, helio-app/src/chat/
+//! sample.rs) with its request for a go-ahead in the window's own words, and
+//! three of the rules the host holds it to.
 import { Image } from 'astro:assets';
-import { onGitHub } from '../lib/repo';
-import session from '../assets/hero/agent.webp';
-import screen from '../assets/hero/agent-screen.webp';
-
-const rules = [
-  ['Never over a person', 'An agent is refused while a person streams.'],
-  ['A person always wins', 'Starting a stream takes over from an agent.'],
-  ['Secure screens are a person’s', 'At a sign-in or lock screen, or a UAC prompt, its input is held.'],
-  ['Someone at the host comes first', 'Input at the host holds the agent until 10 s after it stops.'],
-  ['Only what it may do', 'Each agent has its own permissions; one not allowed to act unwatched waits for someone to watch.'],
-  ['A person’s hold lasts', 'A pause, a take-over or a stop holds, even if the agent starts a new session.'],
-];
+import Card from './Card.astro';
+import Icon from './Icon.astro';
+import Point from './Point.astro';
+import Section from './Section.astro';
+import session from '../assets/windows/agent.webp';
 ---
 
-<section class="section" id="agents">
-  <div class="wrap">
-    <div class="head">
-      <span class="eyebrow">AI agents</span>
-      <h2 class="title">Let an AI agent use your host</h2>
-      <p class="lede">
-        An agent sees the screen and uses the keyboard and mouse as you do through Helio: over the same tunnel, from
-        anywhere. Watch it, take over or stop it at any point.
-      </p>
-    </div>
-
-    <div class="screens">
-      <figure>
+<Section
+  id="agents"
+  lead="Let AI agents use your computers."
+  rest="Under rules the host enforces."
+>
+  <Card slot="cards" title="Watch it, or take over">
+    Hand it a task in Helio, or give your own agent your hosts through MCP. See every step, and take the keyboard and
+    mouse back with <span class="chord"><kbd>Ctrl</kbd> <kbd>Alt</kbd> <kbd>Shift</kbd> <kbd>T</kbd></span>.
+    <div slot="visual" class="bleed">
+      <div class="shot">
         <Image
           src={session}
-          alt="An agent session in Helio: the conversation about the Downloads folder, the agent waiting for a go-ahead to empty the Recycle Bin with Allow and Don't buttons, a screenshot of the Windows desktop it saw after its last step, with File Explorer on Downloads, and its plan."
+          alt="An agent session in Helio: a conversation about the Downloads folder, the agent waiting for a go-ahead to empty the Recycle Bin, the Windows desktop it saw after its last step, and its plan."
           widths={[640, 960, 1280]}
-          sizes="(max-width: 759px) 94vw, (max-width: 1328px) 48vw, 640px"
+          sizes="(max-width: 860px) 90vw, 640px"
         />
-        <figcaption><strong>Client</strong> · the agent’s session in Helio</figcaption>
-      </figure>
-      <figure>
-        <Image
-          src={screen}
-          alt="What the agent sees: a Windows desktop with File Explorer on the Downloads folder, its two biggest files selected."
-          widths={[640, 960, 1280]}
-          sizes="(max-width: 759px) 94vw, (max-width: 1328px) 52vw, 680px"
-        />
-        <figcaption><strong>Host</strong> · the Windows desktop it sees and uses</figcaption>
-      </figure>
+      </div>
     </div>
-
-    <ul class="points">
-      <li>
-        <h3>Watch it, or take over</h3>
-        <p>
-          Every action, its result and the screen after it. Log in to see the desktop live; <kbd>Ctrl</kbd>
-          <kbd>Alt</kbd>
-          <kbd>Shift</kbd>
-          <kbd>T</kbd> takes the keyboard and mouse.
-        </p>
-      </li>
-      <li>
-        <h3>It asks first</h3>
-        <p>
-          By default it stops for your go-ahead before anything risky, like deleting files, sending messages or
-          installing software. If it forgets to ask, rules catch the most dangerous commands.
-        </p>
-      </li>
-      <li>
-        <h3>Cloudflare’s clef checks the screen</h3>
-        <p>
-          Turn on <a href={onGitHub('docs/ai-agents.md#screen-checks-cloudflare-clef')}>screen checks</a> and clef
-          looks first: a click that deletes, spends, sends or installs waits for your go-ahead, as does typing into a
-          password field. A screen showing personal information reaches the model only if you agree.
-        </p>
-      </li>
-      <li>
-        <h3>Your model, or your agent</h3>
-        <p>
-          Claude Code or Codex on your plan, an Anthropic, OpenAI or OpenRouter key, or a local model. Or give any MCP
-          client your hosts as tools with <code>Helio mcp</code>; <code>Helio mcp install</code> adds them to Claude Code,
-          Codex and others.
-        </p>
-      </li>
-    </ul>
-
-    <div class="rules">
-      <h3>Rules the host holds every agent to</h3>
-      <ol class="steps">
-        {rules.map(([title, body]) => (
-          <li>
-            <h4>{title}</h4>
-            <p>{body}</p>
-          </li>
-        ))}
-      </ol>
-      <p class="note">
-        An agent pairs like a device, its role sealed with the PIN’s key: the host knows it by that key, not by what
-        it claims. <a href={onGitHub('docs/ai-agents.md')}>How agents work</a>
-      </p>
+  </Card>
+  <Card slot="cards" title="It asks first">
+    It stops for your go-ahead before anything risky, like deleting files, sending messages or installing software.
+    <div slot="visual" class="thread" aria-hidden="true">
+      <ul class="acts">
+        <li><Icon name="check" size={14} /><code>left_click (402, 188)</code></li>
+        <li><Icon name="check" size={14} /><code>key ctrl+left_click (402, 214)</code></li>
+        <li><Icon name="check" size={14} /><code>key Delete</code><span>moved to the Recycle Bin</span></li>
+      </ul>
+      <p class="you">Empty it too.</p>
+      <div class="ask">
+        <p class="ask-title"><Icon name="hand" size={18} /> The agent asks for your go-ahead</p>
+        <div class="ask-row">
+          <p class="ask-what">Empty the Recycle Bin (8.9 GB, 2 items)</p>
+          <p class="ask-buttons"><span class="allow">Allow</span><span class="deny">Don’t</span></p>
+        </div>
+      </div>
     </div>
-  </div>
-</section>
+  </Card>
+  <Point slot="points" icon="user" title="Never over a person">An agent is refused while a person streams.</Point>
+  <Point slot="points" icon="hand" title="A person always wins">Starting a stream takes over from an agent.</Point>
+  <Point slot="points" icon="lock" title="Secure screens are a person’s">
+    At a sign-in or lock screen, or a UAC prompt, its input is held.
+  </Point>
+</Section>
 
 <style>
-  /* Client and host side by side, the same height: the columns share the
-     width as the pictures' shapes do, 3:2 (2700x1800) and 16:10
-     (2560x1600). The pictures and the captions are rows both figures share,
-     so the captions line up to the pixel, whatever each picture rounds to. */
-  .screens {
-    display: grid;
-    grid-template-columns: minmax(0, 1.5fr) minmax(0, 1.6fr);
-    column-gap: 24px;
+  .chord {
+    white-space: nowrap;
   }
 
-  .screens figure {
+  .bleed {
+    flex: 1;
+    min-height: 0;
+    padding-left: 28px;
+    margin-bottom: -1px;
+  }
+
+  .bleed .shot {
+    border-right: 0;
+    border-bottom: 0;
+    border-radius: 12px 0 0 0;
+  }
+
+  /* The session's last lines, held to the card's foot as a chat is. */
+  .thread {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    justify-content: flex-end;
+    gap: 10px;
+    min-height: 0;
+    padding: 0 28px 24px;
+    overflow: hidden;
+  }
+
+  /* Where the card is a share of the screen's height, the oldest lines run
+     off the top on a short screen, under a fade, as in a thread scrolled to
+     its end: the agent's steps are cut, never gone. The fade takes the
+     place of the gap under the card's text. */
+  @media (min-width: 861px) {
+    .thread {
+      margin-top: -24px;
+      -webkit-mask-image: linear-gradient(transparent, #000 28px);
+      mask-image: linear-gradient(transparent, #000 28px);
+    }
+  }
+
+  .acts {
     display: grid;
-    grid-row: span 2;
-    grid-template-rows: subgrid;
-    row-gap: 14px;
+    flex-shrink: 0;
+    gap: 4px;
     margin: 0;
+    padding: 0;
+    list-style: none;
+    font-size: 0.75rem;
   }
 
-  /* As the hero's pictures (PageHero.astro). */
-  .screens :global(img) {
-    width: 100%;
-    height: auto;
-    border: 1px solid rgb(255 255 255 / 0.16);
-    border-radius: 14px;
-    box-shadow: 0 30px 80px -24px rgb(0 0 0 / 0.75);
-    /* To look at only: not dragged, selected or opened on their own. */
-    pointer-events: none;
-  }
-
-  /* As the latency section's Host and Client (Latency.astro). */
-  figcaption {
+  .acts li {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
     color: var(--text-3);
+  }
+
+  .acts :global(svg) {
+    flex-shrink: 0;
+    color: var(--sky-4);
+  }
+
+  .acts code {
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--text-2);
+  }
+
+  .you {
+    flex-shrink: 0;
+    align-self: flex-end;
+    padding: 7px 12px;
+    border-radius: 12px;
+    background: rgb(var(--sky-5-rgb) / 0.18);
+    color: var(--text);
     font-size: 0.875rem;
   }
 
-  figcaption strong {
+  .ask {
+    flex-shrink: 0;
+    padding: 14px 18px 16px;
+    border: 1px solid var(--line-2);
+    border-radius: 12px;
+    background: rgb(var(--sky-5-rgb) / 0.1);
+  }
+
+  .ask-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
     color: var(--text);
     font-weight: 500;
   }
 
-  .points {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 40px;
-    margin: var(--gap-part) 0 0;
-    padding: 0;
-    list-style: none;
+  .ask-title :global(svg) {
+    color: var(--sky-4);
   }
 
-  .points h3 {
-    font-size: 1rem;
-  }
-
-  .points p {
+  /* What it asks, with the buttons beside it where they fit, and under it
+     where they do not. */
+  .ask-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px 16px;
     margin-top: 8px;
-    font-size: 0.9375rem;
   }
 
-  .rules {
-    margin-top: var(--gap-part);
+  .ask-what {
+    color: var(--text);
+    font-size: 0.95rem;
   }
 
-  /* As the latency section's Pipeline breakdown. */
-  .rules > h3 {
-    font-size: clamp(1.25rem, 1.1rem + 0.6vw, 1.5rem);
-    letter-spacing: -0.02em;
+  .ask-buttons {
+    display: flex;
+    gap: 8px;
+    font-size: 0.85rem;
+    font-weight: 500;
   }
 
-  .steps {
-    margin-top: var(--gap-head);
+  .allow,
+  .deny {
+    padding: 6px 14px;
+    border-radius: 8px;
   }
 
-  .rules > .note {
-    margin-top: var(--gap-note);
+  .allow {
+    background: var(--sky-2);
+    color: var(--ink);
   }
 
-  @media (max-width: 900px) {
-    .points {
-      grid-template-columns: 1fr;
-    }
-  }
-
-  /* Too narrow for two pictures to be read: one above the other. */
-  @media (max-width: 759px) {
-    .screens {
-      grid-template-columns: minmax(0, 1fr);
-      row-gap: var(--gap-head);
-    }
+  .deny {
+    border: 1px solid var(--line-2);
+    color: var(--text);
   }
 </style>

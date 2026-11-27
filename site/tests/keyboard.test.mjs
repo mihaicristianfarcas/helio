@@ -1,7 +1,9 @@
-//! Keyboard regressions against the built page and its actual component scripts.
-//! DOM checks cover control order and focus changes; they do not render a browser.
+//! Regressions against the built site and its actual component scripts:
+//! the landing page's keyboard order, focus, downloads and star count, and
+//! the documentation's pages and links. DOM checks cover control order and
+//! focus changes; they do not render a browser.
 import assert from 'node:assert/strict';
-import { readdirSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
@@ -64,10 +66,7 @@ function page(components = [], width = 1280) {
   return { window, document, run, enabled, stops, close: () => window.happyDOM.abort() };
 }
 
-const components = [
-  'components/Nav.astro', 'components/Install.astro',
-  'components/Command.astro', 'components/Video.astro', 'components/FAQ.astro', 'layouts/Base.astro',
-];
+const components = ['components/Nav.astro', 'components/Install.astro', 'components/Command.astro', 'layouts/Base.astro'];
 
 test('cached fonts cannot restore a refresh before the downloads initialize', async () => {
   const { window, document, run, close } = page();
@@ -77,7 +76,7 @@ test('cached fonts cannot restore a refresh before the downloads initialize', as
     window.sessionStorage.setItem('scroll:/', '400');
     run('layouts/Base.astro');
     await Promise.resolve();
-    assert.equal(window.scrollY, 0, 'the initial expanded layout must not receive the saved position');
+    assert.equal(window.scrollY, 0, 'the layout before the scripts must not receive the saved position');
     assert.equal(document.documentElement.dataset.restore, '400');
     for (const component of components.filter((component) => component !== 'layouts/Base.astro')) run(component);
     assert.equal(document.querySelectorAll('[data-picker] .panel:not([hidden])').length, 1);
@@ -138,7 +137,6 @@ test('scrolling keeps the header in place, and its line shows only with somethin
     assert.equal(header.hasAttribute('data-stuck'), false);
     scrollTo(400);
     assert.equal(header.hasAttribute('data-stuck'), true);
-    assert.equal(header.hasAttribute('data-hidden'), false);
     scrollTo(0);
     assert.equal(header.hasAttribute('data-stuck'), false);
   } finally { await close(); }
@@ -148,7 +146,6 @@ for (const width of [1280, 390]) {
   test(`at ${width}px the page offers every visible action, in header-to-footer order`, async () => {
     const { window, document, enabled, stops, close } = page(components, width);
     try {
-      if (width < 820) document.querySelector('[data-menu]').click();
       const order = stops();
       const expected = [...document.querySelectorAll(actions)].filter(enabled);
       assert.deepEqual(order.map((element) => element.outerHTML), expected.map((element) => element.outerHTML));
@@ -172,12 +169,13 @@ for (const width of [1280, 390]) {
   });
 }
 
-// The GitHub button's stars: the build's reading is in the markup (lib/stars.ts);
-// the page refreshes it. These start from a slot of their own, so they hold
-// whether or not the build that made dist/ could reach GitHub.
+// The stars: the build's reading is in the markup (lib/stars.ts); the page
+// refreshes it, in the header and in the hero. These start from a slot of
+// their own, so they hold whether or not the build that made dist/ could
+// reach GitHub.
 function starSlot(document, count) {
   const slot = document.querySelector('[data-stars]');
-  slot.hidden = count === null;
+  slot.toggleAttribute('data-unknown', count === null);
   slot.querySelector('[data-count]').textContent = count === null ? '' : String(count);
   return slot;
 }
@@ -195,8 +193,9 @@ test('the star count is refreshed from GitHub, and kept for an hour', async () =
     };
     run('components/Nav.astro');
     await new Promise(setImmediate);
-    assert.equal(slot.hidden, false);
+    assert.equal(slot.hasAttribute('data-unknown'), false);
     assert.equal(slot.querySelector('[data-count]').textContent, '1.2k');
+    assert.equal(document.querySelector('.hero [data-count]')?.textContent ?? '1.2k', '1.2k', 'the hero shows the same');
     assert.equal(document.querySelector('.gh').getAttribute('aria-label'), 'Source on GitHub, 1,234 stars');
     assert.equal(calls, 1);
     run('components/Nav.astro');
@@ -238,7 +237,7 @@ test('a refused, failed or malformed answer leaves the star count the page has',
         window.fetch = answer;
         run('components/Nav.astro');
         await new Promise(setImmediate);
-        assert.equal(slot.hidden, had === null);
+        assert.equal(slot.hasAttribute('data-unknown'), had === null);
         assert.equal(slot.querySelector('[data-count]').textContent, had === null ? '' : '7');
         assert.equal(window.localStorage.getItem('helio:stars'), null, 'only a good answer is kept');
       } finally { await close(); }
@@ -252,10 +251,18 @@ for (const [agent, system, button, listed] of [
   ['Mozilla/5.0 (X11; Linux x86_64)', 'linux', 'Helio-linux-x86_64', ['Helio-macos-arm64', 'Helio-macos-x86_64', 'Helio-windows-x86_64-setup']],
 ]) {
   test(`on ${system} there is one download button, and a line of the other platforms under the steps`, async () => {
-    const { window, document, run, stops, close } = page(['layouts/Base.astro']);
+    const { window, document, run, stops, close } = page();
     try {
       Object.defineProperty(window.navigator, 'userAgent', { value: agent, configurable: true });
+      run('layouts/Base.astro');
       run('components/Install.astro');
+      const marks = [...document.querySelectorAll('.hero .button svg')].filter((mark) => window.getComputedStyle(mark).display !== 'none');
+      assert.deepEqual(marks.map((mark) => mark.dataset.mark), [system], 'the hero\'s button wears the system\'s mark');
+      const name = { macos: 'macOS', windows: 'Windows', linux: 'Linux' }[system];
+      const label = [...document.querySelector('.hero .button').querySelectorAll('span:not(.mark)')]
+        .filter((span) => window.getComputedStyle(span).display !== 'none' && !span.querySelector('span'))
+        .map((span) => span.textContent).join('');
+      assert.equal(label, ` for ${name}`, 'and says what it downloads for');
       const panels = [...document.querySelectorAll('[data-picker] .panel')].filter((panel) => !panel.hidden);
       assert.equal(panels.length, 1);
       assert.equal(panels[0].dataset.os, system);
@@ -264,7 +271,6 @@ for (const [agent, system, button, listed] of [
       const rows = [...document.querySelectorAll('[data-listed]')].filter((row) => !row.hidden);
       assert.deepEqual(rows.map((row) => row.dataset.listed), listed);
       assert.ok(rows.every((row) => stops().includes(row.querySelector('a'))));
-      assert.equal(document.querySelectorAll('[data-select-app], [data-select-os]').length, 0);
     } finally { await close(); }
   });
 }
@@ -287,9 +293,10 @@ for (const [name, agent] of [
     try {
       const alerts = device(window, agent, 5);
       run('layouts/Base.astro');
+      run('components/Install.astro');
       assert.equal(stops().filter((stop) => stop.dataset?.file).length, 0);
       const links = [...document.querySelectorAll('a[href$="#install"]')];
-      assert.ok(links.length >= 2);
+      assert.ok(links.length >= 2, 'the header and the hero still offer the download');
       for (const link of links) link.click();
       assert.equal(alerts.length, links.length);
       assert.equal(alerts[0], 'Please open this page on a macOS, Windows or Linux device.');
@@ -303,7 +310,7 @@ test('a Mac, with no touch screen, keeps its downloads at any width', async () =
     const alerts = device(window, 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)', 0);
     run('layouts/Base.astro');
     assert.ok(stops().some((stop) => stop.dataset?.file));
-    document.querySelector('a[href$="#install"]').click();
+    document.querySelector('header a[href$="#install"]').click();
     assert.deepEqual(alerts, []);
   } finally { await close(); }
 });
@@ -312,6 +319,7 @@ test('section and skip links focus a visible action, never a heading or static r
   const { document, enabled, close } = page(components);
   try {
     const links = [...document.querySelectorAll('header a[href^="#"], a.skip')];
+    assert.ok(links.length >= 3);
     for (const link of links) {
       link.focus();
       link.click();
@@ -324,67 +332,6 @@ test('section and skip links focus a visible action, never a heading or static r
   } finally { await close(); }
 });
 
-test('on a wide screen every FAQ answer is shown, its question is no Tab stop, and inactive download panels never enter the Tab order', async () => {
-  const { window, document, stops, close } = page(components);
-  try {
-    const items = [...document.querySelectorAll('#faq details')];
-    assert.equal(items.length, 7);
-    const answerLinks = document.querySelectorAll('#faq .qa p a');
-    assert.ok(answerLinks.length >= 7);
-    for (const link of answerLinks) assert.ok(stops().includes(link));
-    for (const item of items) {
-      const summary = item.querySelector('summary');
-      assert.equal(item.open, true);
-      assert.ok(!stops().includes(summary), 'a question that toggles nothing is not a stop');
-      assert.equal(summary.getAttribute('aria-disabled'), 'true');
-      summary.click();
-      assert.equal(item.open, true, 'a click cannot close an answer on a wide screen');
-    }
-    const hiddenPanels = document.querySelectorAll('[data-picker] .panel[hidden]');
-    assert.equal(hiddenPanels.length, 2);
-    for (const panel of hiddenPanels) {
-      assert.equal(window.getComputedStyle(panel).display, 'none');
-      assert.ok(stops().every((element) => !panel.contains(element)));
-    }
-  } finally { await close(); }
-});
-
-test('on a narrow screen the FAQ answers start closed, and each question toggles its own', async () => {
-  const { document, stops, close } = page(components, 390);
-  try {
-    const items = [...document.querySelectorAll('#faq details')];
-    for (const item of items) {
-      const summary = item.querySelector('summary');
-      const link = item.querySelector('p a');
-      assert.equal(item.open, false);
-      assert.ok(stops().includes(summary));
-      assert.equal(summary.hasAttribute('aria-disabled'), false);
-      assert.ok(!stops().includes(link));
-    }
-    const [first, second] = items;
-    first.querySelector('summary').click();
-    assert.equal(first.open, true);
-    assert.equal(second.open, false);
-    assert.ok(stops().includes(first.querySelector('p a')));
-    assert.ok(!stops().includes(second.querySelector('p a')));
-    first.querySelector('summary').click();
-    assert.equal(first.open, false);
-    assert.ok(!stops().includes(first.querySelector('p a')));
-  } finally { await close(); }
-});
-
-test('the FAQ follows the window across its breakpoint', async () => {
-  const { window, document, close } = page(components, 1280);
-  try {
-    const items = [...document.querySelectorAll('#faq details')];
-    window.happyDOM.setViewport({ width: 390, height: 900 });
-    assert.ok(items.every((item) => !item.open && !item.querySelector('summary').hasAttribute('aria-disabled')));
-    items[0].querySelector('summary').click();
-    window.happyDOM.setViewport({ width: 1280, height: 900 });
-    assert.ok(items.every((item) => item.open && item.querySelector('summary').getAttribute('tabindex') === '-1'));
-  } finally { await close(); }
-});
-
 test('missing downloads leave focus on an available link and cannot be followed', async () => {
   const { window, document, run, stops, close } = page(['layouts/Base.astro']);
   try {
@@ -393,7 +340,7 @@ test('missing downloads leave focus on an available link and cannot be followed'
     run('components/Install.astro');
     const download = document.querySelector('[data-picker] .panel:not([hidden]) [data-file]');
     download.focus();
-    respond({ ok: true, json: async () => ({ version: '1.0', commit: 'abcdef123456', published: '2026-10-04', files: {} }) });
+    respond({ ok: true, json: async () => ({ version: '1.0.0', commit: 'abcdef123456', published: '2026-10-04', files: {} }) });
     await new Promise(setImmediate);
     assert.equal(download.hasAttribute('href'), false);
     assert.ok(!stops().includes(download));
@@ -401,11 +348,10 @@ test('missing downloads leave focus on an available link and cannot be followed'
   } finally { await close(); }
 });
 
-test('without JavaScript static content has no Tab stops, every FAQ answer is open and every download stays available', async () => {
+test('without JavaScript static content has no Tab stops, and every download stays available', async () => {
   const { document, stops, close } = page();
   try {
     assert.ok(stops().every((element) => element.matches(actions)));
-    assert.equal(document.querySelectorAll('#faq details:not([open])').length, 0);
     assert.equal(document.querySelectorAll('[data-picker] .panel[hidden]').length, 0);
     assert.ok(stops().filter((element) => element.matches('[data-file]')).length >= 6);
   } finally { await close(); }
@@ -417,17 +363,64 @@ test('the page writes no version into itself', () => {
   assert.equal(text.match(/Version\s+\d/g)?.length ?? 0, 0);
 });
 
-test('the site is one page, and each of its own links finds its section there', () => {
-  const pages = readdirSync(join(site, 'dist'), { recursive: true }).filter((file) => file.endsWith('.html'));
-  assert.deepEqual(pages, ['index.html']);
+test('each of the landing page\'s own links finds its section there', () => {
   const ids = new Set([...html.matchAll(/\sid="([^"]+)"/g)].map((match) => match[1]));
   const links = [...html.matchAll(/href="#([^"]*)"/g)].map((match) => match[1]);
-  for (const section of ['features', 'latency', 'agents', 'platforms', 'faq', 'install']) assert.ok(links.includes(section), section);
+  for (const section of ['top', 'install', 'agents', 'main']) assert.ok(links.includes(section), section);
   for (const link of links) assert.ok(ids.has(link), `#${link}`);
-  assert.doesNotMatch(html, /href="[^"#]*\/agents\b/);
 });
 
-test('the page does not name the apps as they were called before', () => {
+// The documentation: the repository's Markdown, built into dist/docs/.
+const built = (path) => {
+  const file = join(site, 'dist', path.replace(/^\//, ''), 'index.html');
+  return existsSync(file) ? readFileSync(file, 'utf8') : null;
+};
+const docs = () => readdirSync(join(site, 'dist/docs'), { recursive: true })
+  .filter((file) => file.endsWith('index.html'))
+  .map((file) => `/docs/${file.replace(/index\.html$/, '')}`.replace(/\/+$/, '/'));
+
+test('every page of the documentation is built, and listed beside every other', () => {
+  const pages = docs().sort();
+  assert.equal(pages.length, 19);
+  assert.ok(pages.includes('/docs/') && pages.includes('/docs/platforms/windows/') && pages.includes('/docs/agents/'));
+  const sitemap = readFileSync(join(site, 'dist/sitemap.xml'), 'utf8');
+  for (const page of pages) {
+    const html = built(page);
+    const sidebar = [...html.matchAll(/<aside class="pages"[\s\S]*?<\/aside>/g)][0][0];
+    assert.deepEqual([...sidebar.matchAll(/href="(\/docs\/[^"]*)"/g)].map((m) => m[1]).sort(), pages, page);
+    assert.match(sidebar, new RegExp(`href="${page}"[^>]*aria-current="page"`), `${page} is marked as the one open`);
+    assert.ok(sitemap.includes(`${page}</loc>`), `${page} is in the sitemap`);
+  }
+});
+
+test('every Markdown file in docs/ is a page of the documentation', async () => {
+  const { PAGES } = await import('../src/lib/docs.mjs');
+  const repo = dirname(site);
+  const files = readdirSync(join(repo, 'docs'), { recursive: true })
+    .filter((file) => file.endsWith('.md') && file !== 'README.md')
+    .map((file) => `docs/${file.split('\\').join('/')}`);
+  for (const file of files) assert.ok(PAGES.some((page) => page.file === file), `${file} is missing from src/lib/docs.mjs`);
+  for (const file of ['README.md', 'AGENTS.md', 'CONTRIBUTING.md', 'SECURITY.md']) {
+    assert.ok(PAGES.some((page) => page.file === file), file);
+  }
+});
+
+test('every link in the documentation leads to a page and a section that exist', () => {
+  for (const page of docs()) {
+    const html = built(page);
+    const article = html.match(/<article class="prose"[^>]*>([\s\S]*?)<\/article>/)[1];
+    for (const [, href] of article.matchAll(/<a [^>]*href="([^"]*)"/g)) {
+      if (/^[a-z]+:/i.test(href)) continue;
+      assert.doesNotMatch(href, /\.md(#|$)/, `${page}: ${href} is still a link to Markdown`);
+      const [path, anchor] = href.split('#');
+      const target = path ? built(path) : html;
+      assert.ok(target, `${page}: ${href} leads to no page`);
+      if (anchor) assert.ok(target.includes(`id="${anchor}"`), `${page}: ${href} leads to no section`);
+    }
+  }
+});
+
+test('the site does not name the apps as they were called before', () => {
   for (const file of ['dist/index.html', 'dist/robots.txt', 'dist/sitemap.xml']) {
     assert.doesNotMatch(readFileSync(join(site, file), 'utf8'), /pingpong|\bPing\b|\bPong\b/i);
   }

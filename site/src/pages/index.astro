@@ -1,20 +1,22 @@
 ---
-//! The landing page answers desktop streaming and remote gaming searches.
+//! The landing page: what Helio is, how fast it is against Moonlight, what
+//! the one app does, how it keeps a stream private, AI agents, and the
+//! downloads. Only what matters most is here; the rest is in the
+//! documentation (pages/docs), which the repository's own docs make.
 import Base from '../layouts/Base.astro';
 import Agents from '../components/Agents.astro';
-import Features from '../components/Features.astro';
-import FAQ from '../components/FAQ.astro';
 import Footer from '../components/Footer.astro';
 import Hero from '../components/Hero.astro';
 import Install from '../components/Install.astro';
 import Latency from '../components/Latency.astro';
 import Nav from '../components/Nav.astro';
-import Platforms from '../components/Platforms.astro';
+import OneApp from '../components/OneApp.astro';
+import Private from '../components/Private.astro';
 import { onGitHub } from '../lib/repo';
 
 const title = 'Helio: Open-source remote desktop & game streaming';
 const description =
-  'Free, open-source remote desktop and game streaming for macOS, Windows and Linux, at 3024×1890 and 120 fps, in a post-quantum WireGuard tunnel.';
+  'Free, open-source remote desktop and game streaming for macOS, Windows and Linux, as fast as Moonlight, in a post-quantum WireGuard tunnel.';
 const canonical = new URL(import.meta.env.BASE_URL.replace(/\/?$/, '/'), Astro.site);
 const structuredData = {
   '@context': 'https://schema.org',
@@ -42,16 +44,15 @@ const structuredData = {
 };
 ---
 
-<Base title={title} description={description} structuredData={structuredData}>
-  <Nav />
+<Base title={title} description={description} structuredData={structuredData} jumps>
+  <Nav landing />
   <main id="main">
     <Hero />
-    <Features />
     <Latency />
+    <OneApp />
+    <Private />
     <Agents />
-    <Platforms />
     <Install />
-    <FAQ />
   </main>
   <Footer />
 </Base>

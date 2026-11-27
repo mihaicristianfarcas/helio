@@ -1,44 +1,52 @@
-// Every figure the page quotes, with where it comes from. Change them here
-// when the documents they come from change.
+// Every figure the page quotes, with where it comes from: docs/benchmarks.md,
+// the 1.0.0 series. Change them here when that page changes.
+
+/** The conditions under every figure below, as the page states them. */
+export const SETUP =
+  'A 14″ MacBook Pro (M4 Pro) as the client, a Windows 11 PC with an RTX 3070 Ti as the host, on Ethernet; every stack at the same bitrate on the wire; timed while the client’s screen is recorded, the same way for each.';
+
+export interface Versus {
+  helio: number;
+  apollo: number;
+  sunshine: number;
+}
 
 /**
- * The recording on the page (public/media/stream-split.mp4), made by
- * scripts/record-stream.sh: a Linux host and client in one container
- * (tools/linux, release builds), the host's X screen showing a running
- * clock (scripts/clock-scene.py), 1280x720 at 60 fps, software H.264, over
- * loopback. Averages of the client's per-second statistics over 32 s of that
- * same run, the best of four (all four passed; this one had the lowest and
- * steadiest delay); network is 0.0 ms in every second (the statistics give
- * a tenth).
- * The clip samples both screens at 60 fps, so its two halves cannot show a
- * difference finer than a frame, 16.7 ms: read the delay from these figures,
- * not from the frame counter in the picture.
+ * "Click to frame, recorded", series F: a click in a game (the scene drawn
+ * every refresh) to the frame that shows it, median of five runs of 58
+ * clicks, in ms. Helio matches Apollo at 1080p60 and is faster at 1440p120;
+ * the other four modes are on that page.
  */
-export const RECORDING = {
-  mode: '1280×720 at 60 fps, H.264',
-  framesLost: 0,
-  hostMs: 2.63,
-  networkMs: 0,
-  decodeMs: 0.46,
-  renderMs: 1.84,
-  captureToScreenMs: 5.09,
-};
+export const CLICK: (Versus & { mode: string })[] = [
+  { mode: '1080p at 60 fps', helio: 54.1, apollo: 55.0, sunshine: 59.0 },
+  { mode: '1440p at 120 fps', helio: 51.5, apollo: 55.8, sunshine: 55.0 },
+];
 
 /**
- * docs/benchmarks.md, "Against Moonlight + Apollo": 3024x1890 at 120 fps,
- * 100 Mbit/s, HEVC, 7.1 audio; a 14" MacBook Pro (M4 Pro) on Wi-Fi, a
- * Windows 11 host with an RTX 3070 Ti and SudoVDA. Each side's own
- * statistics, not a camera: these lead the page until the glass-to-glass
- * section of that document has figures, which then go first. Round trip and
- * presentation are left out because the two clients do not measure them
- * alike (Helio's presentation runs to the glass, Moonlight's to its present
- * call), so "matches" rests on these three rows.
+ * "Starting a stream", in s: Helio's median of its three starts with no
+ * virtual display kept from an earlier session (1.02–1.23 s; a client back
+ * within a minute takes 0.42 s), Moonlight's medians with the host's monitor
+ * awake, whose starts are no faster after an earlier one. 2560x1440 at 120
+ * fps, on the release candidate before the two 60 fps fixes, which do not
+ * change the host at that rate.
  */
-export const VERSUS = [
-  { label: 'Frames shown', unit: 'fps', ours: '115.6', theirs: '110.0', better: 'higher' },
-  { label: 'Host processing', unit: 'ms', ours: '5.0', theirs: '5.6', better: 'lower' },
-  { label: 'Decode', unit: 'ms', ours: '1.6–2.0', theirs: '2.32', better: 'lower' },
-] as const;
+export const START: Versus = { helio: 1.1, apollo: 2.8, sunshine: 4.3 };
+
+/** "Frames shown", 2560x1440 at 120 fps, the counter scene: % of the host's frames. */
+export const FRAMES: Versus = { helio: 97.3, apollo: 86.4, sunshine: 83.4 };
+
+/** "Bad links", L1, 5% of packets lost both ways, 2560x1440 at 120 fps: % of the host's frames. */
+export const LOSS: Versus = { helio: 96.1, apollo: 84.3, sunshine: 85.2 };
+
+/**
+ * "Bad links", L4n: 60 Mbit/s, then 20 for 20 s, then 60, at 2560x1440 at
+ * 60 fps on noise; % of the host's frames shown while it narrows. Helio's
+ * is a floor: at 60 fps the recording misses frames it shows.
+ */
+export const NARROWING: Versus = { helio: 84.8, apollo: 40.5, sunshine: 20.7 };
+
+/** "Long sessions": an hour each at 2560x1440 at 120 fps, % of frames shown, mean of the minutes. */
+export const HOUR: Versus = { helio: 96.5, apollo: 85.2, sunshine: 85.0 };
 
 /** docs/benchmarks.md, pq-boringtun on an Apple M4 Pro (Criterion). */
 export const TUNNEL = {

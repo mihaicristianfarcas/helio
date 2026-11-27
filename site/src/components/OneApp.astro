@@ -1,0 +1,188 @@
+---
+//! One app, client and host: the Hosts window on Windows (the hero shows it
+//! on a Mac), Settings → Hosting as the app draws it on a PC with what it
+//! needs, and what a stream carries. The page is drawn here, not pictured,
+//! in the app's own words (helio-app/src/hosting.rs).
+import { Image } from 'astro:assets';
+import Card from './Card.astro';
+import Icon from './Icon.astro';
+import Point from './Point.astro';
+import Section from './Section.astro';
+import hosts from '../assets/windows/windows.webp';
+
+/** Settings → Hosting's "What it needs" on a PC that has all of it. */
+const needs = [
+  ['NVIDIA graphics', 'Streams in HEVC or AV1, encoded by the graphics card (NVENC).'],
+  ['SudoVDA', 'A virtual display at each device’s own resolution and refresh rate.'],
+  ['ViGEmBus', 'Each device’s controllers become Xbox controllers on this PC.'],
+];
+---
+
+<Section
+  id="app"
+  lead="One app, client and host."
+  rest="Play your computers, or host this one."
+>
+  <Card slot="cards" title="Every computer, one click away">
+    Hosts on your network show up by themselves, and paired ones are reached from anywhere. A click streams one, or
+    wakes it if it is asleep.
+    <div slot="visual" class="bleed">
+      <div class="shot">
+        <Image
+          src={hosts}
+          alt="Helio's Hosts page on Windows: gaming-pc and mac-studio online, living-room asleep, linux-box not paired yet."
+          widths={[640, 960, 1280]}
+          sizes="(max-width: 860px) 90vw, 640px"
+        />
+      </div>
+    </div>
+  </Card>
+  <Card slot="cards" title="Hosting is a switch">
+    Turn it on and this computer is a host too. Helio Host comes inside the app, and stays off until you do.
+    <div slot="visual" class="bleed">
+      <div class="page" aria-hidden="true">
+        <p class="page-title">Hosting</p>
+        <div class="rows">
+          <div class="row">
+            <p class="label">
+              Let my devices play this PC
+              <span class="sub">On: the host runs whenever you are signed in.</span>
+            </p>
+            <span class="switch"><span></span></span>
+          </div>
+        </div>
+        <p class="group">What it needs</p>
+        <div class="rows">
+          {
+            needs.map(([name, why]) => (
+              <div class="row">
+                <span class="tile">
+                  <Icon name="check-circle" size={16} />
+                </span>
+                <p class="label">
+                  {name}
+                  <span class="sub">{why}</span>
+                </p>
+              </div>
+            ))
+          }
+        </div>
+      </div>
+    </div>
+  </Card>
+  <Point slot="points" icon="display" title="Your screen’s resolution">
+    A virtual display at your screen’s size, so nothing is scaled (on Linux, under GNOME and KDE).
+  </Point>
+  <Point slot="points" icon="sparkle" title="HDR and 4:4:4">
+    HDR10 reaches Macs with HDR displays, and 4:4:4 keeps coloured text sharp.
+  </Point>
+  <Point slot="points" icon="gamepad" title="Controllers and 7.1 sound">
+    Up to 7.1 sound, and controllers on Windows hosts, with rumble.
+  </Point>
+</Section>
+
+<style>
+  /* The window runs off the card's bottom and right edges. */
+  .bleed {
+    flex: 1;
+    min-height: 0;
+    padding-left: 28px;
+    margin-bottom: -1px;
+  }
+
+  .bleed .shot {
+    border-right: 0;
+    border-bottom: 0;
+    border-radius: 12px 0 0 0;
+  }
+
+  /* Settings → Hosting, running off the card as the window beside it
+     does; on a short screen its last rows fade out at the card's foot. */
+  .page {
+    height: 100%;
+    padding: 20px 22px;
+    border: 1px solid var(--line-2);
+    border-right: 0;
+    border-bottom: 0;
+    border-radius: 12px 0 0 0;
+    background: rgb(var(--sky-5-rgb) / 0.06);
+    overflow: hidden;
+    mask-image: linear-gradient(to bottom, #000 calc(100% - 40px), transparent);
+  }
+
+  .page-title {
+    color: var(--text);
+    font-size: 0.95rem;
+    font-weight: 600;
+  }
+
+  .group {
+    margin-top: 16px;
+    color: var(--text-2);
+    font-size: 0.75rem;
+    font-weight: 500;
+  }
+
+  .rows {
+    margin-top: 8px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: rgb(var(--ink-rgb) / 0.35);
+  }
+
+  .row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 14px;
+  }
+
+  .row + .row {
+    border-top: 1px solid var(--line);
+  }
+
+  .label {
+    flex: 1;
+    min-width: 0;
+    color: var(--text);
+    font-size: 0.8125rem;
+    line-height: 1.4;
+  }
+
+  .sub {
+    display: block;
+    color: var(--text-3);
+    font-size: 0.75rem;
+  }
+
+  /* The app's tile: an icon on a rounded square. */
+  .tile {
+    display: grid;
+    flex-shrink: 0;
+    place-items: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+    background: rgb(var(--sky-5-rgb) / 0.14);
+    color: var(--sky-2);
+  }
+
+  /* The app's switch, on. */
+  .switch {
+    display: flex;
+    flex-shrink: 0;
+    justify-content: flex-end;
+    width: 36px;
+    height: 20px;
+    padding: 2px;
+    border-radius: 999px;
+    background: var(--sky-2);
+  }
+
+  .switch span {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: var(--ink);
+  }
+</style>

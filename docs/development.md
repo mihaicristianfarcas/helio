@@ -557,34 +557,47 @@ what they do not.
 
 ## The website
 
-`site/` is Helio's landing page, built with [Astro](https://astro.build)
-(Node 22.12 or newer). It reads the repository rather than copies of it
-where it can: the UI's icons in `helio-ui/assets/icons/`. Its
-downloads are the newest released version ([Releases](#releases)): the page
-links their fixed names (`src/lib/downloads.ts`) and, as it loads, reads
-`latest.json` for the version and the sizes. The GitHub button in the header
-shows the repository's stars: the build reads them from GitHub's API
-(`src/lib/stars.ts`, with the workflow's token; a build that cannot reach
-GitHub leaves the button without a count) and the page refreshes them as it
-loads, at most once an hour per browser. The page lives on the
-`landing-page` branch only, rebased on `main` and never merged into it.
-Each push to that branch that changes `site/` or the icons runs
-`.github/workflows/site.yml`, which builds the page and deploys it with
-wrangler to the Cloudflare Worker `helio-site` (`site/wrangler.jsonc`):
-static assets only, at
+`site/` is Helio's website, built with [Astro](https://astro.build) (Node
+22.12 or newer): the landing page, and the documentation. It reads the
+repository rather than copies of it: the UI's icons in
+`helio-ui/assets/icons/`, and this documentation, which it serves at
+`/docs/`. `src/lib/docs.mjs` lists the pages, in the groups
+[docs/README.md](README.md) uses: `README.md` as `/docs/`, every page in
+`docs/` and `docs/platforms/` at its name (`/docs/platforms/windows/`), and
+`AGENTS.md`, `CONTRIBUTING.md` and `SECURITY.md`. A new page in `docs/`
+gets a line there too; the site's tests fail without it. A link between
+pages stays on the site, its `#anchor` kept, and one to any other file in
+the repository goes to that file on GitHub. Pictures next to the Markdown
+are Astro's to size, and code is shown without highlighting, in the page's
+colours.
+
+Its downloads are the newest released version ([Releases](#releases)): the
+page links their fixed names (`src/lib/downloads.ts`) and, as it loads,
+reads `latest.json` for the version and the sizes.
+The GitHub button in the header shows the repository's stars: the build
+reads them from GitHub's API (`src/lib/stars.ts`, with the workflow's
+token; a build that cannot reach GitHub leaves the button without a count)
+and the page refreshes them as it loads, at most once an hour per browser.
+
+The site lives on the `landing-page` branch only, rebased on `main` and
+never merged into it. Each push to that branch that changes `site/` or the
+icons runs `.github/workflows/site.yml`, which builds the site and deploys
+it with wrangler to the Cloudflare Worker `helio-site`
+(`site/wrangler.jsonc`): static assets only, at
 [helio.mihaicristian.dev](https://helio.mihaicristian.dev), a custom
 domain whose DNS record the Worker owns. The workflow signs in with the
 repository's secret `CLOUDFLARE_SITE_TOKEN`, an API token from the **Edit
 Cloudflare Workers** template for the account and the zone
-`mihaicristian.dev`.
+`mihaicristian.dev`. The documentation it serves is the documentation of
+the commit it was built from.
 
 ```sh
 cd site
 npm install
 npm run dev       # http://localhost:4321, reloading as you edit
-npm run build     # astro check, then the page in site/dist/
+npm run build     # astro check, then the site in site/dist/
 npm run preview   # serves site/dist/
-npm test          # builds the page, then checks its DOM keyboard behaviour
+npm test          # builds the site, then checks it (tests/keyboard.test.mjs)
 npx wrangler deploy   # after a build: deploys site/dist/, as the workflow does
 ```
 
@@ -592,35 +605,39 @@ npx wrangler deploy   # after a build: deploys site/dist/, as the workflow does
 (default `/`) set the deployment URL and path. The canonical URL,
 link-preview image URLs, software structured data, `robots.txt` and
 `sitemap.xml` all use that deployment URL. The sitemap lists the landing
-page, the site's only page, without section anchors or a build-time
-last-modified date. Preview
-deployments should use their host’s indexing controls to keep previews out
-of search results.
+page and every page of the documentation, without section anchors or a
+build-time last-modified date. Preview deployments should use their host's
+indexing controls to keep previews out of search results.
+
+`npm test` checks, on the built site, the landing page's keyboard order,
+its downloads for each system and on phones, the star count, and that every
+page of the documentation is built, listed beside the others and in the
+sitemap, and that each of its links leads to a page and a section that
+exist. It runs in a simulated DOM (happy-dom), not a browser: rendering and
+screen readers are checked by hand.
 
 What it shows is made from the app, by scripts in `site/scripts/`:
 
 | Script | Makes |
 |---|---|
-| `capture-hero.sh` | The hero's pictures in `src/assets/hero/`: the Hosts page (`hosts-sample`) on macOS's and Windows' default wallpapers, 2700x1800, as each desktop composites it. The script's header says how each is made; `hero/` holds what runs there. |
-| `record-stream.sh` | The stream video in `public/media/`: a Linux host and client in the container (`tools/linux-dev`), the host showing a running clock (`clock-scene.py`), both screens read at the same instants from Xvfb's framebuffers (`grab-screens.py`) and set side by side; and the averages of the client's statistics, for `src/lib/facts.ts`. A run whose slowest second fell below 55 fps (the VM starved, both sides at once) is refused and made again. |
+| `capture-hero.sh` | The pictures of the app in `src/assets/hero/`: the Hosts page (`hosts-sample`) on macOS's and Windows' default wallpapers and an agent's session, 2700x1800, as each desktop composites it; the hero shows the first two. Then the window alone, cut from each (`crop-windows.mjs`). The script's header says how each is made; `hero/` holds what runs there. |
+| `crop-windows.mjs` | The window alone from each picture in `src/assets/hero/`, into `src/assets/windows/`, for the sections' cards. |
+| `og-card.html` | The link preview, `public/og.jpg`: the page's title beside the hero's two pictures. Any headless browser renders it at 1200x630. |
 
-The pictures name no version: under `HELIO_UI_DEMO` the window leaves it out,
-and the install card is the one place the site says it, from `latest.json`.
-The AI agents section shows the sample agent session
-(`src/assets/hero/agent.webp`) beside `src/assets/hero/agent-screen.webp`, the
-screen that session shows, a real screenshot of a Windows desktop holding the
-files it talks about (`hero/windows/agentshot.ps1`). `og-card.html` is the link preview
-(`public/og.jpg`), the hero's pictures on the page's sky
-(`src/lib/sky.js`, which needs WebGL); any headless browser renders it at
-1200x630.
-`src/assets/helio.svg` and `public/favicon.svg` are the site's `helio.svg`
-from `make-icon`
+The pictures name no version: under `HELIO_UI_DEMO` the window leaves it
+out, and the install section is the one place the site says it, from
+`latest.json`. The agent's session (`src/assets/windows/agent.webp`) shows
+a real screenshot of a Windows desktop holding the files it talks about
+(`hero/windows/agentshot.ps1`). `src/assets/helio.svg` and
+`public/favicon.svg` are the site's `helio.svg` from `make-icon`
 ([Assets](#assets)).
 
-Every figure on the page is one from the documentation or from that
-recording, with the conditions it was measured under, and lives in
-`src/lib/facts.ts` with where it comes from. When a figure there changes,
-change it on the page too.
+The landing page's colours are the logo's: its ink and the app's five
+accent blues (`helio-ui/src/theme.rs`), and nothing else
+(`src/styles/global.css`). Every figure on it is one from
+[benchmarks.md](benchmarks.md), with the conditions it was measured under,
+and lives in `src/lib/facts.ts` with where it comes from. When a figure
+there changes, change it on the page too.
 
 ## Assets
 

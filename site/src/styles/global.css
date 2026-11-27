@@ -1,65 +1,69 @@
 /*
- * Helio's page: the ink of the logo's h behind everything (ACCENT_INK in
- * helio-ui/src/theme.rs), plain where the text is and quietly waved along the
- * window's edges (lib/sky.js), cool greys for text, and the app's soft blue for the one
- * main action, links and data (ACCENT, ACCENT_LIGHT, ACCENT_DEEP). Nothing
- * moves but the stream video. The screenshots are the app's dark appearance,
- * so the page is dark too.
+ * Helio's page, in the logo's colours and nothing else: its ink, the h
+ * (ACCENT_INK in helio-ui/src/theme.rs), behind everything, and its sky,
+ * five blues (ACCENT_LIGHT, ACCENT, two steps between, ACCENT_DEEP), for
+ * text, lines, the one main action and data. Quieter text is the lightest
+ * blue let through over the ink, never a grey of its own. Plain ink, no
+ * texture: the pictures and the type carry the page.
+ *
+ * The layout follows zeron.sh: one column of one width, a statement for each
+ * section with its first sentence lit and the rest quiet, framed cards under
+ * it and a row of three points.
  */
 
 :root {
   color-scheme: dark;
 
-  --bg: #16213a;
-  --bg-rgb: 22 33 58;
-  /* Panels let the background through. */
-  --surface: rgb(255 255 255 / 0.04);
-  --surface-2: rgb(255 255 255 / 0.07);
+  --ink: #16213a;
+  --ink-rgb: 22 33 58;
+  --sky-1: #d1dff6;
+  --sky-2: #c2d6f6;
+  --sky-3: #b2cbf2;
+  --sky-4: #a0bff0;
+  --sky-5: #92b6f0;
+  --sky-rgb: 209 223 246;
+  --sky-5-rgb: 146 182 240;
 
-  --text: #eef1f7;
-  --text-2: #c6cedd;
-  /* The faintest text that still clears 4.5:1 on the bluest of the
-     background, and on a panel there. */
-  --text-3: #bcc4d4;
+  --bg: var(--ink);
+  --text: var(--sky-1);
+  /* Running text: 5.4:1 on the ink. */
+  --text-2: rgb(var(--sky-rgb) / 0.62);
+  /* Notes and captions, the faintest small text: 4.6:1. */
+  --text-3: rgb(var(--sky-rgb) / 0.56);
+  /* A statement's second half, at a title's size only: 3.9:1. */
+  --text-quiet: rgb(var(--sky-rgb) / 0.5);
 
-  --line: rgb(255 255 255 / 0.09);
-  --line-2: rgb(255 255 255 / 0.16);
+  --line: rgb(var(--sky-rgb) / 0.1);
+  --line-2: rgb(var(--sky-rgb) / 0.18);
+  --card: rgb(var(--sky-rgb) / 0.035);
+  --card-2: rgb(var(--sky-rgb) / 0.07);
 
-  /* The app's, exactly. */
-  --accent: #c2d6f6;
-  --accent-rgb: 194 214 246;
-  --accent-hover: #d1dff6;
-  --accent-deep: #92b6f0;
-  --on-accent: #16213a;
-  /* Data: an ordinal ramp down from the accent, light to dark, and a grey
-     for the rest; each at least 2:1 on the bluest of the background. */
-  --data-1: #c2d6f6;
-  --data-2: #92b6f0;
-  --data-3: #6a93d6;
-  --data-4: #5a86cb;
-  --data-muted: #7a8399;
+  --accent: var(--sky-2);
+  --accent-hover: var(--sky-1);
+  --on-accent: var(--ink);
 
   /* Geist and its metric-matched fallbacks (astro.config.mjs, fonts). */
   --font: var(--font-geist);
   --mono: var(--font-geist-mono);
 
-  /* One line length for running text, so paragraphs wrap at the same place. */
-  --measure: 44rem;
-  --title-size: clamp(1.75rem, 1.3rem + 1.6vw, 2.5rem);
-  /* The space, by eye, from a title to its lede and from a block to the note
-     under it. A title's own leading grows with it, hence the share of its size
-     here: with a fixed margin the two drift apart as the window narrows. */
-  --gap-note: calc(14px + var(--title-size) / 3);
-  /* From a heading and its text to what they introduce. */
-  --gap-head: clamp(36px, 5vw, 56px);
-  /* Between the parts of a section. */
-  --gap-part: clamp(56px, 7vw, 80px);
+  /* One line length for running text. */
+  --measure: 40rem;
+  --hero-size: clamp(2.6rem, 1.5rem + 4.4vw, 4.6rem);
+  --statement-size: clamp(1.75rem, 1.25rem + 1.6vw, 2.5rem);
+  /* Between sections, and from a statement to what it introduces. Each
+     section fits in a laptop's screen under the header (1440x790 in
+     Safari), so the gaps give way to the content as the screen gets
+     shorter. */
+  --gap-section: clamp(96px, 10vw, 144px);
+  --gap-head: clamp(28px, 4.5vh, 48px);
+  /* A card's height in a section, from the screen's. */
+  --card-height: clamp(300px, calc(100svh - 430px), 440px);
 
-  --radius: 12px;
+  --radius: 16px;
   --radius-sm: 8px;
   --gutter: 24px;
-  --max: 1280px;
-  --nav: 60px;
+  --max: 1200px;
+  --nav: 64px;
 }
 
 @media (max-width: 640px) {
@@ -116,6 +120,14 @@ video {
   max-width: 100%;
 }
 
+/* Pictures are to look at: a click or a drag goes through them, and
+   nothing picks them up to drag away or select. */
+img {
+  -webkit-user-drag: none;
+  user-select: none;
+  pointer-events: none;
+}
+
 h1,
 h2,
 h3,
@@ -132,35 +144,31 @@ p {
 }
 
 a {
-  color: var(--accent);
+  color: var(--text);
   text-decoration: none;
-}
-
-a:hover {
-  text-decoration: underline;
-  text-underline-offset: 3px;
 }
 
 /* A link inside a sentence is underlined, not told apart by its colour
    alone. */
-:is(p, figcaption, li) a {
+:is(p, figcaption, li, td) a {
   text-decoration: underline;
-  text-decoration-color: rgb(var(--accent-rgb) / 0.45);
-  text-underline-offset: 3px;
+  text-decoration-color: var(--line-2);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.22em;
 }
 
-:is(p, figcaption, li) a:hover {
+:is(p, figcaption, li, td) a:hover {
   text-decoration-color: currentColor;
 }
 
 :focus-visible {
-  outline: 3px solid var(--accent);
+  outline: 2px solid var(--sky-2);
   outline-offset: 3px;
   border-radius: 4px;
 }
 
-:where(a[href], button, summary, input, select, textarea, video[controls]) {
-  scroll-margin-block: 16px;
+:where(a[href], button, summary, input, select, textarea) {
+  touch-action: manipulation;
 }
 
 /* First on the page for the keyboard, shown only when it has the focus. */
@@ -171,9 +179,8 @@ a:hover {
   z-index: 100;
   padding: 8px 14px;
   border-radius: var(--radius-sm);
-  background: var(--text);
-  color: var(--bg);
-  font-weight: 500;
+  background: var(--accent);
+  color: var(--on-accent);
   transform: translateY(-200%);
 }
 
@@ -182,25 +189,22 @@ a:hover {
 }
 
 ::selection {
-  background: rgb(var(--accent-rgb) / 0.35);
-  color: #fff;
+  background: rgb(var(--sky-5-rgb) / 0.4);
+  color: var(--sky-1);
 }
 
+pre,
 code,
-kbd,
-pre {
+kbd {
   font-family: var(--mono);
-  font-size: 0.875em;
 }
 
-:not(pre) > code,
 kbd {
-  padding: 0.1em 0.4em;
+  padding: 1px 6px;
   border: 1px solid var(--line-2);
   border-radius: 5px;
-  background: var(--surface-2);
   color: var(--text);
-  white-space: nowrap;
+  font-size: 0.85em;
 }
 
 .wrap {
@@ -208,101 +212,6 @@ kbd {
   max-width: calc(var(--max) + 2 * var(--gutter));
   margin-inline: auto;
   padding-inline: var(--gutter);
-}
-
-.section {
-  padding-block: clamp(64px, 8vw, 112px);
-  border-top: 1px solid var(--line);
-}
-
-/* A section's opening: a label, a title, a sentence or two. The title keeps
-   the measure; the sentence under it runs the column (.lede). */
-.head {
-  margin-bottom: var(--gap-head);
-}
-
-.head .title {
-  max-width: var(--measure);
-}
-
-.eyebrow {
-  display: block;
-  margin-bottom: 12px;
-  color: var(--accent);
-  font-size: 0.875rem;
-  font-weight: 500;
-}
-
-.title {
-  font-size: var(--title-size);
-  letter-spacing: -0.025em;
-  line-height: 1.15;
-}
-
-/* The sentence under a title runs the width it has and breaks only where
-   that ends: no measure, and no early breaks to even out the lines. */
-.lede {
-  margin-top: 16px;
-  font-size: clamp(1rem, 0.96rem + 0.2vw, 1.125rem);
-  text-wrap: wrap;
-}
-
-/* A numbered row: the steps to a first stream, and the host's rules for agents. */
-.steps {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 32px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  counter-reset: step;
-}
-
-.steps li {
-  display: grid;
-  grid-template-columns: 28px 1fr;
-  align-content: start;
-  column-gap: 16px;
-  counter-increment: step;
-}
-
-.steps li::before {
-  content: counter(step);
-  grid-row: span 2;
-  display: grid;
-  place-items: center;
-  width: 28px;
-  height: 28px;
-  border: 1px solid var(--line-2);
-  border-radius: 50%;
-  color: var(--text);
-  font-size: 0.8125rem;
-}
-
-.steps :is(h3, h4) {
-  font-size: 1rem;
-  line-height: 28px;
-}
-
-.steps p {
-  margin-top: 2px;
-  font-size: 0.9375rem;
-}
-
-@media (max-width: 860px) {
-  .steps {
-    grid-template-columns: 1fr;
-    gap: 24px;
-  }
-}
-
-/* The small line under a block runs the width it has and breaks only where
-   that ends, as a title's .lede does. */
-.note {
-  color: var(--text-3);
-  font-size: 0.875rem;
-  line-height: 1.55;
-  text-wrap: wrap;
 }
 
 .num {
@@ -314,31 +223,35 @@ kbd {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  min-height: 42px;
-  padding: 8px 18px;
+  min-height: 40px;
+  padding: 0 18px;
   border: 1px solid transparent;
   border-radius: var(--radius-sm);
+  font: inherit;
   font-size: 0.9375rem;
   font-weight: 500;
+  line-height: 1;
   white-space: nowrap;
+  cursor: pointer;
   transition:
-    background-color 0.15s,
-    border-color 0.15s;
+    background-color 150ms ease,
+    border-color 150ms ease;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    transition: none !important;
+  .button {
+    transition: none;
   }
 }
 
-.button:hover {
-  text-decoration: none;
+.button.small {
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: 6px;
+  font-size: 0.8125rem;
 }
 
-/* The app's one main action on a page. */
+/* The page's one main action. */
 .button.primary {
   background: var(--accent);
   color: var(--on-accent);
@@ -349,13 +262,13 @@ kbd {
 }
 
 .button.secondary {
-  border-color: var(--line-2);
+  border-color: var(--line);
+  background: var(--card-2);
   color: var(--text);
 }
 
 .button.secondary:hover {
-  border-color: rgb(255 255 255 / 0.3);
-  background: var(--surface-2);
+  border-color: var(--line-2);
 }
 
 .visually-hidden {
@@ -368,4 +281,47 @@ kbd {
   clip: rect(0 0 0 0);
   white-space: nowrap;
   border: 0;
+}
+
+/* The small line under a block. */
+.note {
+  color: var(--text-3);
+  font-size: 0.875rem;
+  line-height: 1.55;
+  text-wrap: wrap;
+}
+
+/* A rule between the landing page's sections, the width of the page; not
+   under the hero, whose pictures end it. */
+main > section:not(.hero) + section {
+  border-top: 1px solid var(--line);
+}
+
+/* A section's statement, as zeron.sh's: the first sentence lit, the rest
+   quiet, one heading. */
+.statement {
+  max-width: 56rem;
+  font-size: var(--statement-size);
+  line-height: 1.12;
+  letter-spacing: -0.03em;
+}
+
+/* The quiet half starts a line of its own. */
+.statement .rest {
+  display: block;
+  color: var(--text-quiet);
+}
+
+/* An app window, framed: the shots are cut at the window's edge
+   (scripts/crop-windows.mjs), and these corners cover what the window's own
+   rounded corners left of the wallpaper. */
+.shot {
+  border: 1px solid var(--line-2);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.shot img {
+  width: 100%;
+  height: auto;
 }

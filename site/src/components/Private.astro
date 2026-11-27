@@ -1,0 +1,129 @@
+---
+//! The tunnel and the way to a host: one post-quantum WireGuard tunnel for
+//! everything, pairing by PIN (This computer → Devices, from the app's demo:
+//! scripts/capture-hero.sh), and NAT traversal without a relay, the path
+//! docs/networking.md describes.
+import { Image } from 'astro:assets';
+import Card from './Card.astro';
+import Point from './Point.astro';
+import Section from './Section.astro';
+import { TUNNEL } from '../lib/facts';
+import devices from '../assets/windows/devices.webp';
+---
+
+<Section
+  id="private"
+  lead="Private, from anywhere."
+  rest="One post-quantum tunnel, no ports to forward."
+>
+  <Card slot="cards" title="Post-quantum, end to end">
+    Picture, sound, input and the clipboard share one WireGuard tunnel with ML-KEM-768, at {TUNNEL.encrypt1200} per
+    1,200-byte packet. A device pairs once, with a PIN.
+    <div slot="visual" class="bleed">
+      <div class="shot">
+        <Image
+          src={devices}
+          alt="Helio's Devices page on a Mac: MacBook Air asks to pair, with a field for its PIN, above three paired devices, each with what it may do."
+          widths={[640, 960, 1280]}
+          sizes="(max-width: 860px) 90vw, 640px"
+        />
+      </div>
+    </div>
+  </Card>
+  <Card slot="cards" title="No ports to forward">
+    Hosts publish sealed records on the BitTorrent DHT, and both sides punch through their routers, with no relay and
+    no VPN.
+    <div slot="visual" class="pad">
+      <svg class="path" viewBox="0 0 420 150" role="img" aria-labelledby="path-title">
+        <title id="path-title">
+          Your computer and the host each behind a router, finding each other through the DHT and connecting directly.
+        </title>
+        <g class="dashed">
+          <path d="M70 96 Q 70 29 160 29"></path>
+          <path d="M350 96 Q 350 29 260 29"></path>
+        </g>
+        <path class="direct" d="M120 118 H 300"></path>
+        <g class="node">
+          <rect x="20" y="96" width="100" height="44" rx="10"></rect>
+          <text x="70" y="123">Your Mac</text>
+        </g>
+        <g class="node">
+          <rect x="300" y="96" width="100" height="44" rx="10"></rect>
+          <text x="350" y="123">gaming-pc</text>
+        </g>
+        <g class="cloud">
+          <rect x="160" y="12" width="100" height="34" rx="17"></rect>
+          <text x="210" y="34">DHT</text>
+        </g>
+      </svg>
+    </div>
+  </Card>
+  <Point slot="points" icon="key" title="Permissions for each device">
+    Choose what each device may do: watch, type, click, copy and paste, start apps.
+  </Point>
+  <Point slot="points" icon="copy" title="The clipboard, both ways">
+    Text, images, files and folders; on macOS and Windows, never a password manager’s copies.
+  </Point>
+  <Point slot="points" icon="globe" title="One exception">
+    When both sides are behind symmetric NAT, nothing relays the stream: forward UDP 47800 to the host.
+  </Point>
+</Section>
+
+<style>
+  /* The window runs off the card's bottom and right edges. */
+  .bleed {
+    flex: 1;
+    min-height: 0;
+    padding-left: 28px;
+    margin-bottom: -1px;
+  }
+
+  .bleed .shot {
+    border-right: 0;
+    border-bottom: 0;
+    border-radius: 12px 0 0 0;
+  }
+
+  .pad {
+    padding: 0 28px 28px;
+  }
+
+  .path {
+    width: 100%;
+    height: auto;
+  }
+
+  .path text {
+    fill: var(--text);
+    font-family: var(--font);
+    font-size: 13px;
+    text-anchor: middle;
+  }
+
+  .node rect {
+    fill: var(--card-2);
+    stroke: var(--line-2);
+  }
+
+  .cloud rect {
+    fill: none;
+    stroke: var(--sky-5);
+    stroke-dasharray: 3 4;
+  }
+
+  .cloud text {
+    fill: var(--text-2);
+  }
+
+  .dashed path {
+    fill: none;
+    stroke: rgb(var(--sky-5-rgb) / 0.5);
+    stroke-dasharray: 3 5;
+  }
+
+  .direct {
+    fill: none;
+    stroke: var(--sky-2);
+    stroke-width: 2;
+  }
+</style>
