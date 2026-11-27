@@ -393,6 +393,16 @@ test('every page of the documentation is built, and listed beside every other', 
   }
 });
 
+test('the Overview starts on its text, without the link preview the hero already shows', () => {
+  const readme = readFileSync(join(dirname(site), 'README.md'), 'utf8');
+  assert.ok(readme.includes('](docs/images/helio.jpg)'), 'README.md opens on the link preview');
+  const overview = built('/docs/').match(/<article class="prose"[^>]*>([\s\S]*?)<\/article>/)[1];
+  const pictures = [...overview.matchAll(/<img [^>]*alt="([^"]*)"/g)].map((m) => m[1]);
+  assert.ok(pictures.length > 0, 'the Overview keeps its other pictures');
+  assert.ok(!pictures.some((alt) => alt.startsWith('Helio: low-latency')), pictures.join('\n'));
+  assert.ok(!/<p>\s*<\/p>/.test(overview), 'no empty paragraph is left where it was');
+});
+
 test('every Markdown file in docs/ is a page of the documentation', async () => {
   const { PAGES } = await import('../src/lib/docs.mjs');
   const repo = dirname(site);
