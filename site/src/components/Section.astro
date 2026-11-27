@@ -23,8 +23,10 @@ const { id, lead, rest } = Astro.props;
 </section>
 
 <style>
+  /* As far from the rule under it as from the one above, where the
+     sections stack (a phone, a narrow window). */
   .section {
-    padding-top: var(--gap-section);
+    padding-block: var(--gap-section);
   }
 
   /* On a computer's screen each section is one screen tall under the
