@@ -63,11 +63,22 @@ export const idOf = (file) => {
 export const hrefOf = (base, slug) => `${base.replace(/\/?$/, '/')}docs/${slug ? `${slug}/` : ''}`;
 
 /**
+ * The README's first picture is the site's link preview (public/og.jpg),
+ * whose two windows the landing page's hero already shows; the Overview
+ * page goes without it, and starts on the text.
+ */
+const PREVIEW = { file: 'README.md', src: 'docs/images/helio.jpg' };
+
+/**
  * A Sätteri hast plugin (Astro's Markdown processor): a link in a page goes
  * where it went on GitHub. One to another page becomes that page here, its
  * #anchor kept (Astro gives headings GitHub's ids); one to anything else in
  * the repository, a source file or a folder, goes to it on GitHub. Pictures
- * are left to Astro, which finds them beside the Markdown.
+ * are left to Astro, which finds them beside the Markdown, but for the
+ * README's link preview (PREVIEW), which is taken out with its paragraph.
+ * Astro keeps a page's render (.astro/ and node_modules/.astro/, each a
+ * data-store.json) while its Markdown is unchanged, so a change here shows
+ * once those are deleted.
  */
 export function docLinks({ root, base }) {
   const byFile = new Map(PAGES.map((page) => [page.file, page]));
@@ -90,8 +101,15 @@ export function docLinks({ root, base }) {
     return {
       name: 'helio-doc-links',
       element: {
-        filter: ['a'],
+        filter: ['a', 'img'],
         visit(node, ctx) {
+          if (node.tagName === 'img') {
+            if (from === PREVIEW.file && node.properties?.src === PREVIEW.src) {
+              const paragraph = ctx.parent(node);
+              ctx.removeNode(paragraph?.type === 'element' && paragraph.tagName === 'p' ? paragraph : node);
+            }
+            return;
+          }
           const href = node.properties?.href;
           if (typeof href === 'string') ctx.setProperty(node, 'href', rewrite(href, from));
         },
