@@ -1,34 +1,210 @@
 ---
-//! What Helio is and the way to the downloads, with what a stream can be
-//! along the bottom. The pictures are one window on macOS's and
-//! Windows' default wallpapers, as each desktop composites it
-//! (scripts/capture-hero.sh). The version is the install card's
-//! to say, from the downloads' own latest.json.
-import PageHero from './PageHero.astro';
-import Specs from './Specs.astro';
-import { REPO } from '../lib/repo';
+//! The page's opening, as zeron.sh opens its own: what Helio is, one
+//! sentence, the downloads (Install.astro) and the repository; then the app on both of the best-tested pair's
+//! desktops, as each composites it (scripts/capture-hero.sh): the Mac, the
+//! client, in front of the Windows host.
+import { Image } from 'astro:assets';
+import Icon from './Icon.astro';
+import SystemMark from './SystemMark.astro';
 import macos from '../assets/hero/macos.webp';
 import windows from '../assets/hero/windows.webp';
+import { RELEASE_NOTES, REPO, VERSION } from '../lib/repo';
+import { short, stars } from '../lib/stars';
 
+const count = await stars();
 const alt = (desktop: string) =>
   `Helio on ${desktop}, on its default wallpaper: the Hosts page with three paired hosts, two online, and one more found on the network.`;
+const shots = [
+  { src: windows, alt: alt('Windows 11'), place: 'back' },
+  { src: macos, alt: alt('macOS'), place: 'front' },
+];
 ---
 
-<!-- The best-tested setup: the Mac, the client, in front of the Windows host. -->
-<PageHero
-  id="top"
-  title={['Low-latency', 'remote desktop', 'and game streaming']}
-  actions={[
-    { label: 'Download', href: '#install', primary: true },
-    { label: 'View on GitHub', href: REPO },
-  ]}
-  shots={[
-    { src: windows, alt: alt('Windows 11'), place: 'back' },
-    { src: macos, alt: alt('macOS'), place: 'front' },
-  ]}
->
-  Stream a computer’s desktop and games to another, inside one post-quantum WireGuard tunnel.<br />
-  One app for macOS, Windows and Linux, with hosting a switch you turn on.<br />
-  Free and open source.
-  <Specs slot="foot" />
-</PageHero>
+<section class="hero" id="top">
+  <div class="wrap">
+    <a class="news" href={RELEASE_NOTES}><Icon name="sparkle" size={14} />What’s new in v{VERSION}</a>
+    <h1>
+      <span class="phrase">Low-latency remote desktop</span>
+      <span class="phrase">and game streaming</span>
+    </h1>
+    <p class="lead">
+      Stream a computer’s desktop and games to another, inside one post-quantum WireGuard tunnel. One app for macOS,
+      Windows and Linux, free and open source.
+    </p>
+    <div class="actions">
+      <a class="button primary" href="#install">
+        <span class="mark">
+          <Icon name="download" size={17} />
+          <SystemMark system="macos" />
+          <SystemMark system="windows" />
+          <SystemMark system="linux" />
+        </span>
+        <span
+          >Download<span data-for="macos"> for macOS</span><span data-for="windows"> for Windows</span><span
+            data-for="linux"> for Linux</span
+          ></span
+        >
+      </a>
+      <a class="star" href={REPO}>
+        Star on GitHub
+        {count !== null && <span class="num" data-count>{short(count)}</span>}
+        <Icon name="chevron-right" size={12} />
+      </a>
+    </div>
+  </div>
+  <div class="wrap stage">
+    <div class="pair">
+      {
+        shots.map((shot, i) => (
+          <figure class={shot.place}>
+            <Image
+              src={shot.src}
+              alt={shot.alt}
+              widths={[640, 960, 1280, 1600, 2000]}
+              sizes="(max-width: 1248px) 84vw, 1008px"
+              loading="eager"
+              fetchpriority={i === shots.length - 1 ? 'high' : undefined}
+            />
+          </figure>
+        ))
+      }
+    </div>
+  </div>
+</section>
+
+<style>
+  .hero {
+    display: flex;
+    flex-direction: column;
+    padding-top: clamp(48px, 10vh, 128px);
+  }
+
+  /* The release's notes, over the title. */
+  .news {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: min(24px, 3vh);
+    padding: 4px 12px 4px 10px;
+    border: 1px solid var(--line-2);
+    border-radius: 999px;
+    color: var(--text-2);
+    font-size: 0.8125rem;
+    font-weight: 500;
+  }
+
+  .news:hover {
+    border-color: rgb(255 255 255 / 0.3);
+    color: var(--text);
+    text-decoration: none;
+  }
+
+  h1 {
+    font-size: min(var(--hero-size), 7.5vh);
+    line-height: 1.02;
+    letter-spacing: -0.045em;
+  }
+
+  /* The title breaks between its phrases, not inside them. */
+  .phrase {
+    display: inline-block;
+  }
+
+  .lead {
+    max-width: 52rem;
+    margin-top: min(28px, 3vh);
+    font-size: clamp(1.05rem, 0.95rem + 0.4vw, 1.25rem);
+    line-height: 1.55;
+  }
+
+  .actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px 28px;
+    margin-top: min(40px, 4.5vh);
+  }
+
+  /* The visitor's system's mark and name (layouts/Base.astro, before the
+     first paint), or the download arrow and Download alone where there is
+     none. */
+  .mark {
+    display: flex;
+  }
+
+  .mark > :global(svg),
+  [data-for] {
+    display: none;
+  }
+
+  :global(:root[data-os='macos']) [data-for='macos'],
+  :global(:root[data-os='windows']) [data-for='windows'],
+  :global(:root[data-os='linux']) [data-for='linux'] {
+    display: inline;
+  }
+
+  :global(:root:not([data-os])) .mark > :global(svg:first-child),
+  :global(:root[data-os='macos']) .mark > :global([data-mark='macos']),
+  :global(:root[data-os='windows']) .mark > :global([data-mark='windows']),
+  :global(:root[data-os='linux']) .mark > :global([data-mark='linux']) {
+    display: block;
+  }
+
+  .star {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    color: var(--text-2);
+    font-size: 0.9375rem;
+    font-weight: 500;
+  }
+
+  .star:hover {
+    color: var(--text);
+  }
+
+  .stage {
+    display: grid;
+    justify-items: end;
+    padding-top: clamp(32px, 5vh, 64px);
+  }
+
+  /* One picture behind, up and to the right; the other in front of it,
+     lower and to the left, both in one grid cell, as wide as the page. The
+     offsets are shares of the pair's width, so it keeps its shape at every
+     size: --drop plus 3:2 of --share of its width tall. The first screen
+     shows the text and the pair's top; the rest of it follows, whole, as
+     the page scrolls. */
+  .pair {
+    --share: 0.76;
+    --drop: 0.17;
+    display: grid;
+    width: 100%;
+  }
+
+  .pair > figure {
+    grid-area: 1 / 1;
+    width: calc(var(--share) * 100%);
+    margin: 0;
+  }
+
+  .pair > .back {
+    justify-self: end;
+    align-self: start;
+  }
+
+  .pair > .front {
+    z-index: 1;
+    justify-self: start;
+    margin-top: calc(var(--drop) * 100%);
+  }
+
+  .pair :global(img) {
+    width: 100%;
+    height: auto;
+    border: 1px solid var(--line-2);
+    border-radius: 14px;
+    /* To look at only: not dragged, selected or opened on their own. */
+    pointer-events: none;
+  }
+</style>

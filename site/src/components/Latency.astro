@@ -1,449 +1,156 @@
 ---
-//! Latency: the comparison with Moonlight + Apollo first, the same machines
-//! and settings on both; then a breakdown of the pipeline from a run on
-//! loopback, which shows where the time goes and says nothing of a network.
-//! Each measure has its own unit, so each gets its own pair of bars, starting
-//! at zero; a range is drawn to its worse end. The breakdown's stages are
-//! averaged one by one; its total is measured end to end, and what is left
-//! between the stages is shown as such.
-import Video from './Video.astro';
-import { RECORDING as R, VERSUS } from '../lib/facts';
-import { onGitHub } from '../lib/repo';
+//! Why Helio over Moonlight, in the 1.0.0 benchmarks' figures (lib/facts.ts,
+//! docs/benchmarks.md): four numbers, each with Moonlight's beside it and
+//! the mode it was taken at: frames shown, frames shown while the link
+//! narrows, a stream's start, and a click in a game. The conditions sit
+//! under the card, and every figure links to the page that measured it.
+import Point from './Point.astro';
+import Section from './Section.astro';
+import { CLICK, FRAMES, HOUR, LOSS, NARROWING, SETUP, START, type Versus } from '../lib/facts';
 
-const worse = (v: string, better: string) => {
-  const ends = v.split('–').map(Number);
-  return better === 'lower' ? Math.max(...ends) : Math.min(...ends);
+const base = import.meta.env.BASE_URL.replace(/\/?$/, '/');
+const pct = (v: number) => `${Math.round(v)}%`;
+const theirs = (v: Versus, show: (n: number) => string) => {
+  const [low, high] = [Math.min(v.apollo, v.sunshine), Math.max(v.apollo, v.sunshine)];
+  return show(low) === show(high) ? show(low) : `${show(low).replace(/[^\d.]+$/, '')}–${show(high)}`;
 };
-
-const stages = [
-  { name: 'Host', what: 'capture, encode, encrypt, send', ms: R.hostMs, fill: 'var(--data-1)' },
-  { name: 'Network', what: 'and reassembly; loopback here', ms: R.networkMs, fill: 'var(--data-2)' },
-  { name: 'Decode', what: 'the client’s decoder', ms: R.decodeMs, fill: 'var(--data-3)' },
-  { name: 'Present', what: 'render, with V-Sync', ms: R.renderMs, fill: 'var(--data-4)' },
+const click = CLICK.find((c) => c.mode === '1440p at 120 fps')!;
+const tiles = [
+  {
+    figure: pct(FRAMES.helio),
+    what: 'of the host’s frames reach your screen',
+    moonlight: theirs(FRAMES, pct),
+    mode: '1440p at 120 fps',
+  },
+  {
+    figure: pct(NARROWING.helio),
+    what: 'still shown when the link narrows to 20 Mbit/s',
+    moonlight: theirs(NARROWING, pct),
+    mode: '1440p at 60 fps',
+  },
+  {
+    figure: `${START.helio.toFixed(1)} s`,
+    what: 'to start a stream',
+    moonlight: theirs(START, (n) => `${n.toFixed(1)} s`),
+    mode: '1440p at 120 fps',
+  },
+  {
+    figure: `${click.helio.toFixed(1)} ms`,
+    what: 'from a click in a game to your screen',
+    moonlight: theirs(click, (n) => `${n.toFixed(1)} ms`),
+    mode: '1440p at 120 fps',
+  },
 ];
-const between = Math.max(0, R.captureToScreenMs - stages.reduce((a, s) => a + s.ms, 0));
-const all = [...stages, { name: 'Between', what: 'queues between stages', ms: between, fill: 'var(--data-muted)' }];
-// The statistics give each stage to a tenth of a millisecond: an average
-// of zero means every second was under 0.05 ms.
-const ms = (v: number) => (v < 0.005 ? '< 0.05 ms' : `${v.toFixed(2)} ms`);
-const total = R.captureToScreenMs.toFixed(1);
-// The parts drawn, each with whether its middle is past the bar's: a
-// tooltip there opens leftwards, so none reaches past the page's edge.
-const sum = all.reduce((a, s) => a + s.ms, 0);
-let start = 0;
-const drawn = all
-  .filter((s) => s.ms >= 0.005)
-  .map((s) => {
-    const end = start + s.ms / 2 > sum / 2;
-    start += s.ms;
-    return { ...s, end };
-  });
 ---
 
-<section class="section" id="latency">
-  <div class="wrap">
-    <div class="head">
-      <span class="eyebrow">Latency</span>
-      <h2 class="title">Matches Moonlight, on the same machines</h2>
-      <p class="lede">
-        The same MacBook and PC at demanding settings: 3024×1890, 120 fps, 100 Mbit/s, HEVC and 7.1 sound, with the
-        host’s screen full of noise. Apollo uses Sunshine’s video path and, like Helio Host, a virtual display at the
-        client’s mode.
-      </p>
-    </div>
-
-    <div class="stats">
-      {VERSUS.map((v) => {
-        const ours = worse(v.ours, v.better);
-        const theirs = worse(v.theirs, v.better);
-        const max = Math.max(ours, theirs);
-        return (
-          <figure class="stat">
-            <figcaption>
-              {v.label}
-              <span class="better">{v.better} is better</span>
-            </figcaption>
-            <dl>
-              <div class="row">
-                <dt>Helio</dt>
-                <dd>
-                  <span class="track">
-                    <span class="b ours" style={`width: ${(ours / max) * 100}%`} />
-                  </span>
-                  <span class="v num">
-                    {v.ours} {v.unit}
-                  </span>
-                </dd>
-              </div>
-              <div class="row">
-                <dt>Moonlight + Apollo</dt>
-                <dd>
-                  <span class="track">
-                    <span class="b theirs" style={`width: ${(theirs / max) * 100}%`} />
-                  </span>
-                  <span class="v num">
-                    {v.theirs} {v.unit}
-                  </span>
-                </dd>
-              </div>
-            </dl>
-          </figure>
-        );
-      })}
-    </div>
-
-    <p class="note foot">
-      Client: a 14″ MacBook Pro (M4 Pro) on Wi-Fi. Host: Windows 11, RTX 3070 Ti, SudoVDA. Figures are each client’s
-      own: 30-second averages for Helio, end-of-stream for Moonlight. The two measure network round trip and
-      presentation differently, so those are left out.
-      <a href={onGitHub('docs/benchmarks.md#against-moonlight--apollo')}>Every figure, and how it was taken</a>
-    </p>
-
-    <div class="breakdown">
-      <h3>Pipeline breakdown</h3>
-      <p class="tag">Loopback in one container</p>
-      <p class="lede about">
-        Where the time goes with no network in the way: a Linux host and client in one container, at 1280×720 and
-        60 fps in software H.264. Both screens are recorded at the same instants, but a 60 fps clip cannot show less
-        than a frame, 16.7 ms. The stream’s own statistics put {total} ms between capture and the client’s screen,
-        with {R.framesLost === 0 ? 'no frame lost' : `${R.framesLost} frames lost`}.
-      </p>
-
-      <figure class="screens">
-        <div class="stage">
-          <Video
-            src="media/stream-split.mp4"
-            poster="media/stream-split.jpg"
-            label="The host's screen and the client's window side by side, both showing the same running clock and frame counter."
-            width={1968}
-            height={540}
-          />
-          <span class="bezel host" aria-hidden="true"></span>
-          <span class="bezel client" aria-hidden="true"></span>
+<Section id="latency" lead="Smoother than Moonlight, and as fast." rest="Side by side, on the same two computers.">
+  <div slot="cards" class="board">
+    {
+      tiles.map((t) => (
+        <div class="tile">
+          <p class="figure num">{t.figure}</p>
+          <p class="what">{t.what}</p>
+          <p class="theirs num">Moonlight: {t.moonlight}</p>
+          <p class="mode">{t.mode}</p>
         </div>
-        <figcaption class="halves">
-          <span><strong>Host</strong> · the screen Helio Host captures</span>
-          <span><strong>Client</strong> · Helio’s window</span>
-        </figcaption>
-      </figure>
-
-      <div class="budget">
-        <div class="budget-head">
-          <h4>Where the {total} ms go</h4>
-          <span class="note">Host capture to client screen, averaged over 32 s</span>
-        </div>
-        {/* One picture to a screen reader; the legend below says each part. */}
-        <div class="bar" role="img" aria-label={all.map((s) => `${s.name} ${ms(s.ms)}`).join(', ')}>
-          {drawn.map((s) => (
-            <span
-              class:list={['seg', { end: s.end }]}
-              style={`flex-grow: ${s.ms}; background: ${s.fill}`}
-              data-tip={`${s.name}: ${ms(s.ms)}`}
-            />
-          ))}
-        </div>
-        <ul class="legend">
-          {all.map((s) => (
-            <li>
-              <i style={`background: ${s.fill}`} aria-hidden="true" />
-              <strong>{s.name}</strong>
-              <span class="value num">{ms(s.ms)}</span>
-              <span class="what">{s.what}</span>
-            </li>
-          ))}
-        </ul>
-        <p class="note">
-          {R.mode}, encoded in software, over loopback: a real network adds its round trip. On the benchmark machines,
-          capture to encoded frame takes 2.2–2.6 ms at 1080p60.
-        </p>
-      </div>
-    </div>
+      ))
+    }
   </div>
-</section>
+  <p class="setup">
+    {SETUP} <a href={`${base}docs/benchmarks/`}>Every figure, and how it was taken</a>
+  </p>
+  <Point slot="points" icon="wifi-off" title={`${pct(LOSS.helio)} with 5% of packets lost`}>
+    Helio rebuilds what a bad link drops; Moonlight shows {theirs(LOSS, pct)} of the frames.
+  </Point>
+  <Point slot="points" icon="clock" title={`${pct(HOUR.helio)} over an hour`}>
+    Frames shown, minute after minute, at 1440p and 120 fps; Moonlight {theirs(HOUR, pct)}.
+  </Point>
+  <Point slot="points" icon="chart-bar" title="Every figure, with its conditions">
+    Every mode from 1080p to 4K, bad links and hour-long streams, in the
+    <a href={`${base}docs/benchmarks/`}>benchmarks</a>.
+  </Point>
+</Section>
 
 <style>
-  .stats {
+  /* One card of four figures, split by rules. */
+  .board {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 16px;
-  }
-
-  .stat {
-    min-width: 0;
-    margin: 0;
-    padding: 28px;
-    border: 1px solid var(--line-2);
+    grid-column: 1 / -1;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    border: 1px solid var(--line);
     border-radius: var(--radius);
-    background: var(--surface);
+    background: var(--card);
   }
 
-  .stat figcaption {
+  .tile {
     display: flex;
-    justify-content: space-between;
-    gap: 12px;
+    flex-direction: column;
+    min-width: 0;
+    padding: clamp(20px, 3vh, 32px) 28px;
+  }
+
+  .tile + .tile {
+    border-left: 1px solid var(--line);
+  }
+
+  .figure {
     color: var(--text);
-    font-weight: 500;
-  }
-
-  .better {
-    color: var(--text-3);
-    font-size: 0.875rem;
-    font-weight: 400;
-  }
-
-  dl {
-    display: grid;
-    gap: 18px;
-    margin: 24px 0 0;
-  }
-
-  dt {
-    color: var(--text-2);
-    font-size: 0.875rem;
-  }
-
-  dd {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) 6.5rem;
-    align-items: center;
-    gap: 12px;
-    margin: 6px 0 0;
-  }
-
-  .track {
-    display: block;
-  }
-
-  /* Bars grow from the left; square there, rounded at the value end. */
-  .b {
-    display: block;
-    height: 16px;
-    border-radius: 0 4px 4px 0;
-  }
-
-  .ours {
-    background: var(--data-2);
-  }
-
-  .theirs {
-    background: var(--data-muted);
-  }
-
-  .v {
-    color: var(--text);
-    font-size: 0.9375rem;
-    font-weight: 500;
-    white-space: nowrap;
-  }
-
-  .foot {
-    margin-top: var(--gap-note);
-  }
-
-  .breakdown {
-    margin-top: var(--gap-part);
-  }
-
-  .breakdown > h3 {
-    display: inline;
-    margin-right: 12px;
-    font-size: clamp(1.25rem, 1.1rem + 0.6vw, 1.5rem);
-    letter-spacing: -0.02em;
-  }
-
-  .tag {
-    display: inline-block;
-    padding: 1px 8px;
-    border: 1px solid rgb(var(--accent-rgb) / 0.4);
-    border-radius: 999px;
-    color: var(--accent);
-    font-size: 0.75rem;
-    vertical-align: 3px;
-  }
-
-  .about {
-    margin-bottom: var(--gap-head);
-  }
-
-  .screens {
-    margin: 0;
-  }
-
-  /* The clip is both screens, 960 px each with 48 px between them
-     (scripts/record-stream.sh). A mask keeps the two screens, with rounded
-     corners, and drops the gap; drawn in the clip's own pixels and
-     stretched with it, so it fits at every size. Each bezel draws a
-     screen's edge with the same corners. */
-  .stage {
-    position: relative;
-  }
-
-  .stage :global(.video) {
-    --screens: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1968 540' preserveAspectRatio='none'%3E%3Crect width='960' height='540' rx='20'/%3E%3Crect x='1008' width='960' height='540' rx='20'/%3E%3C/svg%3E");
-    -webkit-mask: var(--screens) 0 0 / 100% 100% no-repeat;
-    mask: var(--screens) 0 0 / 100% 100% no-repeat;
-  }
-
-  .bezel {
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    width: calc(960 / 1968 * 100%);
-    border: 1px solid rgb(255 255 255 / 0.22);
-    border-radius: calc(20 / 960 * 100%) / calc(20 / 540 * 100%);
-    box-shadow: 0 24px 48px -24px rgb(0 0 0 / 0.7);
-    pointer-events: none;
-  }
-
-  .host {
-    left: 0;
-  }
-
-  .client {
-    right: 0;
-  }
-
-  .halves {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    column-gap: calc(48 / 1968 * 100%);
-    margin-top: 14px;
-    color: var(--text-3);
-    font-size: 0.875rem;
-  }
-
-  .halves strong {
-    color: var(--text);
-    font-weight: 500;
-  }
-
-  .budget {
-    margin-top: var(--gap-part);
-  }
-
-  .budget-head {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: 4px 24px;
-    margin-bottom: 16px;
-  }
-
-  h4 {
-    margin: 0;
-    color: var(--text);
-    font-size: 1.0625rem;
+    font-size: clamp(2.5rem, 1.6rem + 2.2vw, 3.5rem);
     font-weight: 600;
-  }
-
-  /* One bar, its parts in pipeline order, a 2px gap of the page between
-     them; square at the start, rounded at the end. */
-  .bar {
-    display: flex;
-    gap: 2px;
-    height: 16px;
-  }
-
-  .seg {
-    position: relative;
-    min-width: 2px;
-  }
-
-  .seg:last-child {
-    border-radius: 0 4px 4px 0;
-  }
-
-  /* A hit area taller than the mark. */
-  .seg::before {
-    content: '';
-    position: absolute;
-    inset: -8px 0;
-  }
-
-  .seg::after {
-    content: attr(data-tip);
-    position: absolute;
-    bottom: calc(100% + 10px);
-    left: 0;
-    z-index: 1;
-    padding: 4px 8px;
-    border: 1px solid var(--line-2);
-    border-radius: 6px;
-    background: var(--surface);
-    color: var(--text);
-    font-size: 0.8125rem;
-    white-space: nowrap;
-    opacity: 0;
-    pointer-events: none;
-    transition: opacity 0.12s;
-  }
-
-  .seg.end::after {
-    right: 0;
-    left: auto;
-  }
-
-  .seg:hover::after {
-    opacity: 1;
-  }
-
-  .legend {
-    display: grid;
-    grid-template-columns: repeat(5, 1fr);
-    gap: 16px;
-    margin: 24px 0 var(--gap-note);
-    padding: 0;
-    list-style: none;
-  }
-
-  .legend li {
-    display: grid;
-    grid-template-columns: 10px 1fr;
-    column-gap: 8px;
-    align-items: center;
-    font-size: 0.875rem;
-  }
-
-  .legend i {
-    width: 10px;
-    height: 10px;
-    border-radius: 2px;
-  }
-
-  .legend strong {
-    color: var(--text);
-    font-weight: 500;
-  }
-
-  .value,
-  .what {
-    grid-column: 2;
-  }
-
-  .value {
-    color: var(--text);
+    line-height: 1;
+    letter-spacing: -0.04em;
   }
 
   .what {
-    color: var(--text-3);
-    font-size: 0.8125rem;
+    margin-top: 14px;
+    color: var(--text);
+    font-size: 1rem;
     line-height: 1.4;
   }
 
-  @media (max-width: 860px) {
-    .stats {
-      grid-template-columns: 1fr;
+  .theirs {
+    margin-top: auto;
+    padding-top: 18px;
+    color: var(--text-2);
+    font-size: 0.9rem;
+  }
+
+  .mode {
+    margin-top: 2px;
+    color: var(--text-3);
+    font-size: 0.8125rem;
+  }
+
+  .setup {
+    max-width: 60rem;
+    margin-top: 14px;
+    color: var(--text-3);
+    font-size: 0.8125rem;
+    line-height: 1.6;
+  }
+
+  @media (max-width: 1000px) {
+    .board {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .tile:nth-child(3) {
+      border-left: 0;
+    }
+
+    .tile:nth-child(n + 3) {
+      border-top: 1px solid var(--line);
     }
   }
 
-  @media (max-width: 760px) {
-    .legend {
-      grid-template-columns: repeat(2, 1fr);
+  @media (max-width: 520px) {
+    .board {
+      grid-template-columns: minmax(0, 1fr);
     }
 
-    .halves {
-      font-size: 0.8125rem;
+    .tile + .tile {
+      border-top: 1px solid var(--line);
+      border-left: 0;
     }
   }
 </style>

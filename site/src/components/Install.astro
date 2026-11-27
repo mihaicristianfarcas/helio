@@ -6,8 +6,8 @@
 //! section (global.css), and its download buttons say why (layouts/Base.astro).
 //! Script also reads the sizes and the build from latest.json.
 import Command from './Command.astro';
-import Icon from './Icon.astro';
-import { REPO, TAP, onGitHub } from '../lib/repo';
+import SystemMark from './SystemMark.astro';
+import { REPO, TAP } from '../lib/repo';
 import { CHECKSUMS, FILES, MANIFEST, type File, type System } from '../lib/downloads';
 
 interface Panel {
@@ -77,15 +77,14 @@ const steps = [
   ['Stream', 'Click the host again, from anywhere. Ctrl+Alt+Shift+Q ends the stream.'],
 ];
 const panelId = (system: System) => `download-${system}`;
+const base = import.meta.env.BASE_URL.replace(/\/?$/, '/');
 ---
 
-<section class="section" id="install">
+<section class="install" id="install" aria-labelledby="install-title">
   <div class="wrap">
-    <div class="head">
-      <span class="eyebrow">Get started</span>
-      <h2 class="title">Download, pair and stream</h2>
-      <p class="lede">Install Helio on both computers, and turn on hosting on the one with the games.</p>
-    </div>
+    <h2 class="statement" id="install-title">
+      Download, pair and stream. <span class="rest">Install Helio on both computers.</span>
+    </h2>
 
     <div class="picker" data-picker data-manifest={MANIFEST} data-repo={REPO}>
       {
@@ -96,7 +95,7 @@ const panelId = (system: System) => `download-${system}`;
               <p class="needs">{p.needs}</p>
               <div class="files">
                 <a class="button primary" href={p.file.url} data-file={p.file.id}>
-                  <Icon name="download" size={17} />
+                  <SystemMark system={p.system} />
                   Download for {p.name}
                   {p.detail && <span class="detail">{p.detail}</span>}
                   <span class="size num" data-size />
@@ -144,9 +143,14 @@ const panelId = (system: System) => `download-${system}`;
 
     <ol class="steps">
       {
-        steps.map(([t, d]) => (
+        steps.map(([t, d], i) => (
           <li>
-            <h3>{t}</h3>
+            <h3>
+              <span class="step num" aria-hidden="true">
+                {i + 1}
+              </span>
+              {t}
+            </h3>
             <p>{d}</p>
           </li>
         ))
@@ -154,28 +158,48 @@ const panelId = (system: System) => `download-${system}`;
     </ol>
     <p class="note after">
       Helio offers each new release and installs it when you choose. Building from source takes Rust 1.96 or newer.
-      <a href={onGitHub('docs/install.md')}>Installing, step by step</a>
+      <a href={`${base}docs/install/`}>Installing, step by step</a>
     </p>
   </div>
 </section>
 
 <style>
+  .install {
+    padding-block: var(--gap-section) clamp(64px, 8vw, 112px);
+  }
+
+  /* One screen tall, as every section of the page (Section.astro). */
+  @media (min-width: 861px) and (min-height: 560px) {
+    .install {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      min-height: calc(100svh - var(--nav-height, var(--nav)));
+      /* The tallest section: centring gives it the room the others get
+         from their padding. */
+      padding-block: 8px;
+    }
+  }
+
+  /* Framed as the other sections' cards are. */
   .picker {
-    border: 1px solid var(--line-2);
+    margin-top: var(--gap-head);
+    border: 1px solid var(--line);
     border-radius: var(--radius);
-    background: var(--surface);
+    background: var(--card);
   }
 
   .panel {
     display: grid;
     grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
-    gap: 28px 48px;
-    padding: 28px 24px;
+    gap: min(24px, 2.6vh) 48px;
+    padding: min(24px, 2.6vh) 28px;
   }
 
   .get h3 {
-    font-size: 1.375rem;
-    letter-spacing: -0.015em;
+    font-size: 1.125rem;
+    font-weight: 500;
+    letter-spacing: -0.01em;
   }
 
   .needs {
@@ -272,7 +296,7 @@ const panelId = (system: System) => `download-${system}`;
 
   .picker > .others {
     margin: 0;
-    padding: 0 24px 20px;
+    padding: 0 28px 20px;
   }
 
   .others [data-missing] {
@@ -287,23 +311,58 @@ const panelId = (system: System) => `download-${system}`;
     gap: 6px 20px;
     max-width: none;
     margin: 0;
-    padding: 0 24px 20px;
+    padding: 0 28px 20px;
   }
 
   .build span {
     margin-right: auto;
   }
 
+  /* The steps, as the other sections' points: a row of three, each
+     number beside its title where their icons sit. */
   .steps {
-    margin-top: var(--gap-part);
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 32px;
+    margin: min(48px, 5vh) 0 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .steps h3 {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 1rem;
+    font-weight: 500;
+  }
+
+  .step {
+    display: grid;
+    place-items: center;
+    width: 20px;
+    height: 20px;
+    border: 1px solid var(--line-2);
+    border-radius: 50%;
+    color: var(--sky-4);
+    font-size: 0.75rem;
+  }
+
+  .steps p {
+    max-width: 24rem;
+    margin-top: 6px;
+    font-size: 0.95rem;
+    line-height: 1.55;
   }
 
   .after {
-    margin-top: var(--gap-note);
+    margin-top: 14px;
+    font-size: 0.8125rem;
   }
 
   @media (max-width: 860px) {
-    .panel {
+    .panel,
+    .steps {
       grid-template-columns: 1fr;
     }
   }
@@ -318,21 +377,13 @@ const panelId = (system: System) => `download-${system}`;
 </style>
 
 <script>
-  // The visitor's system, chosen for them: its panel and its one button,
-  // with the line of other platforms moved up under the steps. Then what
+  // The visitor's system (layouts/Base.astro), chosen for them: its panel
+  // and its one button, with the line of other platforms moved up under the
+  // steps. Then what
   // latest.json says of the build: its commit and date, the button's size. A
   // file it does not list is not built yet.
   const picker = document.querySelector<HTMLElement>('[data-picker]')!;
-  const ua = navigator.userAgent;
-  const system = /Windows/.test(ua)
-    ? 'windows'
-    : /Android|iPhone|iPad/.test(ua)
-      ? null
-      : /Macintosh/.test(ua)
-        ? 'macos'
-        : /Linux|X11|CrOS/.test(ua)
-          ? 'linux'
-          : null;
+  const system = document.documentElement.dataset.os;
   if (system) {
     for (const panel of picker.querySelectorAll<HTMLElement>('.panel')) {
       panel.hidden = panel.dataset.os !== system;

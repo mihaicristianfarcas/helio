@@ -1,0 +1,43 @@
+---
+//! One of a section's three points: an icon from the app, a title, a
+//! sentence.
+import Icon from './Icon.astro';
+
+interface Props {
+  icon: string;
+  title: string;
+}
+
+const { icon, title } = Astro.props;
+---
+
+<li class="point">
+  <h3><Icon name={icon} size={18} />{title}</h3>
+  <p><slot /></p>
+</li>
+
+<style>
+  .point {
+    min-width: 0;
+    color: var(--text-2);
+  }
+
+  .point :global(svg) {
+    color: var(--sky-4);
+  }
+
+  h3 {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 1rem;
+    font-weight: 500;
+  }
+
+  p {
+    max-width: 24rem;
+    margin-top: 6px;
+    font-size: 0.95rem;
+    line-height: 1.55;
+  }
+</style>

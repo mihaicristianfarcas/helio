@@ -1,0 +1,71 @@
+---
+//! A framed card in a section: a title and a sentence, then what it shows,
+//! which runs to the card's edges (the `visual` slot).
+interface Props {
+  title: string;
+}
+
+const { title } = Astro.props;
+---
+
+<article class="card">
+  <div class="text">
+    <h3>{title}</h3>
+    <p><slot /></p>
+  </div>
+  <div class="visual"><slot name="visual" /></div>
+</article>
+
+<style>
+  .card {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: var(--card);
+    overflow: hidden;
+    /* Safari lets a child drawn on a layer of its own (a mask, a transform)
+       out past overflow's rounded corners; a clip path holds it. */
+    clip-path: inset(0 round var(--radius));
+  }
+
+  .text {
+    padding: 24px 28px 0;
+  }
+
+  h3 {
+    font-size: 1.125rem;
+    font-weight: 500;
+    letter-spacing: -0.01em;
+  }
+
+  p {
+    max-width: 30rem;
+    margin-top: 6px;
+    font-size: 0.95rem;
+    line-height: 1.55;
+  }
+
+  .visual {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    justify-content: center;
+    min-height: 0;
+    padding-top: 24px;
+  }
+
+  /* A window runs off the card's edges: on a short screen it is cut,
+     from its top left, rather than shrunk. */
+  .visual :global(.shot) {
+    min-height: 0;
+    height: 100%;
+  }
+
+  .visual :global(.shot img) {
+    height: 100%;
+    object-fit: cover;
+    object-position: left top;
+  }
+</style>
