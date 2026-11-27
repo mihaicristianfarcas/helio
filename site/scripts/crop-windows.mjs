@@ -10,7 +10,7 @@ import sharp from 'sharp';
 
 const WINDOW = { left: 230, top: 160, width: 2240, height: 1480 };
 
-for (const name of ['windows', 'agent', 'devices']) {
+for (const name of ['hosts', 'agent', 'devices']) {
   const from = new URL(`../src/assets/hero/${name}.webp`, import.meta.url).pathname;
   const to = new URL(`../src/assets/windows/${name}.webp`, import.meta.url).pathname;
   await sharp(from).extract(WINDOW).webp({ quality: 90 }).toFile(to);

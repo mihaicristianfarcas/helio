@@ -8,7 +8,7 @@
 #
 #   site/scripts/capture-hero.sh SHOTS_DIR
 #
-# SHOTS_DIR holds stream.png, host.png, windows.png, agent.png and
+# SHOTS_DIR holds stream.png, host.png, hosts.png, agent.png and
 # devices.png, each 2700x1800, and agent-screen.png. Each comes from a build
 # of this checkout:
 #
@@ -37,20 +37,8 @@
 #   for: the sidebar's rows and the page moved up to where Windows has them,
 #   over the traffic lights, and Windows 11's caption buttons drawn
 #   (chrome.rs, theme.rs).
-# - windows.png, the Hosts window the One app card shows: Windows (a PC with
-#   a GPU, which acrylic needs; with SudoVDA installed, as hosting installs
-#   it): hero/windows/, each script run in the signed-in session
-#   (tools/host-run.ps1 -Limited, from SSH), from C:\pp\hero holding a
-#   release helio-app.exe beside FFmpeg's DLLs, with HELIO_UI_DEMO's
-#   hosts-sample at 1120x740. hero-display.rs, built as an example of
-#   helio-display, makes a 2880x1800 virtual display the whole desktop as a
-#   stream does, until C:\pp\hero\done exists; check that it says ACTIVE and
-#   that the screen is 2880x1800 before going on. Then scale.ps1 for 200%,
-#   wall.ps1 for the wallpaper, and hero.ps1 hides the taskbar and icons and
-#   takes the screen. Answer the firewall's question about the new
-#   helio-app.exe first, and leave nothing else on the screen: the picture
-#   is the screen. Then the wallpaper as it was, and the done file puts the
-#   monitors back. Wallpaper: Windows 11's light Bloom (img0.jpg).
+# - hosts.png: the Mac's way, with HELIO_UI_DEMO=hosts-sample,size=1120x740:
+#   the Hosts page with four sample hosts, for the One app card.
 # - agent-screen.png (2560x1600), the screen the agent's window shows: a
 #   Windows VM, hero/windows/agentshot.ps1, the desktop the sample session
 #   talks about. The page does not show it by itself;
@@ -83,7 +71,7 @@ magick "$SHOTS/host.png" "$SHOTS/host-sidebar.png" -geometry +232+176 -composite
     -fill none -stroke '#e6e6e6' -strokewidth 2 \
     -draw 'line 2230,192 2250,192' -draw 'roundrectangle 2322,182 2342,202 3,3' \
     -draw 'line 2414,182 2434,202' -draw 'line 2434,182 2414,202' "$SHOTS/host-windows.png"
-for name in stream host windows agent devices; do
+for name in stream host hosts agent devices; do
     from=$SHOTS/$name.png
     [ "$name" = host ] && from=$SHOTS/host-windows.png
     node -e 'require(process.argv[1])(process.argv[2]).webp({ quality: 88, effort: 6 }).toFile(process.argv[3])' \
