@@ -1,6 +1,6 @@
 //! Regressions against the built site and its actual component scripts:
 //! the landing page's keyboard order, focus, downloads and star count, and
-//! the documentation's pages and links. DOM checks cover control order and
+//! the documentation's pages, links and search index. DOM checks cover control order and
 //! focus changes; they do not render a browser.
 import assert from 'node:assert/strict';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
@@ -434,11 +434,12 @@ test('every page of the documentation is built, and listed beside every other', 
 
 test('the Overview starts on its text, without the link preview the hero already shows', () => {
   const readme = readFileSync(join(dirname(site), 'README.md'), 'utf8');
-  assert.ok(readme.includes('](docs/images/helio.jpg)'), 'README.md opens on the link preview');
+  const preview = readme.match(/!\[([^\]]*)\]\(docs\/images\/helio\.jpg\)/);
+  assert.ok(preview, 'README.md opens on the link preview');
   const overview = built('/docs/').match(/<article class="prose"[^>]*>([\s\S]*?)<\/article>/)[1];
-  const pictures = [...overview.matchAll(/<img [^>]*alt="([^"]*)"/g)].map((m) => m[1]);
+  const pictures = [...overview.matchAll(/<img [^>]*alt="([^"]*)"/g)].map((m) => m[1].replaceAll('&#39;', "'"));
   assert.ok(pictures.length > 0, 'the Overview keeps its other pictures');
-  assert.ok(!pictures.some((alt) => alt.startsWith('Helio: low-latency')), pictures.join('\n'));
+  assert.ok(!pictures.includes(preview[1]), pictures.join('\n'));
   assert.ok(!/<p>\s*<\/p>/.test(overview), 'no empty paragraph is left where it was');
 });
 
@@ -472,5 +473,20 @@ test('every link in the documentation leads to a page and a section that exist',
 test('the site does not name the apps as they were called before', () => {
   for (const file of ['dist/index.html', 'dist/robots.txt', 'dist/sitemap.xml']) {
     assert.doesNotMatch(readFileSync(join(site, file), 'utf8'), /pingpong|\bPing\b|\bPong\b/i);
+  }
+});
+
+test('the documentation, and only it, is in the search index, and every page of it opens the search', () => {
+  const pages = docs();
+  const entry = JSON.parse(readFileSync(join(site, 'dist/pagefind/pagefind-entry.json'), 'utf8'));
+  const indexed = Object.values(entry.languages).reduce((n, language) => n + language.page_count, 0);
+  assert.equal(indexed, pages.length, 'every page of the documentation is in the index, and nothing else');
+  assert.ok(existsSync(join(site, 'dist/pagefind/pagefind.js')), 'the page has Pagefind to load');
+  assert.ok(!readFileSync(join(site, 'dist/index.html'), 'utf8').includes('data-pagefind-body'), 'the landing page is not indexed');
+  for (const page of pages) {
+    const html = built(page);
+    assert.match(html, /<article class="prose"[^>]*data-pagefind-body/, `${page}: its text is what is indexed`);
+    assert.match(html, /<dialog[^>]*data-search[^>]*data-pagefind="\/pagefind\/pagefind\.js"/, `${page}: the search`);
+    assert.equal((html.match(/<button[^>]*data-search-open/g) ?? []).length, 2, `${page}: the field over the list of pages, and over its folded copy`);
   }
 });

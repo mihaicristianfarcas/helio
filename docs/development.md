@@ -576,6 +576,15 @@ the repository goes to that file on GitHub. Pictures next to the Markdown
 are Astro's to size, and code is shown without highlighting, in the page's
 colours.
 
+The documentation has a search, the field above its list of pages (or `/`,
+or Ctrl+K and ⌘K): `npm run build` runs [Pagefind](https://pagefind.app)
+after Astro, which indexes the text of each page of the documentation (its
+article is `data-pagefind-body`, so the landing page and the lists beside
+the text stay out) into `dist/pagefind/`. The page loads it from there the
+first time the search opens, and fetches only the parts of the index a
+search needs (`src/components/Search.astro`). `npm run dev` builds no index:
+try the search with `npm run build` and `npm run preview`.
+
 Its downloads are the newest released version ([Releases](#releases)): the
 page links their fixed names (`src/lib/downloads.ts`), and the build writes
 in `latest.json`'s version, sizes and commit (`src/lib/release.ts`), so the
@@ -603,7 +612,7 @@ the commit it was built from.
 cd site
 npm install
 npm run dev       # http://localhost:4321, reloading as you edit
-npm run build     # astro check, then the site in site/dist/
+npm run build     # astro check, the site in site/dist/, then its search index
 npm run preview   # serves site/dist/
 npm test          # builds the site, then checks it (tests/keyboard.test.mjs)
 npx wrangler deploy   # after a build: deploys site/dist/, as the workflow does
@@ -620,8 +629,8 @@ indexing controls to keep previews out of search results.
 `npm test` checks, on the built site, the landing page's keyboard order,
 its downloads for each system and on phones, the star count, and that every
 page of the documentation is built, listed beside the others and in the
-sitemap, and that each of its links leads to a page and a section that
-exist. It runs in a simulated DOM (happy-dom), not a browser: rendering and
+sitemap, that each of its links leads to a page and a section that
+exist, and that the search index holds every page of it and nothing else. It runs in a simulated DOM (happy-dom), not a browser: rendering and
 screen readers are checked by hand.
 
 What it shows is made from the app, by scripts in `site/scripts/`:

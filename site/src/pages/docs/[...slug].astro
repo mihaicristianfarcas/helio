@@ -2,10 +2,14 @@
 //! A documentation page: one of the repository's Markdown files
 //! (lib/docs.mjs), with every page beside it and this page's sections. On
 //! a narrow screen the list of pages folds into a button above the text.
+//! The search (Search.astro) opens from the field above the list of pages,
+//! and on a narrow screen from the same field above that button.
 import { getCollection, render } from 'astro:content';
 import Base from '../../layouts/Base.astro';
 import Footer from '../../components/Footer.astro';
 import Nav from '../../components/Nav.astro';
+import Search from '../../components/Search.astro';
+import SearchButton from '../../components/SearchButton.astro';
 import { GROUPS, PAGES, hrefOf } from '../../lib/docs.mjs';
 import { onGitHub } from '../../lib/repo';
 
@@ -46,6 +50,7 @@ const title = slug ? `${heading} · Helio documentation` : 'Helio documentation'
 <Base title={title} description={description}>
   <Nav />
   <div class="wrap docs">
+    <div class="search-narrow"><SearchButton /></div>
     <details class="pages-narrow">
       <summary>Documentation <span aria-hidden="true">›</span> <strong>{page.title}</strong></summary>
       <nav aria-label="Documentation">
@@ -65,6 +70,7 @@ const title = slug ? `${heading} · Helio documentation` : 'Helio documentation'
     </details>
 
     <aside class="pages">
+      <div class="search-wide"><SearchButton /></div>
       <nav aria-label="Documentation">
         {
           GROUPS.map((group) => (
@@ -82,7 +88,7 @@ const title = slug ? `${heading} · Helio documentation` : 'Helio documentation'
     </aside>
 
     <main id="main" class="doc">
-      <article class="prose">
+      <article class="prose" data-pagefind-body>
         <Content />
       </article>
       <footer class="doc-foot">
@@ -122,6 +128,7 @@ const title = slug ? `${heading} · Helio documentation` : 'Helio documentation'
     }
   </div>
   <Footer />
+  <Search />
 </Base>
 
 <script>
@@ -231,8 +238,13 @@ const title = slug ? `${heading} · Helio documentation` : 'Helio documentation'
     color: var(--text);
   }
 
-  .pages-narrow {
+  .pages-narrow,
+  .search-narrow {
     display: none;
+  }
+
+  .search-wide {
+    margin-bottom: 28px;
   }
 
   .doc {
@@ -304,6 +316,12 @@ const title = slug ? `${heading} · Helio documentation` : 'Helio documentation'
 
     .pages {
       display: none;
+    }
+
+    /* The field and the list of pages under it, closer than the text. */
+    .search-narrow {
+      display: block;
+      margin-bottom: -12px;
     }
 
     .pages-narrow {

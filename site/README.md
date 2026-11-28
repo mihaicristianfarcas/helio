@@ -14,7 +14,7 @@ another domain or a project path.
 ```sh
 npm install
 npm run dev       # http://localhost:4321
-npm run build     # astro check, then site/dist/
+npm run build     # astro check, site/dist/, then its search index
 npm test          # build, then check the built site
 npx wrangler deploy   # after a build: site/dist/ to helio.mihaicristian.dev
 ```

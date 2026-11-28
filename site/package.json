@@ -5,7 +5,7 @@
   "description": "Helio's landing page",
   "scripts": {
     "dev": "astro dev",
-    "build": "astro check && astro build",
+    "build": "astro check && astro build && pagefind --site dist",
     "test": "npm run build && node --test tests/keyboard.test.mjs",
     "preview": "astro preview",
     "check": "astro check"
@@ -24,6 +24,7 @@
     "@astrojs/check": "^0.9.10",
     "@types/node": "^26.6.3",
     "happy-dom": "20.14.5",
+    "pagefind": "1.6.0",
     "typescript": "^6.0.3"
   }
 }

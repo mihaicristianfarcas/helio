@@ -1,0 +1,331 @@
+---
+//! The documentation's search: a dialog with a field, and under it the
+//! pages that match as you type, each with the sections that match and a
+//! line of their text, your words marked. Pagefind (pagefind.app) indexes
+//! the built pages after `astro build` (package.json), the text of each
+//! documentation page only (its article is `data-pagefind-body`, so the
+//! landing page and the lists beside the text stay out), and the browser
+//! fetches only the parts of the index a search needs, from this site. It
+//! is loaded the first time the dialog opens. `npm run dev` builds no
+//! index, so there the dialog says how to try it.
+//!
+//! The keys are the usual ones: `/` or Ctrl+K (⌘K on a Mac) opens it, the
+//! arrows go from the field through the results, Enter opens one, Escape
+//! closes it.
+import Icon from './Icon.astro';
+
+const pagefind = `${import.meta.env.BASE_URL.replace(/\/?$/, '/')}pagefind/pagefind.js`;
+---
+
+<dialog class="search" aria-label="Search the documentation" data-search data-pagefind={pagefind}>
+  <div class="field">
+    <Icon name="search" size={18} />
+    <input
+      type="search"
+      placeholder="Search the documentation"
+      aria-label="Search the documentation"
+      aria-controls="search-results"
+      autocomplete="off"
+      spellcheck="false"
+      enterkeyhint="go"
+      data-search-input
+    />
+    <button type="button" class="close" aria-label="Close" data-search-close>
+      <Icon name="close" size={16} />
+    </button>
+  </div>
+  <p class="status" role="status" aria-live="polite" data-search-status></p>
+  <ul class="results" id="search-results" aria-label="Results" data-search-results></ul>
+</dialog>
+
+<!-- Pagefind's module is imported here, a line the bundler leaves as it
+     is: in a bundled script, Vite wraps a dynamic import in a preload
+     helper that this site's inlined scripts never define
+     ("__VITE_PRELOAD__ is not defined"). -->
+<script is:inline>
+  window.helioImportPagefind = (url) => import(url);
+</script>
+
+<script>
+  type SubResult = { title: string; url: string; excerpt: string };
+  type Data = { url: string; excerpt: string; meta: { title?: string }; sub_results: SubResult[] };
+  type Pagefind = {
+    options: (o: Record<string, unknown>) => Promise<void>;
+    init: () => Promise<void>;
+    preload: (q: string) => Promise<void>;
+    debouncedSearch: (q: string, o?: object, ms?: number) => Promise<{ results: { data: () => Promise<Data> }[] } | null>;
+  };
+
+  /** Pages shown for a search, and sections under each. */
+  const PAGES = 8;
+  const SECTIONS = 3;
+
+  const dialog = document.querySelector<HTMLDialogElement>('[data-search]');
+  const input = document.querySelector<HTMLInputElement>('[data-search-input]');
+  const status = document.querySelector<HTMLElement>('[data-search-status]');
+  const list = document.querySelector<HTMLUListElement>('[data-search-results]');
+
+  if (dialog && input && status && list) {
+    let pagefind: Promise<Pagefind | null> | null = null;
+
+    // Pagefind's script is the built site's (the inline script above).
+    const load = () =>
+      (pagefind ??= (async () => {
+        try {
+          const importer = (window as unknown as { helioImportPagefind: (url: string) => Promise<Pagefind> })
+            .helioImportPagefind;
+          const module = await importer(dialog.dataset.pagefind!);
+          await module.options({ baseUrl: import.meta.env.BASE_URL, excerptLength: 22 });
+          await module.init();
+          return module;
+        } catch {
+          return null;
+        }
+      })());
+
+    const open = () => {
+      if (dialog.open) return;
+      dialog.showModal();
+      input.select();
+      void load();
+    };
+
+    // A result's text is the page's, escaped by Pagefind, with <mark>
+    // round the words searched for: the only markup it holds.
+    const row = (href: string, title: string, excerpt: string, sub: boolean) => {
+      const a = document.createElement('a');
+      a.href = href;
+      a.className = sub ? 'hit sub' : 'hit';
+      const t = document.createElement('span');
+      t.className = 'title';
+      t.textContent = title;
+      const e = document.createElement('span');
+      e.className = 'excerpt';
+      e.innerHTML = excerpt;
+      a.append(t, e);
+      return a;
+    };
+
+    const show = async (query: string) => {
+      const q = query.trim();
+      if (!q) {
+        list.replaceChildren();
+        status.textContent = '';
+        return;
+      }
+      const engine = await load();
+      if (!engine) {
+        list.replaceChildren();
+        status.textContent = 'Search works in a built site: npm run build, then npm run preview.';
+        return;
+      }
+      const search = await engine.debouncedSearch(q, {}, 120);
+      // A newer search has started; it will show its own results.
+      if (!search) return;
+      const pages = await Promise.all(search.results.slice(0, PAGES).map((r) => r.data()));
+      if (input.value.trim() !== q) return;
+      list.replaceChildren(
+        ...pages.map((page) => {
+          const li = document.createElement('li');
+          const title = page.meta.title ?? page.url;
+          li.append(row(page.url, title, page.excerpt, false));
+          // The page's own title is its first heading, which Pagefind lists
+          // among its sections too.
+          const sections = page.sub_results.filter((s) => s.url !== page.url && s.title !== title);
+          for (const s of sections.slice(0, SECTIONS)) {
+            li.append(row(s.url, s.title, s.excerpt, true));
+          }
+          return li;
+        }),
+      );
+      const n = search.results.length;
+      status.textContent =
+        n === 0 ? `No page mentions “${q}”.` : n > PAGES ? `${n} pages; the ${PAGES} closest first.` : n === 1 ? '1 page.' : `${n} pages.`;
+    };
+
+    input.addEventListener('input', () => void show(input.value));
+
+    // The arrows go from the field through the results and back; Enter on
+    // the field opens the first.
+    dialog.addEventListener('keydown', (event) => {
+      const hits = [...list.querySelectorAll<HTMLAnchorElement>('a.hit')];
+      const at = hits.indexOf(document.activeElement as HTMLAnchorElement);
+      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+        if (hits.length === 0) return;
+        event.preventDefault();
+        const next = event.key === 'ArrowDown' ? at + 1 : at - 1;
+        if (next < 0) input.focus();
+        else hits[Math.min(next, hits.length - 1)].focus();
+      } else if (event.key === 'Enter' && document.activeElement === input && hits[0]) {
+        event.preventDefault();
+        hits[0].click();
+      }
+    });
+
+    // A result on this page only moves to its section, so the dialog closes
+    // for it to be seen; a click on the backdrop closes it too.
+    dialog.addEventListener('click', (event) => {
+      const target = event.target as HTMLElement;
+      if (target === dialog || target.closest('a.hit, [data-search-close]')) dialog.close();
+    });
+
+    for (const button of document.querySelectorAll<HTMLElement>('[data-search-open]')) {
+      button.addEventListener('click', open);
+      // Its script and index start loading as the pointer reaches it.
+      button.addEventListener('pointerenter', () => void load(), { once: true });
+    }
+
+    document.addEventListener('keydown', (event) => {
+      const typing = (event.target as HTMLElement).closest('input, textarea, select, [contenteditable]');
+      const k = event.key === 'k' && (event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey;
+      const slash = event.key === '/' && !event.metaKey && !event.ctrlKey && !event.altKey && !typing;
+      if (k || slash) {
+        event.preventDefault();
+        open();
+      }
+    });
+  }
+</script>
+
+<style>
+  .search {
+    width: min(40rem, calc(100vw - 32px));
+    max-height: min(36rem, calc(100svh - 96px));
+    margin: 12svh auto auto;
+    padding: 0;
+    border: 1px solid var(--line-2);
+    border-radius: var(--radius);
+    background: var(--bg);
+    color: var(--text);
+    box-shadow: 0 24px 64px rgb(0 0 0 / 0.45);
+    overflow: hidden;
+  }
+
+  .search[open] {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .search::backdrop {
+    background: rgb(var(--ink-rgb) / 0.72);
+  }
+
+  .field {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 8px 6px 16px;
+    border-bottom: 1px solid var(--line);
+    color: var(--text-3);
+  }
+
+  input {
+    flex: 1;
+    min-width: 0;
+    padding-block: 10px;
+    border: 0;
+    background: none;
+    color: var(--text);
+    font: inherit;
+    font-size: 1rem;
+    outline: none;
+  }
+
+  input::placeholder {
+    color: var(--text-3);
+  }
+
+  input::-webkit-search-cancel-button {
+    display: none;
+  }
+
+  .close {
+    display: grid;
+    place-items: center;
+    width: 32px;
+    height: 32px;
+    border: 0;
+    border-radius: var(--radius-sm);
+    background: none;
+    color: var(--text-3);
+    cursor: pointer;
+  }
+
+  .close:hover {
+    background: var(--card-2);
+    color: var(--text);
+  }
+
+  .status {
+    padding: 10px 16px 0;
+    color: var(--text-3);
+    font-size: 0.8125rem;
+  }
+
+  .status:empty {
+    display: none;
+  }
+
+  .results {
+    display: grid;
+    gap: 4px;
+    margin: 0;
+    padding: 8px;
+    list-style: none;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  .results:empty {
+    display: none;
+  }
+
+  .results li {
+    display: grid;
+  }
+
+  /* A whole row is the link, so its text is not underlined as a link in a
+     list's sentence is (global.css). */
+  .results :global(.hit) {
+    display: grid;
+    gap: 2px;
+    padding: 9px 10px;
+    border-radius: var(--radius-sm);
+    color: var(--text);
+    text-decoration: none;
+  }
+
+  .results :global(.hit.sub) {
+    margin-left: 12px;
+    padding-block: 7px;
+    border-left: 1px solid var(--line);
+    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  }
+
+  .results :global(.hit:hover),
+  .results :global(.hit:focus-visible) {
+    background: var(--card-2);
+    outline: none;
+  }
+
+  .results :global(.title) {
+    font-size: 0.875rem;
+    font-weight: 500;
+  }
+
+  .results :global(.sub .title) {
+    font-weight: 400;
+  }
+
+  .results :global(.excerpt) {
+    color: var(--text-2);
+    font-size: 0.8125rem;
+    line-height: 1.45;
+  }
+
+  .results :global(mark) {
+    border-radius: 3px;
+    background: rgb(var(--sky-5-rgb) / 0.22);
+    color: var(--text);
+  }
+</style>
