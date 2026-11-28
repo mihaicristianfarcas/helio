@@ -576,12 +576,13 @@ the repository goes to that file on GitHub. Pictures next to the Markdown
 are Astro's to size, and code is shown without highlighting, in the page's
 colours.
 
-The documentation has a search, the field above its list of pages (or `/`,
-or Ctrl+K and ⌘K): `npm run build` runs [Pagefind](https://pagefind.app)
-after Astro, which indexes the text of each page of the documentation (its
-article is `data-pagefind-body`, so the landing page and the lists beside
-the text stay out) into `dist/pagefind/`. The page loads it from there the
-first time the search opens, and fetches only the parts of the index a
+The documentation has a search, the field above its list of pages (or ⌘K
+on a Mac, Ctrl+K elsewhere), whose results drop down under it as you type:
+`npm run build` runs [Pagefind](https://pagefind.app) after Astro, which
+indexes the text of each page of the documentation (its article is
+`data-pagefind-body`, so the landing page and the lists beside the text
+stay out) into `dist/pagefind/`. The page loads it from there the first
+time the field is reached, and fetches only the parts of the index a
 search needs (`src/components/Search.astro`). `npm run dev` builds no index:
 try the search with `npm run build` and `npm run preview`.
 

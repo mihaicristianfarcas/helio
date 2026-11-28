@@ -66,6 +66,10 @@
 
   --radius: 16px;
   --radius-sm: 8px;
+  /* Small buttons (the header's Download), and the documentation's boxes
+     beside them: the search field and its list, the folded list of pages,
+     the Previous and Next cards, code and pictures. */
+  --radius-xs: 6px;
   --gutter: 24px;
   --max: 1200px;
   --nav: 64px;
@@ -252,7 +256,7 @@ kbd {
 .button.small {
   min-height: 28px;
   padding: 0 10px;
-  border-radius: 6px;
+  border-radius: var(--radius-xs);
   font-size: 0.8125rem;
 }
 

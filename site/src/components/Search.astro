@@ -1,49 +1,72 @@
 ---
-//! The documentation's search: a dialog with a field, and under it the
-//! pages that match as you type, each with the sections that match and a
-//! line of their text, your words marked. Pagefind (pagefind.app) indexes
-//! the built pages after `astro build` (package.json), the text of each
-//! documentation page only (its article is `data-pagefind-body`, so the
-//! landing page and the lists beside the text stay out), and the browser
-//! fetches only the parts of the index a search needs, from this site. It
-//! is loaded the first time the dialog opens. `npm run dev` builds no
-//! index, so there the dialog says how to try it.
+//! The documentation's search: a field, and under it, as you type, a list
+//! of the pages that match, each with the sections that match and a line of
+//! their text, your words marked. The page has two, one above the list of
+//! pages and one above its folded copy on a narrow screen; one script runs
+//! both. Pagefind (pagefind.app) indexes the built pages after `astro build`
+//! (package.json), the text of each documentation page only (its article is
+//! `data-pagefind-body`, so the landing page and the lists beside the text
+//! stay out), and the browser fetches only the parts of the index a search
+//! needs, from this site. It is loaded when a field is first reached.
+//! `npm run dev` builds no index, so there the list says how to try it.
 //!
-//! The keys are the usual ones: `/` or Ctrl+K (⌘K on a Mac) opens it, the
-//! arrows go from the field through the results, Enter opens one, Escape
-//! closes it.
+//! The field is a combobox (WAI-ARIA's pattern): focus stays in it while
+//! the arrows mark a result, Enter opens the marked one (the first if none
+//! is), Escape closes the list and then clears the field. ⌘K on a Mac,
+//! Ctrl+K elsewhere, moves to whichever field is shown, and the field shows
+//! the one for the reader's system (Base.astro's `data-os`, which also picks
+//! the downloads), none on a phone. The list is wider than
+//! the field beside the pages, as wide as it on a phone, and never taller
+//! than the room left under it with the keyboard up.
 import Icon from './Icon.astro';
 
+interface Props {
+  /** Prefix for the ids of this copy's list and its rows. */
+  id: string;
+}
+
+const { id } = Astro.props;
 const pagefind = `${import.meta.env.BASE_URL.replace(/\/?$/, '/')}pagefind/pagefind.js`;
 ---
 
-<dialog class="search" aria-label="Search the documentation" data-search data-pagefind={pagefind}>
+<div class="search" data-search data-pagefind={pagefind} data-id={id}>
   <div class="field">
-    <Icon name="search" size={18} />
+    <Icon name="search" size={14} />
     <input
       type="search"
-      placeholder="Search the documentation"
+      role="combobox"
+      aria-expanded="false"
+      aria-controls={`${id}-results`}
+      aria-autocomplete="list"
       aria-label="Search the documentation"
-      aria-controls="search-results"
+      placeholder="Search"
       autocomplete="off"
       spellcheck="false"
-      enterkeyhint="go"
+      enterkeyhint="search"
       data-search-input
     />
-    <button type="button" class="close" aria-label="Close" data-search-close>
-      <Icon name="close" size={16} />
+    <span class="keys" aria-hidden="true"><kbd class="mac">⌘K</kbd><kbd class="pc">Ctrl K</kbd></span>
+    <!-- Out of the Tab order: Escape clears from the keyboard, and Tab
+         leaves the field, closing its list. -->
+    <button type="button" class="clear" tabindex="-1" aria-label="Clear the search" data-search-clear>
+      <Icon name="close" size={18} />
     </button>
   </div>
-  <p class="status" role="status" aria-live="polite" data-search-status></p>
-  <ul class="results" id="search-results" aria-label="Results" data-search-results></ul>
-</dialog>
+  <div class="panel" hidden data-search-panel>
+    <!-- tabindex: Chrome makes a list that scrolls a Tab stop of its own
+         when nothing in it is one, and focus stays in the field here. -->
+    <div class="results" role="listbox" tabindex="-1" id={`${id}-results`} aria-label="Results" data-search-results></div>
+    <p class="message" data-search-message></p>
+  </div>
+  <p class="visually-hidden" role="status" aria-live="polite" data-search-status></p>
+</div>
 
 <!-- Pagefind's module is imported here, a line the bundler leaves as it
      is: in a bundled script, Vite wraps a dynamic import in a preload
      helper that this site's inlined scripts never define
      ("__VITE_PRELOAD__ is not defined"). -->
 <script is:inline>
-  window.helioImportPagefind = (url) => import(url);
+  window.helioImportPagefind ??= (url) => import(url);
 </script>
 
 <script>
@@ -52,50 +75,104 @@ const pagefind = `${import.meta.env.BASE_URL.replace(/\/?$/, '/')}pagefind/pagef
   type Pagefind = {
     options: (o: Record<string, unknown>) => Promise<void>;
     init: () => Promise<void>;
-    preload: (q: string) => Promise<void>;
     debouncedSearch: (q: string, o?: object, ms?: number) => Promise<{ results: { data: () => Promise<Data> }[] } | null>;
   };
 
   /** Pages shown for a search, and sections under each. */
   const PAGES = 8;
   const SECTIONS = 3;
+  /** Space kept between the list's foot and the screen's (or the keyboard's) edge, in px. */
+  const MARGIN = 16;
 
-  const dialog = document.querySelector<HTMLDialogElement>('[data-search]');
-  const input = document.querySelector<HTMLInputElement>('[data-search-input]');
-  const status = document.querySelector<HTMLElement>('[data-search-status]');
-  const list = document.querySelector<HTMLUListElement>('[data-search-results]');
+  const roots = [...document.querySelectorAll<HTMLElement>('[data-search]')];
+  let pagefind: Promise<Pagefind | null> | null = null;
 
-  if (dialog && input && status && list) {
-    let pagefind: Promise<Pagefind | null> | null = null;
+  // Pagefind's script is the built site's (the inline script above); both
+  // fields share it.
+  const load = (url: string) =>
+    (pagefind ??= (async () => {
+      try {
+        const importer = (window as unknown as { helioImportPagefind: (url: string) => Promise<Pagefind> })
+          .helioImportPagefind;
+        const module = await importer(url);
+        await module.options({ baseUrl: import.meta.env.BASE_URL, excerptLength: 22 });
+        await module.init();
+        return module;
+      } catch {
+        return null;
+      }
+    })());
 
-    // Pagefind's script is the built site's (the inline script above).
-    const load = () =>
-      (pagefind ??= (async () => {
-        try {
-          const importer = (window as unknown as { helioImportPagefind: (url: string) => Promise<Pagefind> })
-            .helioImportPagefind;
-          const module = await importer(dialog.dataset.pagefind!);
-          await module.options({ baseUrl: import.meta.env.BASE_URL, excerptLength: 22 });
-          await module.init();
-          return module;
-        } catch {
-          return null;
-        }
-      })());
+  for (const root of roots) {
+    const input = root.querySelector<HTMLInputElement>('[data-search-input]')!;
+    const clear = root.querySelector<HTMLButtonElement>('[data-search-clear]')!;
+    const panel = root.querySelector<HTMLElement>('[data-search-panel]')!;
+    const list = root.querySelector<HTMLElement>('[data-search-results]')!;
+    const message = root.querySelector<HTMLElement>('[data-search-message]')!;
+    const status = root.querySelector<HTMLElement>('[data-search-status]')!;
+    const prefix = root.dataset.id!;
+    const url = root.dataset.pagefind!;
+    let active = -1;
+
+    const options = () => [...list.querySelectorAll<HTMLAnchorElement>('[role="option"]')];
+
+    // The list ends above the keyboard on a phone: the visual viewport is
+    // what is left of the screen once it is up.
+    const fit = () => {
+      const view = window.visualViewport;
+      const bottom = view ? view.offsetTop + view.height : window.innerHeight;
+      const room = bottom - panel.getBoundingClientRect().top - MARGIN;
+      panel.style.setProperty('--room', `${Math.max(160, Math.round(room))}px`);
+    };
+
+    // The list fades at an edge only while there is more past it.
+    const fade = () => {
+      list.toggleAttribute('data-more-above', list.scrollTop > 1);
+      list.toggleAttribute('data-more-below', list.scrollTop + list.clientHeight < list.scrollHeight - 1);
+    };
+
+    const mark = (index: number) => {
+      const all = options();
+      active = index;
+      all.forEach((option, i) => option.setAttribute('aria-selected', String(i === index)));
+      const current = all[index];
+      if (current) {
+        input.setAttribute('aria-activedescendant', current.id);
+        current.scrollIntoView({ block: 'nearest' });
+      } else {
+        input.removeAttribute('aria-activedescendant');
+      }
+    };
 
     const open = () => {
-      if (dialog.open) return;
-      dialog.showModal();
-      input.select();
-      void load();
+      if (!panel.hidden) return;
+      panel.hidden = false;
+      input.setAttribute('aria-expanded', 'true');
+      fit();
+      fade();
+      window.visualViewport?.addEventListener('resize', fit);
+      window.addEventListener('resize', fit);
+    };
+
+    const close = () => {
+      if (panel.hidden) return;
+      panel.hidden = true;
+      input.setAttribute('aria-expanded', 'false');
+      mark(-1);
+      window.visualViewport?.removeEventListener('resize', fit);
+      window.removeEventListener('resize', fit);
     };
 
     // A result's text is the page's, escaped by Pagefind, with <mark>
     // round the words searched for: the only markup it holds.
-    const row = (href: string, title: string, excerpt: string, sub: boolean) => {
+    const row = (href: string, title: string, excerpt: string, sub: boolean, n: number) => {
       const a = document.createElement('a');
       a.href = href;
+      a.id = `${prefix}-option-${n}`;
       a.className = sub ? 'hit sub' : 'hit';
+      a.setAttribute('role', 'option');
+      a.setAttribute('aria-selected', 'false');
+      a.tabIndex = -1;
       const t = document.createElement('span');
       t.className = 'title';
       t.textContent = title;
@@ -106,17 +183,27 @@ const pagefind = `${import.meta.env.BASE_URL.replace(/\/?$/, '/')}pagefind/pagef
       return a;
     };
 
+    // A line in place of results: none matched, or no index to search.
+    const say = (text: string) => {
+      list.replaceChildren();
+      message.textContent = text;
+      status.textContent = text;
+      mark(-1);
+      if (document.activeElement === input) open();
+    };
+
     const show = async (query: string) => {
       const q = query.trim();
       if (!q) {
         list.replaceChildren();
+        message.textContent = '';
         status.textContent = '';
+        close();
         return;
       }
-      const engine = await load();
+      const engine = await load(url);
       if (!engine) {
-        list.replaceChildren();
-        status.textContent = 'Search works in a built site: npm run build, then npm run preview.';
+        say('Search works in a built site: npm run build, then npm run preview.');
         return;
       }
       const search = await engine.debouncedSearch(q, {}, 120);
@@ -124,164 +211,318 @@ const pagefind = `${import.meta.env.BASE_URL.replace(/\/?$/, '/')}pagefind/pagef
       if (!search) return;
       const pages = await Promise.all(search.results.slice(0, PAGES).map((r) => r.data()));
       if (input.value.trim() !== q) return;
+      if (pages.length === 0) {
+        say(`No page mentions “${q}”.`);
+        return;
+      }
+      let n = 0;
       list.replaceChildren(
         ...pages.map((page) => {
-          const li = document.createElement('li');
+          const group = document.createElement('div');
           const title = page.meta.title ?? page.url;
-          li.append(row(page.url, title, page.excerpt, false));
+          group.setAttribute('role', 'group');
+          group.setAttribute('aria-label', title);
+          group.append(row(page.url, title, page.excerpt, false, n++));
           // The page's own title is its first heading, which Pagefind lists
           // among its sections too.
           const sections = page.sub_results.filter((s) => s.url !== page.url && s.title !== title);
           for (const s of sections.slice(0, SECTIONS)) {
-            li.append(row(s.url, s.title, s.excerpt, true));
+            group.append(row(s.url, s.title, s.excerpt, true, n++));
           }
-          return li;
+          return group;
         }),
       );
-      const n = search.results.length;
-      status.textContent =
-        n === 0 ? `No page mentions “${q}”.` : n > PAGES ? `${n} pages; the ${PAGES} closest first.` : n === 1 ? '1 page.' : `${n} pages.`;
+      message.textContent = '';
+      const count = search.results.length;
+      status.textContent = count === 1 ? '1 page.' : `${count} pages.`;
+      list.scrollTop = 0;
+      mark(-1);
+      if (document.activeElement === input) open();
+      fade();
     };
 
+    input.addEventListener('focus', () => {
+      void load(url);
+      if (input.value.trim() && (list.childElementCount > 0 || message.textContent)) open();
+    });
     input.addEventListener('input', () => void show(input.value));
+    list.addEventListener('scroll', fade, { passive: true });
 
-    // The arrows go from the field through the results and back; Enter on
-    // the field opens the first.
-    dialog.addEventListener('keydown', (event) => {
-      const hits = [...list.querySelectorAll<HTMLAnchorElement>('a.hit')];
-      const at = hits.indexOf(document.activeElement as HTMLAnchorElement);
+    input.addEventListener('keydown', (event) => {
+      const all = options();
       if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
-        if (hits.length === 0) return;
-        event.preventDefault();
-        const next = event.key === 'ArrowDown' ? at + 1 : at - 1;
-        if (next < 0) input.focus();
-        else hits[Math.min(next, hits.length - 1)].focus();
-      } else if (event.key === 'Enter' && document.activeElement === input && hits[0]) {
-        event.preventDefault();
-        hits[0].click();
-      }
-    });
-
-    // A result on this page only moves to its section, so the dialog closes
-    // for it to be seen; a click on the backdrop closes it too.
-    dialog.addEventListener('click', (event) => {
-      const target = event.target as HTMLElement;
-      if (target === dialog || target.closest('a.hit, [data-search-close]')) dialog.close();
-    });
-
-    for (const button of document.querySelectorAll<HTMLElement>('[data-search-open]')) {
-      button.addEventListener('click', open);
-      // Its script and index start loading as the pointer reaches it.
-      button.addEventListener('pointerenter', () => void load(), { once: true });
-    }
-
-    document.addEventListener('keydown', (event) => {
-      const typing = (event.target as HTMLElement).closest('input, textarea, select, [contenteditable]');
-      const k = event.key === 'k' && (event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey;
-      const slash = event.key === '/' && !event.metaKey && !event.ctrlKey && !event.altKey && !typing;
-      if (k || slash) {
+        if (all.length === 0) return;
         event.preventDefault();
         open();
+        // Up from the field goes to the last result, up from the first back
+        // to the field.
+        const next = event.key === 'ArrowDown' ? active + 1 : active - 1;
+        mark(next < -1 ? all.length - 1 : Math.min(next, all.length - 1));
+      } else if (event.key === 'Enter') {
+        const target = all[active] ?? all[0];
+        if (target && !panel.hidden) {
+          event.preventDefault();
+          target.click();
+        }
+      } else if (event.key === 'Escape') {
+        event.preventDefault();
+        if (!panel.hidden) close();
+        else if (input.value) {
+          input.value = '';
+          void show('');
+        } else input.blur();
       }
     });
+
+    // A press on a result keeps the focus in the field, so the list is
+    // still there when the click lands.
+    list.addEventListener('mousedown', (event) => event.preventDefault());
+    list.addEventListener('pointermove', (event) => {
+      const option = (event.target as HTMLElement).closest<HTMLAnchorElement>('[role="option"]');
+      if (!option) return;
+      const index = options().indexOf(option);
+      if (index !== active) mark(index);
+    });
+    // A result on this page only moves to its section, so the list closes
+    // for it to be seen, and a phone's keyboard goes down.
+    list.addEventListener('click', (event) => {
+      if ((event.target as HTMLElement).closest('[role="option"]')) {
+        close();
+        input.blur();
+      }
+    });
+
+    clear.addEventListener('mousedown', (event) => event.preventDefault());
+    clear.addEventListener('click', () => {
+      input.value = '';
+      void show('');
+      input.focus();
+    });
+
+    root.addEventListener('focusout', (event) => {
+      if (!root.contains(event.relatedTarget as Node | null)) close();
+    });
   }
+
+  // ⌘K or Ctrl+K goes to the field that is shown: beside the pages, or
+  // above their folded copy. Either works on any system, as a keyboard's
+  // labels do not say which system it is plugged into.
+  document.addEventListener('keydown', (event) => {
+    const k = event.key === 'k' && (event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey;
+    if (!k) return;
+    const field = roots
+      .map((root) => root.querySelector<HTMLInputElement>('[data-search-input]')!)
+      .find((input) => input.getClientRects().length > 0);
+    if (field) {
+      event.preventDefault();
+      field.focus();
+      field.select();
+    }
+  });
 </script>
 
 <style>
   .search {
-    width: min(40rem, calc(100vw - 32px));
-    max-height: min(36rem, calc(100svh - 96px));
-    margin: 12svh auto auto;
-    padding: 0;
-    border: 1px solid var(--line-2);
-    border-radius: var(--radius);
-    background: var(--bg);
-    color: var(--text);
-    box-shadow: 0 24px 64px rgb(0 0 0 / 0.45);
-    overflow: hidden;
-  }
-
-  .search[open] {
-    display: flex;
-    flex-direction: column;
-  }
-
-  .search::backdrop {
-    background: rgb(var(--ink-rgb) / 0.72);
+    position: relative;
   }
 
   .field {
     display: flex;
     align-items: center;
-    gap: 10px;
-    padding: 6px 8px 6px 16px;
-    border-bottom: 1px solid var(--line);
+    gap: 8px;
+    padding: 0 5px 0 9px;
+    border: 1px solid var(--line-2);
+    border-radius: var(--radius-xs);
+    background: var(--card);
     color: var(--text-3);
+    cursor: text;
+    transition:
+      border-color 150ms ease,
+      box-shadow 150ms ease;
+  }
+
+  .field:hover {
+    border-color: rgb(var(--sky-rgb) / 0.28);
+  }
+
+  .field:focus-within {
+    border-color: rgb(var(--sky-5-rgb) / 0.55);
+    box-shadow: 0 0 0 3px rgb(var(--sky-5-rgb) / 0.14);
+  }
+
+  .field > :global(svg) {
+    flex: none;
+    pointer-events: none;
   }
 
   input {
     flex: 1;
     min-width: 0;
-    padding-block: 10px;
+    height: 28px;
+    padding: 0;
     border: 0;
     background: none;
     color: var(--text);
     font: inherit;
-    font-size: 1rem;
+    font-size: 0.875rem;
     outline: none;
+    appearance: none;
   }
 
   input::placeholder {
     color: var(--text-3);
   }
 
+  input::-webkit-search-decoration,
   input::-webkit-search-cancel-button {
     display: none;
+    appearance: none;
   }
 
-  .close {
+  /* Geist has no ⌘, so a Mac draws it in its own font: the only system
+     shown it. */
+  kbd {
+    display: none;
+    padding: 0 5px;
+    border: 1px solid var(--line-2);
+    border-radius: 4px;
+    color: var(--text-3);
+    font: inherit;
+    font-size: 0.6875rem;
+    line-height: 16px;
+  }
+
+  :global(html[data-os='macos']) .mac,
+  :global(html[data-os='windows']) .pc,
+  :global(html[data-os='linux']) .pc {
+    display: block;
+  }
+
+  .clear {
     display: grid;
     place-items: center;
-    width: 32px;
-    height: 32px;
+    flex: none;
+    width: 24px;
+    height: 24px;
     border: 0;
-    border-radius: var(--radius-sm);
+    border-radius: 4px;
     background: none;
     color: var(--text-3);
     cursor: pointer;
   }
 
-  .close:hover {
+  .clear:hover {
     background: var(--card-2);
     color: var(--text);
   }
 
-  .status {
-    padding: 10px 16px 0;
-    color: var(--text-3);
-    font-size: 0.8125rem;
-  }
-
-  .status:empty {
+  /* The keys while the field waits, the clear button once it holds words. */
+  .field:focus-within .keys,
+  input:not(:placeholder-shown) ~ .keys,
+  input:placeholder-shown ~ .clear {
     display: none;
   }
 
+  /* Phones and tablets: a field a finger can hit, and text at 16 px, under
+     which iOS zooms the page into the field. No keys to press. */
+  @media (hover: none) {
+    input {
+      height: 36px;
+      font-size: 1rem;
+    }
+
+    .clear {
+      width: 32px;
+      height: 32px;
+    }
+
+    /* The magnifier as large as the clear button's cross beside 16 px text. */
+    .field > :global(svg) {
+      width: 16px;
+      height: 16px;
+    }
+
+    .keys {
+      display: none;
+    }
+  }
+
+  .panel {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    z-index: 10;
+    display: flex;
+    flex-direction: column;
+    width: max(100%, min(30rem, calc(100vw - 2 * var(--gutter))));
+    max-height: min(30rem, var(--room, 70vh));
+    border: 1px solid var(--line-2);
+    border-radius: var(--radius-xs);
+    background: var(--bg);
+    box-shadow: 0 16px 48px rgb(0 0 0 / 0.4);
+    overflow: hidden;
+    animation: drop 140ms cubic-bezier(0.2, 0, 0, 1);
+  }
+
+  .panel[hidden] {
+    display: none;
+  }
+
+  @keyframes drop {
+    from {
+      opacity: 0;
+      transform: translateY(-4px);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .field {
+      transition: none;
+    }
+
+    .panel {
+      animation: none;
+    }
+  }
+
+  /* The list fades out at an edge it can scroll past (the script's fade). */
   .results {
+    --fade-top: 0px;
+    --fade-bottom: 0px;
     display: grid;
-    gap: 4px;
-    margin: 0;
-    padding: 8px;
-    list-style: none;
+    align-content: start;
+    gap: 2px;
+    min-height: 0;
+    padding: 4px;
     overflow-y: auto;
     overscroll-behavior: contain;
+    mask-image: linear-gradient(
+      to bottom,
+      transparent,
+      #000 var(--fade-top),
+      #000 calc(100% - var(--fade-bottom)),
+      transparent
+    );
+  }
+
+  .results[data-more-above] {
+    --fade-top: 28px;
+  }
+
+  .results[data-more-below] {
+    --fade-bottom: 28px;
   }
 
   .results:empty {
     display: none;
   }
 
-  .results li {
+  .results :global([role='group']) {
     display: grid;
+  }
+
+  .results :global([role='group'] + [role='group']) {
+    margin-top: 4px;
   }
 
   /* A whole row is the link, so its text is not underlined as a link in a
@@ -289,28 +530,27 @@ const pagefind = `${import.meta.env.BASE_URL.replace(/\/?$/, '/')}pagefind/pagef
   .results :global(.hit) {
     display: grid;
     gap: 2px;
-    padding: 9px 10px;
-    border-radius: var(--radius-sm);
+    padding: 8px 12px;
+    border-radius: 4px;
     color: var(--text);
     text-decoration: none;
   }
 
   .results :global(.hit.sub) {
     margin-left: 12px;
-    padding-block: 7px;
+    padding-block: 6px;
     border-left: 1px solid var(--line);
-    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+    border-radius: 0 4px 4px 0;
   }
 
-  .results :global(.hit:hover),
-  .results :global(.hit:focus-visible) {
+  .results :global(.hit[aria-selected='true']) {
     background: var(--card-2);
-    outline: none;
   }
 
   .results :global(.title) {
     font-size: 0.875rem;
     font-weight: 500;
+    line-height: 1.4;
   }
 
   .results :global(.sub .title) {
@@ -318,14 +558,28 @@ const pagefind = `${import.meta.env.BASE_URL.replace(/\/?$/, '/')}pagefind/pagef
   }
 
   .results :global(.excerpt) {
+    display: -webkit-box;
+    overflow: hidden;
     color: var(--text-2);
     font-size: 0.8125rem;
     line-height: 1.45;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
   }
 
   .results :global(mark) {
     border-radius: 3px;
     background: rgb(var(--sky-5-rgb) / 0.22);
     color: var(--text);
+  }
+
+  .message {
+    padding: 14px 16px;
+    color: var(--text-3);
+    font-size: 0.875rem;
+  }
+
+  .message:empty {
+    display: none;
   }
 </style>

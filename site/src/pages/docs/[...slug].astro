@@ -2,14 +2,14 @@
 //! A documentation page: one of the repository's Markdown files
 //! (lib/docs.mjs), with every page beside it and this page's sections. On
 //! a narrow screen the list of pages folds into a button above the text.
-//! The search (Search.astro) opens from the field above the list of pages,
-//! and on a narrow screen from the same field above that button.
+//! The search (Search.astro) is the field above the list of pages, and on
+//! a narrow screen the same field above that button; its results drop down
+//! under it.
 import { getCollection, render } from 'astro:content';
 import Base from '../../layouts/Base.astro';
 import Footer from '../../components/Footer.astro';
 import Nav from '../../components/Nav.astro';
 import Search from '../../components/Search.astro';
-import SearchButton from '../../components/SearchButton.astro';
 import { GROUPS, PAGES, hrefOf } from '../../lib/docs.mjs';
 import { onGitHub } from '../../lib/repo';
 
@@ -50,7 +50,7 @@ const title = slug ? `${heading} · Helio documentation` : 'Helio documentation'
 <Base title={title} description={description}>
   <Nav />
   <div class="wrap docs">
-    <div class="search-narrow"><SearchButton /></div>
+    <div class="search-narrow"><Search id="search-narrow" /></div>
     <details class="pages-narrow">
       <summary>Documentation <span aria-hidden="true">›</span> <strong>{page.title}</strong></summary>
       <nav aria-label="Documentation">
@@ -70,7 +70,7 @@ const title = slug ? `${heading} · Helio documentation` : 'Helio documentation'
     </details>
 
     <aside class="pages">
-      <div class="search-wide"><SearchButton /></div>
+      <div class="search-wide"><Search id="search-wide" /></div>
       <nav aria-label="Documentation">
         {
           GROUPS.map((group) => (
@@ -128,7 +128,6 @@ const title = slug ? `${heading} · Helio documentation` : 'Helio documentation'
     }
   </div>
   <Footer />
-  <Search />
 </Base>
 
 <script>
@@ -190,18 +189,51 @@ const title = slug ? `${heading} · Helio documentation` : 'Helio documentation'
     position: sticky;
     top: calc(var(--nav-height, var(--nav)) + 48px);
     max-height: calc(100vh - var(--nav-height, var(--nav)) - 72px);
+  }
+
+  .toc,
+  .pages nav {
     overflow-y: auto;
     overscroll-behavior: contain;
   }
 
-  .pages nav,
+  /* The search field and the groups of pages stand apart by one gap:
+     .pages' own, between the field and the list, which the list takes for
+     its groups. Only the list scrolls, under the field, so the field's
+     results can drop out over the text: over it, as .pages comes first. */
+  .pages {
+    z-index: 2;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .pages,
+  .pages-narrow nav {
+    gap: 28px;
+  }
+
+  .pages nav {
+    display: flex;
+    flex-direction: column;
+    gap: inherit;
+    min-height: 0;
+  }
+
   .pages-narrow nav {
     display: grid;
-    gap: 28px;
   }
 
   .group {
     display: grid;
+  }
+
+  /* A group ends on its last page's baseline, as the field ends on its
+     border, so the gap reads the same under both; the row's padding and the
+     line under its letters would otherwise add to the gap after a group.
+     (A browser without text-box keeps that line.) */
+  .pages .group a:last-child {
+    padding-bottom: 0;
+    text-box: trim-end cap alphabetic;
   }
 
   .group a,
@@ -241,10 +273,6 @@ const title = slug ? `${heading} · Helio documentation` : 'Helio documentation'
   .pages-narrow,
   .search-narrow {
     display: none;
-  }
-
-  .search-wide {
-    margin-bottom: 28px;
   }
 
   /* Each column's first ink is on .docs' top edge, 48 px under the header,
@@ -291,7 +319,7 @@ const title = slug ? `${heading} · Helio documentation` : 'Helio documentation'
     gap: 2px;
     padding: 16px 20px;
     border: 1px solid var(--line);
-    border-radius: 12px;
+    border-radius: var(--radius-xs);
     font-weight: 500;
   }
 
@@ -331,8 +359,11 @@ const title = slug ? `${heading} · Helio documentation` : 'Helio documentation'
       display: none;
     }
 
-    /* The field and the list of pages under it, closer than the text. */
+    /* The field and the list of pages under it, closer than the text;
+       its results drop out over both. */
     .search-narrow {
+      position: relative;
+      z-index: 2;
       display: block;
       margin-bottom: -12px;
     }
@@ -340,7 +371,7 @@ const title = slug ? `${heading} · Helio documentation` : 'Helio documentation'
     .pages-narrow {
       display: block;
       border: 1px solid var(--line);
-      border-radius: 12px;
+      border-radius: var(--radius-xs);
     }
 
     .pages-narrow summary {
@@ -437,7 +468,7 @@ const title = slug ? `${heading} · Helio documentation` : 'Helio documentation'
   .prose :global(pre) {
     padding: 16px 20px;
     border: 1px solid var(--line);
-    border-radius: 10px;
+    border-radius: var(--radius-xs);
     background: var(--card);
     color: var(--text);
     font-size: 0.85rem;
@@ -458,7 +489,7 @@ const title = slug ? `${heading} · Helio documentation` : 'Helio documentation'
 
   .prose :global(img) {
     height: auto;
-    border-radius: 10px;
+    border-radius: var(--radius-xs);
   }
 
   /* Wide tables scroll on their own rather than widen the page. */

@@ -476,7 +476,7 @@ test('the site does not name the apps as they were called before', () => {
   }
 });
 
-test('the documentation, and only it, is in the search index, and every page of it opens the search', () => {
+test('the documentation, and only it, is in the search index, and every page of it has the search field', () => {
   const pages = docs();
   const entry = JSON.parse(readFileSync(join(site, 'dist/pagefind/pagefind-entry.json'), 'utf8'));
   const indexed = Object.values(entry.languages).reduce((n, language) => n + language.page_count, 0);
@@ -486,7 +486,8 @@ test('the documentation, and only it, is in the search index, and every page of 
   for (const page of pages) {
     const html = built(page);
     assert.match(html, /<article class="prose"[^>]*data-pagefind-body/, `${page}: its text is what is indexed`);
-    assert.match(html, /<dialog[^>]*data-search[^>]*data-pagefind="\/pagefind\/pagefind\.js"/, `${page}: the search`);
-    assert.equal((html.match(/<button[^>]*data-search-open/g) ?? []).length, 2, `${page}: the field over the list of pages, and over its folded copy`);
+    assert.equal((html.match(/<div[^>]*data-search[^>]*data-pagefind="\/pagefind\/pagefind\.js"/g) ?? []).length, 2, `${page}: the field over the list of pages, and over its folded copy`);
+    assert.equal((html.match(/<input[^>]*role="combobox"[^>]*data-search-input/g) ?? []).length, 2, `${page}: each a field to type in`);
+    assert.ok(!html.includes('<dialog'), `${page}: no dialog opens for it`);
   }
 });
