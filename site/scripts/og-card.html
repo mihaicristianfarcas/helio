@@ -17,10 +17,13 @@ body { width: 1200px; height: 630px; overflow: hidden; font-family: Geist, syste
 h1 { margin-top: 50px; color: #d1dff6; font-size: 46px; line-height: 1.04; letter-spacing: -0.045em; font-weight: 600; }
 /* Each phrase from a line of its own, its last words kept together. */
 h1 span { display: block; }
-p { margin-top: 26px; color: rgb(209 223 246 / 0.62); font-size: 20px; line-height: 1.4; }
-/* The pair, its right edge and its foot past the card's, as the hero runs
-   on past the first screen. */
-.stage { position: absolute; left: 540px; top: 96px; width: 720px; }
+/* Narrower than the title, so its lines end well short of the MacBook. */
+p { margin-top: 26px; max-width: 400px; color: rgb(209 223 246 / 0.62); font-size: 20px; line-height: 1.4; }
+/* The pair at 900 px, half again the copy's width: the MacBook 558 px
+   wide, its feet 25 px above the card's foot, and the monitor behind it
+   running off the card's right edge, as the hero runs on past the first
+   screen. */
+.stage { position: absolute; left: 520px; top: 52px; width: 900px; }
 
 .pair {
   container-type: inline-size;
