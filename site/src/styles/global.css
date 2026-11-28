@@ -292,8 +292,9 @@ kbd {
 }
 
 /* A rule between the landing page's sections, the width of the page; not
-   under the hero, whose pictures end it. */
-main > section:not(.hero) + section {
+   under the hero, whose pictures end it. A sibling selector, not "+": a
+   section's script (Private's) can sit between two sections. */
+main > section:not(.hero) ~ section {
   border-top: 1px solid var(--line);
 }
 
