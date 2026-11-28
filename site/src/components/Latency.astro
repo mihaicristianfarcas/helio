@@ -4,9 +4,23 @@
 //! the mode it was taken at: frames shown, frames shown while the link
 //! narrows, a stream's start, and a click in a game. The conditions sit
 //! under the card, and every figure links to the page that measured it.
+//! Under them, six more from the same page: loss, an hour, coming back, the
+//! client's CPU and memory, and the rest of the figures.
 import Point from './Point.astro';
 import Section from './Section.astro';
-import { CLICK, FRAMES, HOUR, LOSS, NARROWING, SETUP, START, type Versus } from '../lib/facts';
+import {
+  CLICK,
+  CLIENT_CPU,
+  FRAMES,
+  HOUR,
+  LOSS,
+  MEMORY,
+  NARROWING,
+  RETURN,
+  SETUP,
+  START,
+  type Versus,
+} from '../lib/facts';
 
 const base = import.meta.env.BASE_URL.replace(/\/?$/, '/');
 const pct = (v: number) => `${Math.round(v)}%`;
@@ -64,6 +78,16 @@ const tiles = [
   </Point>
   <Point slot="points" icon="clock" title={`${pct(HOUR.helio)} over an hour`}>
     Frames shown, minute after minute, at 1440p and 120 fps; Moonlight {theirs(HOUR, pct)}.
+  </Point>
+  <Point slot="points" icon="return" title={`${RETURN.helio.toFixed(1)} s to come back`}>
+    Back within a minute, a Windows host still has your display ready; Moonlight {theirs(RETURN, (n) => `${n.toFixed(1)} s`)}
+    each time.
+  </Point>
+  <Point slot="points" icon="bolt" title={`${pct(CLIENT_CPU.helio)} of a core`}>
+    The client’s CPU at 1440p and 120 fps; Moonlight {theirs(CLIENT_CPU, pct)}.
+  </Point>
+  <Point slot="points" icon="laptop" title={`${MEMORY.helio} MB, an hour in`}>
+    The client’s memory, as in its first minute; Moonlight’s {theirs(MEMORY, (n) => `${n} MB`)}.
   </Point>
   <Point slot="points" icon="chart-bar" title="Every figure, with its conditions">
     Every mode from 1080p to 4K, bad links and hour-long streams, in the
@@ -127,6 +151,22 @@ const tiles = [
     color: var(--text-3);
     font-size: 0.8125rem;
     line-height: 1.6;
+  }
+
+  /* A screen under 760 px tall (a 1280x720 window) holds the section with
+     its six points only with the tiles a little tighter. */
+  @media (min-width: 861px) and (max-height: 760px) {
+    .tile {
+      padding-block: 16px;
+    }
+
+    .theirs {
+      padding-top: 12px;
+    }
+
+    .setup {
+      margin-top: 10px;
+    }
   }
 
   @media (max-width: 1000px) {

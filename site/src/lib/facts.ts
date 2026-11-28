@@ -48,6 +48,22 @@ export const NARROWING: Versus = { helio: 84.8, apollo: 40.5, sunshine: 20.7 };
 /** "Long sessions": an hour each at 2560x1440 at 120 fps, % of frames shown, mean of the minutes. */
 export const HOUR: Versus = { helio: 96.5, apollo: 85.2, sunshine: 85.0 };
 
+/** "Long sessions": the client's memory in the hour's last minute, MB (Helio's was 103 in the first too). */
+export const MEMORY: Versus = { helio: 103, apollo: 225, sunshine: 224 };
+
+/** "Load", 2560x1440 at 120 fps on noise: the client's CPU, % of a core, median of five runs. */
+export const CLIENT_CPU: Versus = { helio: 26.7, apollo: 43.5, sunshine: 43.8 };
+
+/**
+ * "Starting a stream", in s: the medians of the later starts with the
+ * monitor awake, 10 s after the last session. Helio Host on Windows keeps
+ * the virtual display for a minute after a session (LINGER,
+ * helio-host/src/platform.rs; the macOS and Linux hosts make a new one each
+ * time), so a client back in that minute skips making it; Moonlight's
+ * starts take as long as its first.
+ */
+export const RETURN: Versus = { helio: 0.42, apollo: 2.82, sunshine: 4.26 };
+
 /** docs/benchmarks.md, pq-boringtun on an Apple M4 Pro (Criterion). */
 export const TUNNEL = {
   encrypt1200: '0.63 µs',

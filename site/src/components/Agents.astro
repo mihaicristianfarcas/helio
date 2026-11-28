@@ -3,8 +3,8 @@
 //! shows it, the end of that session as its chat draws it (the app's
 //! sample, helio-app/src/chat/sample.rs, and view.rs: your messages in
 //! bubbles on the right, the agent's steps and reply as plain text, its
-//! request for a go-ahead in the window's own words), and three of the
-//! rules the host holds it to.
+//! request for a go-ahead in the window's own words), five of the rules
+//! the host holds it to, and the models it can run on.
 import { Image } from 'astro:assets';
 import Card from './Card.astro';
 import Icon from './Icon.astro';
@@ -61,6 +61,15 @@ import session from '../assets/windows/agent.webp';
   <Point slot="points" icon="hand" title="A person always wins">Starting a stream takes over from an agent.</Point>
   <Point slot="points" icon="lock" title="Secure screens are a person’s">
     At a sign-in or lock screen, or a UAC prompt, its input is held.
+  </Point>
+  <Point slot="points" icon="keyboard" title="Someone at the host comes first">
+    Input at the host holds the agent until 10 s after it stops.
+  </Point>
+  <Point slot="points" icon="shield" title="Its own permissions">
+    Like any device: what it may see and use, and whether it may act unwatched.
+  </Point>
+  <Point slot="points" icon="agent" title="Your model">
+    Codex, Claude Code, an API key, OpenRouter, or a model of your own through Ollama.
   </Point>
 </Section>
 

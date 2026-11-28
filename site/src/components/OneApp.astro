@@ -1,6 +1,6 @@
 ---
-//! One app, client and host: the Hosts window on Windows (the hero shows it
-//! on a Mac), Settings → Hosting as the app draws it on a PC with what it
+//! One app, client and host: the Hosts page on a Mac (the demo's hosts),
+//! Settings → Hosting as the app draws it on a PC with what it
 //! needs, and what a stream carries. The page is drawn here, not pictured,
 //! in the app's own words (helio-app/src/hosting.rs).
 import { Image } from 'astro:assets';
@@ -11,6 +11,13 @@ import Section from './Section.astro';
 import hosts from '../assets/windows/hosts.webp';
 
 /** Settings → Hosting's "What it needs" on a PC that has all of it. */
+/**
+ * Steam's mark, for Steam Big Picture: filled in currentColor on a 24x24
+ * box, from Simple Icons 13.21.0 (CC0 1.0), as SystemMark's marks are.
+ */
+const STEAM =
+  'M11.979 0C5.678 0 .511 4.86.022 11.037l6.432 2.658c.545-.371 1.203-.59 1.912-.59.063 0 .125.004.188.006l2.861-4.142V8.91c0-2.495 2.028-4.524 4.524-4.524 2.494 0 4.524 2.031 4.524 4.527s-2.03 4.525-4.524 4.525h-.105l-4.076 2.911c0 .052.004.105.004.159 0 1.875-1.515 3.396-3.39 3.396-1.635 0-3.016-1.173-3.331-2.727L.436 15.27C1.862 20.307 6.486 24 11.979 24c6.627 0 11.999-5.373 11.999-12S18.605 0 11.979 0zM7.54 18.21l-1.473-.61c.262.543.714.999 1.314 1.25 1.297.539 2.793-.076 3.332-1.375.263-.63.264-1.319.005-1.949s-.75-1.121-1.377-1.383c-.624-.26-1.29-.249-1.878-.03l1.523.63c.956.4 1.409 1.5 1.009 2.455-.397.957-1.497 1.41-2.454 1.012H7.54zm11.415-9.303c0-1.662-1.353-3.015-3.015-3.015-1.665 0-3.015 1.353-3.015 3.015 0 1.665 1.35 3.015 3.015 3.015 1.663 0 3.015-1.35 3.015-3.015zm-5.273-.005c0-1.252 1.013-2.266 2.265-2.266 1.249 0 2.266 1.014 2.266 2.266 0 1.251-1.017 2.265-2.266 2.265-1.253 0-2.265-1.014-2.265-2.265z';
+
 const needs = [
   ['NVIDIA graphics', 'Streams in HEVC or AV1, encoded by the graphics card (NVENC).'],
   ['SudoVDA', 'A virtual display at each device’s own resolution and refresh rate.'],
@@ -74,10 +81,22 @@ const needs = [
     A virtual display at your screen’s size, so nothing is scaled (on Linux, under GNOME and KDE).
   </Point>
   <Point slot="points" icon="sparkle" title="HDR and 4:4:4">
-    HDR10 reaches Macs with HDR displays, and 4:4:4 keeps coloured text sharp.
+    HDR from an NVIDIA PC or a Mac to your Mac’s HDR display, and 4:4:4 for text without colour fringes.
   </Point>
   <Point slot="points" icon="gamepad" title="Controllers and 7.1 sound">
     Up to 7.1 sound, and controllers on Windows hosts, with rumble.
+  </Point>
+  <Point slot="points" icon="activity" title="Moonlight’s statistics, and one more">
+    Ctrl+Alt+Shift+S shows them, and the time from the host capturing a frame to your screen.
+  </Point>
+  <Point slot="points" title="Steam Big Picture">
+    <svg slot="icon" width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <path d={STEAM}></path>
+    </svg>
+    Opened on the host for the stream, and closed after, as Sunshine does.
+  </Point>
+  <Point slot="points" icon="power" title="Wake-on-LAN">
+    A click on an offline host wakes it, on a wired network with Wake-on-LAN on.
   </Point>
 </Section>
 

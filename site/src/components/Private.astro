@@ -74,6 +74,15 @@ import devices from '../assets/windows/devices.webp';
   <Point slot="points" icon="copy" title="The clipboard, both ways">
     Text, images, files and folders; on macOS and Windows, never a password manager’s copies.
   </Point>
+  <Point slot="points" icon="lock" title="A PIN, post-quantum too">
+    Pairing adds ML-KEM-768 to SPAKE2: a recording of it does not help later.
+  </Point>
+  <Point slot="points" icon="shield" title="Only paired devices get in">
+    The host takes handshakes from no other keys, and the tunnel’s keys change every two minutes.
+  </Point>
+  <Point slot="points" icon="user" title="No account">
+    Nothing to sign up for, and no server of ours between your devices.
+  </Point>
   <Point slot="points" icon="globe" title="One exception">
     When both sides are behind symmetric NAT, nothing relays the stream: forward UDP 47800 to the host.
   </Point>

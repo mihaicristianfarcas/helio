@@ -56,8 +56,13 @@
      shorter. */
   --gap-section: clamp(96px, 10vw, 144px);
   --gap-head: clamp(28px, 4.5vh, 48px);
-  /* A card's height in a section, from the screen's. */
-  --card-height: clamp(300px, calc(100svh - 430px), 440px);
+  /* A card's height in a section: what the screen leaves under the header
+     once the section's statement, spacing and two rows of points are in.
+     Those took 405–447 px on screens 720–960 px tall (they grow with the
+     screen's height): about 279 px and 17.5% of it, which leaves
+     82% - 345 px, measured in Helium at 1280x720, 1440x800, 1512x860 and
+     1920x960. */
+  --card-height: clamp(240px, calc(82svh - 345px), 440px);
 
   --radius: 16px;
   --radius-sm: 8px;
