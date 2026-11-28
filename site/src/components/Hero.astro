@@ -1,8 +1,10 @@
 ---
 //! The page's opening, as zeron.sh opens its own: what Helio is, one
 //! sentence, the downloads (Install.astro) and the repository; then a real
-//! stream (scripts/capture-hero.sh): Helio's window on the Mac, the client,
-//! in front of the host's Overview of that same session.
+//! stream (scripts/capture-hero.sh): Helio's window on a MacBook, the
+//! client, in front of the host's Overview of that same session on a Windows
+//! PC's monitor. The screens are pictures, menu bar, Dock and taskbar
+//! included (scripts/hero/screens.html); the two devices are drawn here.
 import { Image } from 'astro:assets';
 import Icon from './Icon.astro';
 import SystemMark from './SystemMark.astro';
@@ -12,18 +14,10 @@ import { REPO } from '../lib/repo';
 import { short, stars } from '../lib/stars';
 
 const count = await stars();
-const shots = [
-  {
-    src: host,
-    alt: 'Helio on the host, gaming-pc, on Windows 11’s wallpaper: This computer → Overview, streaming to macbook at 2240 × 1480, 120 fps in HEVC, 93 frames a second sent, a host latency of 10.9 ms.',
-    place: 'back',
-  },
-  {
-    src: stream,
-    alt: 'Helio on a Mac, streaming gaming-pc in a window: the host’s desktop on Windows 11’s wallpaper, with the stream’s statistics over it.',
-    place: 'front',
-  },
-];
+const hostAlt =
+  'Helio on the host, gaming-pc, a Windows PC: This computer → Overview, streaming to macbook at 2240 × 1480, 120 fps in HEVC, 93 frames a second sent, a host latency of 10.9 ms.';
+const streamAlt =
+  'Helio on a MacBook, streaming gaming-pc in a window: the PC’s screen as its monitor shows it, Helio’s Overview above the Windows taskbar, with the stream’s statistics over it.';
 ---
 
 <section class="hero" id="top">
@@ -59,20 +53,32 @@ const shots = [
   </div>
   <div class="wrap stage">
     <div class="pair">
-      {
-        shots.map((shot, i) => (
-          <figure class={shot.place}>
+      <figure class="monitor">
+        <div class="panel">
+          <Image
+            src={host}
+            alt={hostAlt}
+            widths={[640, 960, 1280, 1600, 2000]}
+            sizes="(max-width: 1248px) 64vw, 797px"
+            loading="eager"
+          />
+        </div>
+      </figure>
+      <figure class="macbook">
+        <div class="lid">
+          <div class="bezel">
             <Image
-              src={shot.src}
-              alt={shot.alt}
+              src={stream}
+              alt={streamAlt}
               widths={[640, 960, 1280, 1600, 2000]}
-              sizes="(max-width: 1248px) 84vw, 1008px"
+              sizes="(max-width: 1248px) 53vw, 655px"
               loading="eager"
-              fetchpriority={i === shots.length - 1 ? 'high' : undefined}
+              fetchpriority="high"
             />
-          </figure>
-        ))
-      }
+          </div>
+        </div>
+        <span class="base"></span>
+      </figure>
     </div>
   </div>
 </section>
@@ -154,42 +160,133 @@ const shots = [
     padding-top: clamp(32px, 5vh, 64px);
   }
 
-  /* One picture behind, up and to the right; the other in front of it,
-     lower and to the left, both in one grid cell, as wide as the page. The
-     offsets are shares of the pair's width, so it keeps its shape at every
-     size: --drop plus 3:2 of --share of its width tall. The first screen
-     shows the text and the pair's top; the rest of it follows, whole, as
-     the page scrolls. */
+  /* The PC's monitor behind, up and to the right; the MacBook in front of
+     it, lower and to the left. Every size is a share of the pair's width
+     (cqw), so it keeps its shape at every width, 61.5 of 100 tall: the
+     MacBook's top 19.5 below the monitor's, just under the session's
+     figures on the monitor (their card ends at 18.2). The first screen shows the text and the
+     monitor's top; the rest follows, whole, as the page scrolls. */
   .pair {
-    --share: 0.76;
-    --drop: 0.17;
-    display: grid;
+    container-type: inline-size;
+    position: relative;
     width: 100%;
+    aspect-ratio: 100 / 61.5;
   }
 
   .pair > figure {
-    grid-area: 1 / 1;
-    width: calc(var(--share) * 100%);
+    position: absolute;
     margin: 0;
   }
 
-  .pair > .back {
-    justify-self: end;
-    align-self: start;
-  }
-
-  .pair > .front {
-    z-index: 1;
-    justify-self: start;
-    margin-top: calc(var(--drop) * 100%);
-  }
-
   .pair :global(img) {
+    display: block;
     width: 100%;
     height: auto;
-    border: 1px solid var(--line-2);
-    border-radius: 14px;
     /* To look at only: not dragged, selected or opened on their own. */
     pointer-events: none;
+  }
+
+  /* A plain monitor's panel: thin black bezels and a deeper chin, round a
+     screen of the stream's 2240:1480. */
+  .monitor {
+    top: 0;
+    right: 0;
+    width: 68cqw;
+  }
+
+  .panel {
+    position: relative;
+    z-index: 1;
+    padding: 0.8cqw 0.8cqw 2cqw;
+    border-radius: 1cqw;
+    background: #0d0d0f;
+    box-shadow:
+      inset 0 0 0 1px rgb(255 255 255 / 0.1),
+      0 2cqw 4cqw rgb(0 0 0 / 0.35);
+  }
+
+  .panel :global(img) {
+    border-radius: 0.2cqw;
+  }
+
+  /* A space black MacBook Pro from the front: the lid's rim round a black
+     bezel, the display's top corners round, the base a little wider than
+     the lid, with the scoop for a thumb in its edge, on its two front feet.
+     The notch is in the picture, against the menu bar. */
+  .macbook {
+    z-index: 1;
+    left: 0;
+    bottom: 0.35cqw;
+    width: 62cqw;
+  }
+
+  .macbook::before,
+  .macbook::after {
+    content: '';
+    position: absolute;
+    bottom: -0.35cqw;
+    width: 4.5cqw;
+    height: 0.35cqw;
+    border-radius: 0 0 0.3cqw 0.3cqw;
+    background: #0b0b0c;
+  }
+
+  .macbook::before {
+    left: 5%;
+  }
+
+  .macbook::after {
+    right: 5%;
+  }
+
+  .lid {
+    width: 57.4cqw;
+    margin: 0 auto;
+    padding: 0.3cqw 0.3cqw 0;
+    border-radius: 2.3cqw 2.3cqw 0 0;
+    background: linear-gradient(#45474c, #26272a);
+  }
+
+  .bezel {
+    padding: 1.1cqw 1.1cqw 1.9cqw;
+    border-radius: 2cqw 2cqw 0 0;
+    background: #000;
+  }
+
+  .bezel :global(img) {
+    border-radius: 0.9cqw 0.9cqw 0 0;
+  }
+
+  .base {
+    position: relative;
+    display: block;
+    height: 1.6cqw;
+    border-radius: 0 0 1.6cqw 1.6cqw / 0 0 1.2cqw 1.2cqw;
+    background: linear-gradient(#55575c, #333438 40%, #1c1d20);
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.22);
+  }
+
+  .base::before {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: 0;
+    width: 9cqw;
+    height: 0.6cqw;
+    transform: translateX(-50%);
+    border-radius: 0 0 0.7cqw 0.7cqw;
+    background: linear-gradient(#17181a, #2e2f33);
+  }
+
+  /* The MacBook stands in its own soft shadow. */
+  .base::after {
+    content: '';
+    position: absolute;
+    left: 3%;
+    right: 3%;
+    bottom: -1.75cqw;
+    height: 2.4cqw;
+    z-index: -1;
+    background: radial-gradient(closest-side, rgb(0 0 0 / 0.5), transparent);
   }
 </style>
