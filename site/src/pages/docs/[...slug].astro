@@ -247,6 +247,19 @@ const title = slug ? `${heading} · Helio documentation` : 'Helio documentation'
     margin-bottom: 28px;
   }
 
+  /* Each column's first ink is on .docs' top edge, 48 px under the header,
+     where the search field's border is: a text's first line is pulled up
+     by the space its line height and the font leave over its capitals,
+     measured in Geist in Helium as the first row that is not background
+     (4.5 px over 13 px, 7 px over 44 px), in em so it follows the size. */
+  .toc > .group-name:first-child {
+    margin-top: -0.346em;
+  }
+
+  .prose > :global(h1:first-child) {
+    margin-top: -0.159em;
+  }
+
   .doc {
     min-width: 0;
   }
