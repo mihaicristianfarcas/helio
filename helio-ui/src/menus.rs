@@ -6,7 +6,8 @@
 //!
 //! GPUI draws a menu bar only on a Mac. On Windows and Linux the actions
 //! and their keys work all the same; what the menus would offer is on the
-//! window itself there.
+//! window itself there (Help's Report a Bug… and Show Logs are rows of
+//! Helio's Settings → General, which dispatch these same actions).
 
 use std::path::PathBuf;
 
@@ -29,7 +30,7 @@ actions!(
         Zoom,
         BringAllToFront,
         Help,
-        ReportIssue,
+        ReportBug,
         ShowLogs,
     ]
 );
@@ -83,7 +84,19 @@ pub fn init(app: AppMenus, cx: &mut App) {
     });
     let help = format!("{REPOSITORY}/blob/main/{}", app.help);
     cx.on_action(move |_: &Help, cx| cx.open_url(&help));
-    cx.on_action(|_: &ReportIssue, cx| cx.open_url(&format!("{REPOSITORY}/issues")));
+    // The version as the window names it, a checkout's commit after it.
+    let version = match app.build.as_str() {
+        "" => app.version.clone(),
+        build => format!("{} ({build})", app.version),
+    };
+    cx.on_action(move |_: &ReportBug, cx| {
+        let system = crate::report::this_system();
+        cx.open_url(&crate::report::bug_form(
+            REPOSITORY,
+            &version,
+            system.as_deref(),
+        ))
+    });
     cx.on_action(move |_: &ShowLogs, cx| cx.reveal_path(&app.log));
 }
 
@@ -159,6 +172,6 @@ pub fn help_menu(name: &str) -> Menu {
         MenuItem::action(format!("{name} Help"), Help),
         MenuItem::separator(),
         MenuItem::action("Show Logs in Finder", ShowLogs),
-        MenuItem::action("Report an Issue…", ReportIssue),
+        MenuItem::action("Report a Bug…", ReportBug),
     ])
 }

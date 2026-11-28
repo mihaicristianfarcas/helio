@@ -1,7 +1,10 @@
 //! The app's own settings (General, Hosting, Updates), Moonlight's (video,
 //! audio, input) and the agents' setup, one page each: asides' cards of
 //! labelled rows, each saying what it does. General's Command line row puts
-//! `helio` on the PATH and takes it off (`crate::command`).
+//! `helio` on the PATH and takes it off (`crate::command`); its Help rows
+//! dispatch the Help menu's actions (`helio_ui::menus`), so Windows and
+//! Linux, which have no menu bar, report a bug and find the logs the same
+//! way a Mac does.
 
 use gpui::{div, prelude::*, px, AnyElement, App, Context, SharedString, Window};
 use helio_proto::control::{codec, video};
@@ -75,7 +78,8 @@ impl HelioApp {
         let (title, subtitle, body): (&str, &str, AnyElement) = match tab {
             Tab::General => (
                 "General",
-                "Helio itself: when it opens, its command line, and setting it up again.",
+                "Helio itself: when it opens, its command line, setting it up again, and \
+                    reporting a bug.",
                 self.general(t, cx),
             ),
             Tab::Hosting => (
@@ -245,7 +249,42 @@ impl HelioApp {
                     t,
                 )),
             )
+            .child(section("Help", t).child(rows(Self::help_rows(t), t)))
             .into_any_element()
+    }
+
+    /// Help's rows: the bug form, and the logs it asks for.
+    fn help_rows(t: Theme) -> [AnyElement; 2] {
+        let report = button("report-bug", "Report a Bug…", t).on_click(|_, window, cx| {
+            window.dispatch_action(Box::new(helio_ui::menus::ReportBug), cx)
+        });
+        let logs = button("show-logs", "Show Logs", t).on_click(|_, window, cx| {
+            window.dispatch_action(Box::new(helio_ui::menus::ShowLogs), cx)
+        });
+        [
+            setting(
+                "Report a bug",
+                Some(
+                    "Opens Helio's bug form on GitHub in your browser, with this version and \
+                        system filled in. Nothing is sent until you submit it there."
+                        .into(),
+                ),
+                report,
+                t,
+            )
+            .into_any_element(),
+            setting(
+                "Logs",
+                Some(
+                    "Shows Helio's log in its folder: a bug report asks for it. Logs hold no \
+                        PIN, password or key."
+                        .into(),
+                ),
+                logs,
+                t,
+            )
+            .into_any_element(),
+        ]
     }
 
     /// The Command line row: where `helio` stands, and the button that

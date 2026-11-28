@@ -16,6 +16,7 @@ pub mod login;
 pub mod markdown;
 pub mod menus;
 pub mod motion;
+pub mod report;
 pub mod text_field;
 pub mod theme;
 pub mod tray;
