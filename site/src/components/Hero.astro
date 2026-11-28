@@ -22,15 +22,15 @@ const streamAlt =
 
 <section class="hero" id="top">
   <div class="wrap">
-    <h1>
+    <h1 class="rise" style="--i: 0">
       <span class="phrase">Low-latency remote desktop</span>
       <span class="phrase">and game streaming</span>
     </h1>
-    <p class="lead">
+    <p class="lead rise" style="--i: 1">
       Stream a computer’s desktop and games to another, inside one post-quantum WireGuard tunnel. One app for macOS,
       Windows and Linux, free and open source.
     </p>
-    <div class="actions">
+    <div class="actions rise" style="--i: 2">
       <a class="button primary" href="#install">
         <span class="mark">
           <Icon name="download" size={17} />
@@ -52,7 +52,7 @@ const streamAlt =
     </div>
   </div>
   <div class="wrap stage">
-    <div class="pair">
+    <div class="pair rise" style="--i: 4">
       <figure class="monitor">
         <div class="panel">
           <Image
@@ -88,6 +88,24 @@ const streamAlt =
     display: flex;
     flex-direction: column;
     padding-top: clamp(48px, 10vh, 128px);
+  }
+
+  /* The first screen comes in once, as zeron.sh's does: the title, the
+     sentence and the buttons rise 14 px into place, 90 ms apart, and the
+     devices a beat after. It starts when the page shows: a reload keeps
+     the page hidden until it is back where the reader was
+     (layouts/Base.astro, data-restore). */
+  @media (prefers-reduced-motion: no-preference) {
+    :global(html:not([data-restore])) .rise {
+      animation: hero-rise 0.9s cubic-bezier(0.2, 0.7, 0.2, 1) calc(var(--i) * 90ms) both;
+    }
+  }
+
+  @keyframes hero-rise {
+    from {
+      opacity: 0;
+      translate: 0 14px;
+    }
   }
 
   h1 {

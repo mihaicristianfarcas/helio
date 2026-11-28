@@ -63,6 +63,21 @@ const { title } = Astro.props;
     height: 100%;
   }
 
+  /* What runs off the card's edges moves 6 px toward its text while the
+     card is hovered, as zeron.sh's cards do. It reaches 8 px past those
+     edges, where the card clips it, so moving opens no gap there. */
+  .visual :global(.bleed > *) {
+    margin-right: -8px;
+    height: calc(100% + 8px);
+    transition: translate 0.5s cubic-bezier(0.2, 0.7, 0.2, 1);
+  }
+
+  @media (hover: hover) and (prefers-reduced-motion: no-preference) {
+    .card:hover .visual :global(.bleed > *) {
+      translate: -6px -6px;
+    }
+  }
+
   .visual :global(.shot img) {
     height: 100%;
     object-fit: cover;
