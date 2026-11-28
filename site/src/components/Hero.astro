@@ -8,7 +8,7 @@ import Icon from './Icon.astro';
 import SystemMark from './SystemMark.astro';
 import stream from '../assets/hero/stream.webp';
 import host from '../assets/hero/host.webp';
-import { RELEASE_NOTES, REPO, VERSION } from '../lib/repo';
+import { REPO } from '../lib/repo';
 import { short, stars } from '../lib/stars';
 
 const count = await stars();
@@ -28,7 +28,6 @@ const shots = [
 
 <section class="hero" id="top">
   <div class="wrap">
-    <a class="news" href={RELEASE_NOTES}><Icon name="sparkle" size={14} />What’s new in v{VERSION}</a>
     <h1>
       <span class="phrase">Low-latency remote desktop</span>
       <span class="phrase">and game streaming</span>
@@ -83,26 +82,6 @@ const shots = [
     display: flex;
     flex-direction: column;
     padding-top: clamp(48px, 10vh, 128px);
-  }
-
-  /* The release's notes, over the title. */
-  .news {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    margin-bottom: min(24px, 3vh);
-    padding: 4px 12px 4px 10px;
-    border: 1px solid var(--line-2);
-    border-radius: 999px;
-    color: var(--text-2);
-    font-size: 0.8125rem;
-    font-weight: 500;
-  }
-
-  .news:hover {
-    border-color: rgb(255 255 255 / 0.3);
-    color: var(--text);
-    text-decoration: none;
   }
 
   h1 {
