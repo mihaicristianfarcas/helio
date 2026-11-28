@@ -1,28 +1,162 @@
 <!doctype html><html><head><meta charset="utf-8">
 <!--
   The link preview (public/og.jpg), 1200x630, in the page's look: the logo's
-  ink and blues only, the hero's title, and its two pictures: a stream in
-  Helio's window in front of the host's Overview (src/assets/hero/). Any headless browser
-  renders it at 1200x630; save the screenshot as public/og.jpg.
+  ink and blues only, the hero's title, and the hero's pair: the host's
+  screen on the PC's monitor behind, the stream of it on the MacBook in
+  front (src/assets/hero/), the devices drawn by the CSS below, which is
+  Hero.astro's, copied with its comments. Any headless browser renders it
+  at 1200x630; save the screenshot as public/og.jpg.
 -->
 <style>
 @font-face { font-family: Geist; src: url(../node_modules/@fontsource-variable/geist/files/geist-latin-wght-normal.woff2) format('woff2'); font-weight: 100 900; }
 * { margin: 0; box-sizing: border-box; }
 body { width: 1200px; height: 630px; overflow: hidden; font-family: Geist, system-ui; position: relative; background: #16213a; }
-.copy { position: absolute; left: 64px; top: 64px; width: 480px; }
+.copy { position: absolute; left: 64px; top: 60px; width: 440px; }
 .logo { display: flex; align-items: center; gap: 14px; color: #d1dff6; font-weight: 600; font-size: 30px; letter-spacing: -0.015em; }
 .logo img { width: 46px; height: 46px; }
-h1 { margin-top: 56px; color: #d1dff6; font-size: 50px; line-height: 1.02; letter-spacing: -0.045em; font-weight: 600; }
-p { margin-top: 26px; color: rgb(209 223 246 / 0.62); font-size: 21px; line-height: 1.35; }
-.win { position: absolute; width: 640px; border: 1px solid rgb(209 223 246 / 0.18); border-radius: 12px; }
-.back { left: 620px; top: 48px; }
-.front { left: 540px; top: 212px; }
+h1 { margin-top: 50px; color: #d1dff6; font-size: 46px; line-height: 1.04; letter-spacing: -0.045em; font-weight: 600; }
+/* Each phrase from a line of its own, its last words kept together. */
+h1 span { display: block; }
+p { margin-top: 26px; color: rgb(209 223 246 / 0.62); font-size: 20px; line-height: 1.4; }
+/* The pair, its right edge and its foot past the card's, as the hero runs
+   on past the first screen. */
+.stage { position: absolute; left: 540px; top: 96px; width: 720px; }
+
+.pair {
+  container-type: inline-size;
+  position: relative;
+  width: 100%;
+  aspect-ratio: 100 / 61.5;
+}
+
+.pair > figure {
+  position: absolute;
+  margin: 0;
+}
+
+.pair img {
+  display: block;
+  width: 100%;
+  height: auto;
+  /* To look at only: not dragged, selected or opened on their own. */
+  pointer-events: none;
+}
+
+/* A plain monitor's panel: thin black bezels and a deeper chin, round a
+   screen of the stream's 2240:1480. */
+.monitor {
+  top: 0;
+  right: 0;
+  width: 68cqw;
+}
+
+.panel {
+  position: relative;
+  z-index: 1;
+  padding: 0.8cqw 0.8cqw 2cqw;
+  border-radius: 1cqw;
+  background: #0d0d0f;
+  box-shadow:
+    inset 0 0 0 1px rgb(255 255 255 / 0.1),
+    0 2cqw 4cqw rgb(0 0 0 / 0.35);
+}
+
+.panel img {
+  border-radius: 0.2cqw;
+}
+
+/* A space black MacBook Pro from the front: the lid's rim round a black
+   bezel, the display's top corners round, the base a little wider than
+   the lid, with the scoop for a thumb in its edge, on its two front feet.
+   The notch is in the picture, against the menu bar. */
+.macbook {
+  z-index: 1;
+  left: 0;
+  bottom: 0.35cqw;
+  width: 62cqw;
+}
+
+.macbook::before,
+.macbook::after {
+  content: '';
+  position: absolute;
+  bottom: -0.35cqw;
+  width: 4.5cqw;
+  height: 0.35cqw;
+  border-radius: 0 0 0.3cqw 0.3cqw;
+  background: #0b0b0c;
+}
+
+.macbook::before {
+  left: 5%;
+}
+
+.macbook::after {
+  right: 5%;
+}
+
+.lid {
+  width: 57.4cqw;
+  margin: 0 auto;
+  padding: 0.3cqw 0.3cqw 0;
+  border-radius: 2.3cqw 2.3cqw 0 0;
+  background: linear-gradient(#45474c, #26272a);
+}
+
+.bezel {
+  padding: 1.1cqw 1.1cqw 1.9cqw;
+  border-radius: 2cqw 2cqw 0 0;
+  background: #000;
+}
+
+.bezel img {
+  border-radius: 0.9cqw 0.9cqw 0 0;
+}
+
+.base {
+  position: relative;
+  display: block;
+  height: 1.6cqw;
+  /* The aluminium's edge from the front: a tight round, under half the
+     base's height, not a curve along it. */
+  border-radius: 0 0 0.9cqw 0.9cqw / 0 0 0.7cqw 0.7cqw;
+  background: linear-gradient(#55575c, #333438 40%, #1c1d20);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.22);
+}
+
+.base::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 0;
+  width: 9cqw;
+  height: 0.6cqw;
+  transform: translateX(-50%);
+  border-radius: 0 0 0.7cqw 0.7cqw;
+  background: linear-gradient(#17181a, #2e2f33);
+}
+
+/* The MacBook stands in its own soft shadow. */
+.base::after {
+  content: '';
+  position: absolute;
+  left: 3%;
+  right: 3%;
+  bottom: -1.75cqw;
+  height: 2.4cqw;
+  z-index: -1;
+  background: radial-gradient(closest-side, rgb(0 0 0 / 0.5), transparent);
+}
 </style></head><body>
 <div class="copy">
   <div class="logo"><img src="../src/assets/helio.svg">Helio</div>
-  <h1>Low-latency remote desktop and game streaming</h1>
-  <p>For macOS, Windows and Linux.<br>Free and open source.</p>
+  <h1><span>Your PC’s games, on&nbsp;any&nbsp;screen.</span><span>Smooth, even when your&nbsp;network&nbsp;isn’t.</span></h1>
+  <p>Low-latency remote desktop and game streaming for macOS, Windows and Linux. Free and open source.</p>
 </div>
-<img class="win back" src="../src/assets/hero/host.webp">
-<img class="win front" src="../src/assets/hero/stream.webp">
+<div class="stage">
+  <div class="pair">
+    <figure class="monitor"><div class="panel"><img src="../src/assets/hero/host.webp"></div></figure>
+    <figure class="macbook"><div class="lid"><div class="bezel"><img src="../src/assets/hero/stream.webp"></div></div><span class="base"></span></figure>
+  </div>
+</div>
 </body></html>
