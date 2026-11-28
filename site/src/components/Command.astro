@@ -20,7 +20,8 @@ const copy = split.map((l) => l.cmd.trimEnd()).join('\n');
   <div class="cmd-head">
     <span class="label">{label}</span>
     <button type="button" class="copy" data-copy={copy}>
-      <Icon name="copy" size={15} />
+      <Icon name="copy" size={15} class="glyph" />
+      <Icon name="check" size={15} class="glyph done" />
       <span data-copy-label>Copy</span>
       <span class="visually-hidden">: {label}</span>
     </button>
@@ -118,6 +119,16 @@ const copy = split.map((l) => l.cmd.trimEnd()).join('\n');
 
   .copy[data-done] {
     color: var(--text);
+  }
+
+  /* The copy glyph while it waits, a tick while it says Copied. */
+  .copy :global(.glyph.done),
+  .copy[data-done] :global(.glyph:not(.done)) {
+    display: none;
+  }
+
+  .copy[data-done] :global(.glyph.done) {
+    display: block;
   }
 </style>
 
