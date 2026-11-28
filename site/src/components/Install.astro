@@ -246,9 +246,11 @@ const base = import.meta.env.BASE_URL.replace(/\/?$/, '/');
     font-size: 0.9375rem;
   }
 
+  /* The panel's lines are step 1 in detail (Install, below): plain,
+     muted numbers, so the badges stay with the three steps alone. */
   .then li {
     position: relative;
-    padding-left: 36px;
+    padding-left: 24px;
     counter-increment: then;
   }
 
@@ -257,18 +259,12 @@ const base = import.meta.env.BASE_URL.replace(/\/?$/, '/');
   }
 
   .then li::before {
-    content: counter(then);
+    content: counter(then) '.';
     position: absolute;
-    top: 1px;
+    top: 0;
     left: 0;
-    display: grid;
-    place-items: center;
-    width: 22px;
-    height: 22px;
-    border: 1px solid var(--line-2);
-    border-radius: 50%;
-    color: var(--text);
-    font-size: 0.75rem;
+    color: var(--text-3);
+    font-variant-numeric: tabular-nums;
   }
 
   .then :global(strong) {
