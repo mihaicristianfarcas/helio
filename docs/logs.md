@@ -7,7 +7,7 @@ get more out of them.
 
 **Settings → General → Report a Bug…** in Helio opens the form in your
 browser with Helio's version and your system already filled in (on a Mac,
-**Help → Report a Bug…** too). Nothing is sent until you submit the form.
+**Help → Report a Bug…** too, and Helio's icon's menu while hosting is on). Nothing is sent until you submit the form.
 
 Logs never contain a PIN, password, key or token. They do contain host
 names and addresses: edit them out if you like. On macOS and Linux, only
