@@ -1,7 +1,8 @@
 ---
 //! Project and documentation navigation: the documentation's main pages,
 //! on this site, and the project: its pages on GitHub, and what the
-//! documentation has of it (contributing, security) on this site.
+//! documentation has of it (contributing, security) on this site. Its last
+//! line names Helio's author, linked to mihaicristian.dev, and the license.
 import Logo from './Logo.astro';
 import { DISCUSSIONS, REPO, onGitHub } from '../lib/repo';
 
@@ -44,7 +45,7 @@ const base = import.meta.env.BASE_URL.replace(/\/?$/, '/');
     </div>
   </div>
   <div class="wrap legal">
-    <span>Licensed under the GPL-3.0.</span>
+    <span>Created by <a href="https://mihaicristian.dev">Mihai-Cristian Farcaș</a>. Licensed under the <span class="whole">GPL-3.0</span>.</span>
     <span>Moonlight, Sunshine and Apollo are their authors’ projects; Helio is not affiliated with them.</span>
   </div>
 </footer>
@@ -111,6 +112,26 @@ const base = import.meta.env.BASE_URL.replace(/\/?$/, '/');
     padding-block: 24px 32px;
     color: var(--text-3);
     font-size: 0.8125rem;
+  }
+
+  /* The name is a link inside a sentence, so it is underlined as those are
+     (global.css), and a step brighter than the line around it. */
+  .legal a {
+    color: var(--text-2);
+    text-decoration: underline;
+    text-decoration-color: var(--line-2);
+    text-decoration-thickness: 1px;
+    text-underline-offset: 0.22em;
+  }
+
+  .legal a:hover {
+    color: var(--text);
+    text-decoration-color: currentColor;
+  }
+
+  /* A name with a hyphen, which a narrow line would otherwise break at. */
+  .whole {
+    white-space: nowrap;
   }
 
   @media (max-width: 860px) {
