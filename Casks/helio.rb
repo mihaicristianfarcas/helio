@@ -3,9 +3,9 @@
 cask "helio" do
   arch arm: "arm64", intel: "x86_64"
 
-  version "0.9.7"
-  sha256 arm:   "4c5e854bdc66aabc8f17884d590b336a97766edae82ba02807330ca7b447a970",
-         intel: "baf03210493f2d28bd906cf1e263b38a1f621a4b594c65f851b0af022e0f95f1"
+  version "0.10.0"
+  sha256 arm:   "b399e2e606570c36186fd96fdf71f09e56bcabef39479c1e7a21c41ad77bfccc",
+         intel: "fa506d74cb5d1dba238faa32d879ce090d3c9f0fb7c611ec33b2651d9b381255"
 
   url "https://github.com/mihaicristianfarcas/helio/releases/download/v#{version}/Helio-#{version}-macos-#{arch}.zip"
   name "Helio"
@@ -21,8 +21,22 @@ cask "helio" do
 
   app "Helio.app"
 
-  zap trash: [
-    "~/Library/Application Support/Helio",
-    "~/Library/Logs/Helio",
-  ]
+  uninstall quit: "dev.mihaicristian.helio"
+
+  zap launchctl: "dev.mihaicristian.helio.host",
+      delete:    "/etc/paths.d/helio",
+      trash:     [
+        "~/Library/Application Support/Helio Host",
+        "~/Library/Application Support/Helio",
+        "~/Library/LaunchAgents/dev.mihaicristian.helio.host.plist",
+        "~/Library/LaunchAgents/dev.mihaicristian.helio.plist",
+        "~/Library/Logs/Helio",
+        "~/Library/Preferences/dev.mihaicristian.helio.plist",
+      ]
+
+  caveats <<~EOS
+    Hosting is off until you turn it on in Helio (Settings > Hosting). macOS
+    then asks for Screen Recording and Accessibility for Helio Host
+    inside Helio.
+  EOS
 end
