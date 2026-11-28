@@ -357,10 +357,49 @@ test('without JavaScript static content has no Tab stops, and every download sta
   } finally { await close(); }
 });
 
-test('the page writes no version into itself', () => {
-  const page = readFileSync(join(site, 'dist/index.html'), 'utf8');
-  const text = page.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '').replace(/<[^>]+>/g, ' ');
-  assert.equal(text.match(/Version\s+\d/g)?.length ?? 0, 0);
+test('the download card is built with its release, and that release arriving changes nothing', async () => {
+  const { window, document, run, close } = page(['layouts/Base.astro']);
+  try {
+    const picker = document.querySelector('[data-picker]');
+    const commit = picker.dataset.commit;
+    if (!commit) {
+      // Built without network: the card says what it can, and the page completes it.
+      assert.equal(picker.querySelector('[data-build]').textContent.trim(), 'The newest released version.');
+      return;
+    }
+    // As a browser shows it: runs of white space are one space.
+    const shown = (element) => element.textContent.replace(/\s+/g, ' ').trim();
+    assert.match(shown(picker.querySelector('[data-build]')), /^Version \S+, built from [0-9a-f]{7} on \w+ \d+, \d{4}\.$/);
+    for (const size of picker.querySelectorAll('[data-size]')) assert.match(shown(size), /^(\d+\.\d MB|not built yet)$/);
+    let respond;
+    window.fetch = () => new Promise((resolve) => { respond = resolve; });
+    run('components/Install.astro');
+    const before = picker.innerHTML;
+    // The same commit with no files: were it read, every link would close.
+    respond({ ok: true, json: async () => ({ version: '9.9.9', commit, published: '2030-01-02T00:00:00Z', files: {} }) });
+    await new Promise(setImmediate);
+    assert.equal(picker.innerHTML, before);
+  } finally { await close(); }
+});
+
+test('a release newer than the build replaces the card\'s version, sizes and links', async () => {
+  const { window, document, run, close } = page(['layouts/Base.astro']);
+  try {
+    const picker = document.querySelector('[data-picker]');
+    let respond;
+    window.fetch = () => new Promise((resolve) => { respond = resolve; });
+    run('components/Install.astro');
+    const ids = ['Helio-macos-arm64', 'Helio-macos-x86_64', 'Helio-windows-x86_64-setup', 'Helio-linux-x86_64'];
+    const files = Object.fromEntries(ids.map((id) => [id, { url: `https://example.org/${id}`, size: 12_345_678 }]));
+    respond({ ok: true, json: async () => ({ version: '9.9.9', commit: 'f'.repeat(40), published: '2030-01-02T00:00:00Z', files }) });
+    await new Promise(setImmediate);
+    assert.equal(picker.querySelector('[data-build]').textContent, 'Version 9.9.9, built from fffffff on January 2, 2030.');
+    for (const link of picker.querySelectorAll('[data-file]')) {
+      assert.equal(link.getAttribute('href'), `https://example.org/${link.dataset.file}?fffffff`);
+      assert.equal(link.hasAttribute('aria-disabled'), false);
+    }
+    for (const size of picker.querySelectorAll('[data-size]')) assert.equal(size.textContent, '12.3 MB');
+  } finally { await close(); }
 });
 
 test('each of the landing page\'s own links finds its section there', () => {

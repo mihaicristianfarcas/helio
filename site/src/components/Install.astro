@@ -4,11 +4,15 @@
 //! script, or on a system it cannot name, all the systems are shown and the line
 //! closes the card. A phone or tablet, where Helio does not run, never sees this
 //! section (global.css), and its download buttons say why (layouts/Base.astro).
-//! Script also reads the sizes and the build from latest.json.
+//! The build writes in the release the downloads are, from latest.json
+//! (lib/release.ts): its version, its sizes and its links, so the card does
+//! not move as the page loads. Script reads latest.json again, and changes the
+//! card only for a newer release.
 import Command from './Command.astro';
 import SystemMark from './SystemMark.astro';
 import { REPO, TAP } from '../lib/repo';
 import { CHECKSUMS, FILES, MANIFEST, type File, type System } from '../lib/downloads';
+import { day, megabytes, release } from '../lib/release';
 
 interface Panel {
   system: System;
@@ -77,6 +81,23 @@ const steps = [
   ['Stream', 'Click the host again, from anywhere. Ctrl+Alt+Shift+Q ends the stream.'],
 ];
 const panelId = (system: System) => `download-${system}`;
+const built = await release();
+const commit = built?.commit.slice(0, 7);
+/**
+ * A download as the release the page is built with has it: its address with
+ * the commit (a browser that kept an earlier build does not hand it back) and
+ * its size, or, where the release lacks it, not built yet. Without a release,
+ * the fixed address alone, for the script to complete.
+ */
+const download = (f: File) => {
+  if (!built) return { href: f.url, size: '', missing: false };
+  const file = built.files[f.id];
+  return file
+    ? { href: `${file.url}?${commit}`, size: megabytes(file.size), missing: false }
+    : { href: undefined, size: 'not built yet', missing: true };
+};
+const missing = (f: File) =>
+  download(f).missing ? { 'data-missing': '', 'aria-disabled': 'true' as const, tabindex: -1 } : {};
 const base = import.meta.env.BASE_URL.replace(/\/?$/, '/');
 ---
 
@@ -86,7 +107,7 @@ const base = import.meta.env.BASE_URL.replace(/\/?$/, '/');
       Download, pair and stream. <span class="rest">Install Helio on both computers.</span>
     </h2>
 
-    <div class="picker" data-picker data-manifest={MANIFEST} data-repo={REPO}>
+    <div class="picker" data-picker data-manifest={MANIFEST} data-repo={REPO} data-commit={built?.commit}>
       {
         panels.map((p) => (
           <article class="panel" id={panelId(p.system)} aria-labelledby={`${panelId(p.system)}-title`} data-os={p.system}>
@@ -94,11 +115,13 @@ const base = import.meta.env.BASE_URL.replace(/\/?$/, '/');
               <h3 id={`${panelId(p.system)}-title`}>Helio for {p.name}</h3>
               <p class="needs">{p.needs}</p>
               <div class="files">
-                <a class="button primary" href={p.file.url} data-file={p.file.id}>
+                <a class="button primary" href={download(p.file).href} data-file={p.file.id} {...missing(p.file)}>
                   <SystemMark system={p.system} />
                   Download for {p.name}
                   {p.detail && <span class="detail">{p.detail}</span>}
-                  <span class="size num" data-size />
+                  <span class="size num" data-size>
+                    {download(p.file).size}
+                  </span>
                 </a>
               </div>
               {p.caveat && <p class="caveat note">{p.caveat}</p>}
@@ -126,7 +149,7 @@ const base = import.meta.env.BASE_URL.replace(/\/?$/, '/');
         {
           list.map((f) => (
             <span data-listed={f.id}>
-              <a href={f.url} data-file={f.id}>
+              <a href={download(f).href} data-file={f.id} {...missing(f)}>
                 {f.label}
               </a>
             </span>
@@ -135,11 +158,27 @@ const base = import.meta.env.BASE_URL.replace(/\/?$/, '/');
       </p>
 
       <p class="build note">
-        <span data-build>The newest released version.</span>
+        <span data-build>
+          {
+            built ? (
+              <>
+                Version {built.version}, built from <a href={`${REPO}/commit/${built.commit}`}>{commit}</a>
+                {` on ${day(built.published)}.`}
+              </>
+            ) : (
+              'The newest released version.'
+            )
+          }
+        </span>
         <a href={CHECKSUMS}>SHA-256 checksums</a>
         <a href={`${REPO}/releases`}>All releases</a>
       </p>
     </div>
+
+    <p class="note after">
+      Helio offers each new release and installs it when you choose. Building from source takes Rust 1.96 or newer.
+      <a href={`${base}docs/install/`}>Installing, step by step</a>
+    </p>
 
     <ol class="steps">
       {
@@ -156,10 +195,6 @@ const base = import.meta.env.BASE_URL.replace(/\/?$/, '/');
         ))
       }
     </ol>
-    <p class="note after">
-      Helio offers each new release and installs it when you choose. Building from source takes Rust 1.96 or newer.
-      <a href={`${base}docs/install/`}>Installing, step by step</a>
-    </p>
   </div>
 </section>
 
@@ -375,9 +410,9 @@ const base = import.meta.env.BASE_URL.replace(/\/?$/, '/');
 <script>
   // The visitor's system (layouts/Base.astro), chosen for them: its panel
   // and its one button, with the line of other platforms moved up under the
-  // steps. Then what
-  // latest.json says of the build: its commit and date, the button's size. A
-  // file it does not list is not built yet.
+  // steps. Then latest.json again: the build wrote in the release it read
+  // (data-commit), and only a newer one changes the card, its commit and
+  // date, the sizes and the links. A file it does not list is not built yet.
   const picker = document.querySelector<HTMLElement>('[data-picker]')!;
   const system = document.documentElement.dataset.os;
   if (system) {
@@ -399,11 +434,15 @@ const base = import.meta.env.BASE_URL.replace(/\/?$/, '/');
     files: Record<string, { url: string; size: number }>;
   }
 
+  // As lib/release.ts writes them at build: the script cannot import it.
   const megabytes = (n: number) => `${(n / 1e6).toFixed(1)} MB`;
+  const day = (iso: string) => new Date(iso).toLocaleDateString('en', { dateStyle: 'long', timeZone: 'UTC' });
 
   fetch(picker.dataset.manifest!, { cache: 'no-cache' })
     .then((r) => (r.ok ? (r.json() as Promise<Manifest>) : Promise.reject(r.status)))
     .then((m) => {
+      if (m.commit === picker.dataset.commit) return;
+      picker.dataset.commit = m.commit;
       const commit = m.commit.slice(0, 7);
       for (const link of picker.querySelectorAll<HTMLAnchorElement>('[data-file]')) {
         const file = m.files[link.dataset.file!];
@@ -421,10 +460,13 @@ const base = import.meta.env.BASE_URL.replace(/\/?$/, '/');
         }
         // The commit makes each build's link its own: a browser that kept
         // an earlier download does not hand it back.
+        delete link.dataset.missing;
+        link.removeAttribute('aria-disabled');
+        link.removeAttribute('tabindex');
         link.href = `${file.url}?${commit}`;
         if (size) size.textContent = megabytes(file.size);
       }
-      const date = new Date(m.published).toLocaleDateString('en', { dateStyle: 'long' });
+      const date = day(m.published);
       const build = picker.querySelector('[data-build]')!;
       build.textContent = `Version ${m.version}, built from `;
       const link = document.createElement('a');
