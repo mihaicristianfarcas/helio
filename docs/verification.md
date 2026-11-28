@@ -2,14 +2,14 @@
 
 What stands behind Helio, and what does not, so you can decide how far to
 trust it. The counts of commits, pull requests and tests here were taken at
-commit `7a9d108` on 2026-11-05.
+commit `a288466` on 2026-11-28.
 
 ## Built with AI coding agents
 
 Helio is written with AI coding agents, under the rules in
 [AGENTS.md](../AGENTS.md): how code, comments, documentation and commits are
 written, what has to be measured, what has to stay private. The history
-shows it: all 291 commits on `main` that no bot made, merges aside, carry a
+shows it: all 312 commits on `main` that no bot made, merges aside, carry a
 `Co-Authored-By` line naming Claude.
 
 ## How changes are reviewed
@@ -22,7 +22,7 @@ GitHub enforces the pull request and four of the CI checks below
 conversations resolved, so `main`'s history is linear, and `main` takes no
 force push or deletion. GitHub does not enforce the review: branch
 protection asks for no approvals, and the reviews happen outside GitHub, so
-none of the 73 merged pull requests shows one.
+none of the 83 merged pull requests shows one.
 
 The rest of what protects a release:
 
@@ -61,14 +61,14 @@ version, it does all of that and publishes nothing.
 
 ### The tests
 
-The workspace has 794 test functions, and each system runs the ones that
+The workspace has 808 test functions, and each system runs the ones that
 apply to it:
 
 | System | Passed | Ignored | Failed |
 |---|---|---|---|
-| macOS | 680 | 2 | 0 |
-| Windows | 718 | 6 | 0 |
-| Linux | 674 | 3 | 0 |
+| macOS | 694 | 2 | 0 |
+| Windows | 732 | 6 | 0 |
+| Linux | 688 | 3 | 0 |
 
 To count them:
 
