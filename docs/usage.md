@@ -90,7 +90,7 @@ Windows and Linux) opens them.
 | General | Open at login | With hosting on, Helio's icon from the moment you log in, without its window (a LaunchAgent on a Mac, your `Run` key on Windows; not on Linux). With hosting off, nothing starts |
 | | The helio command | **Install** puts `helio`, the command line, on the `PATH` of terminals opened from then on; **Remove** takes it off. How each system does it, and what uninstalling Helio does to it: [cli.md](cli.md) |
 | | Set Up Again | Setup once more: what this computer is for, what it must allow, how to pair |
-| | Report a Bug… | Opens the bug form on GitHub in your browser, with Helio's version and your system filled in ([what else it asks for](logs.md)). Nothing is sent until you submit it. On a Mac, also **Help → Report a Bug…** |
+| | Report a Bug… | Opens the bug form on GitHub in your browser, with Helio's version and your system filled in ([what else it asks for](logs.md)). Nothing is sent until you submit it. Also in **Help** on a Mac, and in Helio's icon's menu while hosting is on |
 | | Show Logs | Shows Helio's log in its folder ([logs.md](logs.md)). On a Mac, also **Help → Show Logs in Finder** |
 | Hosting | Let my devices play this computer | The hosting switch ([Hosting on and off](#hosting-on-and-off)), with what it needs: on a Mac, Screen Recording and Accessibility for the host; on Windows, whether there are NVIDIA graphics, and the drivers turning hosting on installs (SudoVDA, ViGEmBus) |
 | Updates | Look for updates | New releases (the default for a packaged release), releases and main (the default for a build from a checkout: also commits on `main` newer than the build's), or off. See [Updates](#updates) |
@@ -194,7 +194,8 @@ shows **Another user's host** until hosting is turned on from it.
 notification area on Windows while hosting is on, with or without the
 window open. Its menu says what the host is doing (ready, streaming to
 whom, starting, stopped), opens the window, names a device asking to pair
-(a notification says so too), and says when a newer Helio exists. With the
+(a notification says so too), says when a newer Helio exists, and opens
+**Report a Bug…**. With the
 icon there, closing the window leaves the app running behind it (on a Mac,
 without a Dock tile until the window is open again); **Quit Helio** in its
 menu quits the app. Either way the host keeps running: it is a service of

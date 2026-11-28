@@ -130,7 +130,8 @@ While hosting is on, Helio is also the host's icon in the taskbar's
 notification area, as Sunshine's is: it runs as the signed-in user, not as
 the service, so what its menu opens opens on that user's desktop. A click
 on the icon opens the window; the right button has the menu (what the host
-does, a device asking to pair, the window, an update, **Quit Helio**). A
+does, a device asking to pair, the window, an update, **Report a Bug…**,
+**Quit Helio**). A
 device asking to pair is also a Windows notification. **Open at login** in
 General starts Helio at sign-in as the icon only, from the user's `Run`
 key (`Helio.exe --background`). If Explorer restarts, the icon comes back

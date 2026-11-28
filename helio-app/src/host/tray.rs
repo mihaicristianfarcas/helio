@@ -1,7 +1,8 @@
 //! The icon in the menu bar (a Mac) or the taskbar's notification area
-//! (Windows) while hosting is on: its menu says what the host is doing and
-//! opens the window; a device asking to pair is announced with a
-//! notification. With the icon there, closing the window leaves the app
+//! (Windows) while hosting is on: its menu says what the host is doing,
+//! opens the window and reports a bug (the Help menu's action, so the form
+//! opens filled in as it does from there); a device asking to pair is
+//! announced with a notification. With the icon there, closing the window leaves the app
 //! running behind it; hosting off, the icon goes, and closing the window
 //! quits the app as before. Where there is no tray (Linux), none of this
 //! exists.
@@ -30,6 +31,7 @@ mod item {
     pub const PAIR: u32 = 2;
     pub const UPDATES: u32 = 3;
     pub const QUIT: u32 = 4;
+    pub const REPORT: u32 = 5;
 }
 
 pub struct HostIcon {
@@ -96,6 +98,7 @@ pub fn menu(state: &State, snap: &Snapshot, updates: &UpdateStatus) -> Vec<TrayI
             None => "Check for Updates…".into(),
         },
     ));
+    items.push(TrayItem::action(item::REPORT, "Report a Bug…"));
     items.push(TrayItem::Separator);
     // The app quits; the host stays.
     items.push(TrayItem::action(item::QUIT, "Quit Helio"));
@@ -238,6 +241,7 @@ impl HostIcon {
             TrayEvent::Activate | TrayEvent::Item(item::OPEN) => crate::app::open(Show::Window, cx),
             TrayEvent::Item(item::PAIR) => crate::app::open(Show::Devices, cx),
             TrayEvent::Item(item::UPDATES) => crate::app::open(Show::Updates, cx),
+            TrayEvent::Item(item::REPORT) => cx.dispatch_action(&helio_ui::menus::ReportBug),
             TrayEvent::Item(item::QUIT) => cx.quit(),
             TrayEvent::Item(_) => {}
         }
@@ -339,6 +343,7 @@ mod tests {
                 "Open Helio",
                 "-",
                 "Check for Updates…",
+                "Report a Bug…",
                 "-",
                 "Quit Helio"
             ]

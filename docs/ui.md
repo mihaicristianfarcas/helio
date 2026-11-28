@@ -173,7 +173,7 @@ never on a timer.
 While hosting is on, the app shows the host's icon, in the menu bar on a Mac
 and the notification area on Windows: what the host is doing, a device
 asking to pair (also a system notification, unless the window is in front),
-Open Helio, Check for Updates, Quit Helio. With the icon there, closing the
+Open Helio, Check for Updates, Report a Bug, Quit Helio. With the icon there, closing the
 window leaves the app running behind it (on a Mac, without a Dock tile until
 the window opens again); with hosting off, closing the window quits.
 Quitting the app never stops the host. Linux has no tray: closing the window

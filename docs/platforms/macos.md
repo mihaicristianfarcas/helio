@@ -166,7 +166,7 @@ itself 15 s later; `brew uninstall --zap` stops it at once.
 
 While hosting is on, Helio shows the host's icon in the menu bar: what the
 host does, a device asking to pair (a notification says so too), the
-window, an update. Closing the window leaves the icon, and Helio leaves the
+window, an update, and **Report a Bug…**. Closing the window leaves the icon, and Helio leaves the
 Dock until its window opens again (the accessory activation policy);
 **Open at login** in General starts Helio at login as the icon only
 (`--background`). Quitting Helio leaves the host running: it is the
