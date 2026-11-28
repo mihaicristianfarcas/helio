@@ -5,8 +5,9 @@ post-quantum WireGuard tunnel.
 
 ![Helio on a Mac: a click on a paired Windows PC in Hosts opens its desktop full screen, in a Space of its own; a swipe back to the Mac shows the session's page, with its mode and how to end it](docs/images/helio-demo.gif)
 
-- **Best tested:** a Mac as the client, streaming a Windows host with an
-  NVIDIA GPU and SudoVDA ([the test setup](docs/benchmarks.md#test-setup)).
+- **Public beta:** best tested with a Mac as the client, streaming a Windows
+  host with an NVIDIA GPU and SudoVDA ([the test setup](docs/benchmarks.md#test-setup)).
+  Found a bug? [Open an issue](https://github.com/mihaicristianfarcas/helio/issues/new/choose).
 - **Install:** [download for macOS, Windows or Linux](https://helio.mihaicristian.dev/#install),
   [Homebrew](docs/install.md#with-homebrew-macos), or
   [build from source](docs/install.md#building-from-source).

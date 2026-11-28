@@ -12,7 +12,7 @@ body:
     attributes:
       label: Helio version
       description: The first line of `helio.log` says it.
-      placeholder: 1.0.0
+      placeholder: 0.10.0
     validations:
       required: true
   - type: input
