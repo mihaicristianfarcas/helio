@@ -57,7 +57,8 @@ switch, off until you turn it on) it lets them play this one, through
    [helio.mihaicristian.dev](https://helio.mihaicristian.dev/#install),
    on a Mac with Homebrew
    (`brew tap mihaicristianfarcas/helio https://github.com/mihaicristianfarcas/helio`,
-   then `brew install --cask helio`), or build it from source.
+   then `brew install --cask mihaicristianfarcas/helio/helio`: the full name,
+   as Homebrew has another app named `helio`), or build it from source.
 2. On the host, turn hosting on in Helio (setup asks, or **Settings →
    Hosting**). On the other computer open Helio, click the host, and type
    the PIN it shows into the host's Helio (**This computer → Devices**).

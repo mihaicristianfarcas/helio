@@ -161,8 +161,15 @@ latest release (Apple silicon and Intel).
 
 ```sh
 brew tap mihaicristianfarcas/helio https://github.com/mihaicristianfarcas/helio
-brew install --cask helio
+brew install --cask mihaicristianfarcas/helio/helio
 ```
+
+Install it by that full name: Homebrew's own casks have a music composition
+app named `helio`, which `brew install --cask helio` installs. The full
+name also trusts this cask, which Homebrew 6 and later ask of a cask from a
+tap of someone else's before they load it (Homebrew's
+[Tap Trust](https://docs.brew.sh/Tap-Trust)). Once it is installed, `helio`
+names it in Homebrew's other commands.
 
 To host, turn hosting on in Helio (setup asks, or **Settings → Hosting**):
 the host then runs whenever you are logged in, and Helio's icon is in the
