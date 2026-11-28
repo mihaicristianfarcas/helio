@@ -7,7 +7,8 @@ post-quantum WireGuard tunnel.
 
 - **Public beta:** best tested with a Mac as the client, streaming a Windows
   host with an NVIDIA GPU and SudoVDA ([the test setup](docs/benchmarks.md#test-setup)).
-  Found a bug? [Open an issue](https://github.com/mihaicristianfarcas/helio/issues/new/choose).
+  Found a bug? **Settings → General → Report a Bug…** opens the bug form with
+  your version and system filled in, or [open an issue](https://github.com/mihaicristianfarcas/helio/issues/new/choose).
 - **Install:** [download for macOS, Windows or Linux](https://helio.mihaicristian.dev/#install),
   [Homebrew](docs/install.md#with-homebrew-macos), or
   [build from source](docs/install.md#building-from-source).
