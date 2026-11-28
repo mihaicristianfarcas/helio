@@ -90,6 +90,8 @@ Windows and Linux) opens them.
 | General | Open at login | With hosting on, Helio's icon from the moment you log in, without its window (a LaunchAgent on a Mac, your `Run` key on Windows; not on Linux). With hosting off, nothing starts |
 | | The helio command | **Install** puts `helio`, the command line, on the `PATH` of terminals opened from then on; **Remove** takes it off. How each system does it, and what uninstalling Helio does to it: [cli.md](cli.md) |
 | | Set Up Again | Setup once more: what this computer is for, what it must allow, how to pair |
+| | Report a Bug… | Opens the bug form on GitHub in your browser, with Helio's version and your system filled in ([what else it asks for](logs.md)). Nothing is sent until you submit it. On a Mac, also **Help → Report a Bug…** |
+| | Show Logs | Shows Helio's log in its folder ([logs.md](logs.md)). On a Mac, also **Help → Show Logs in Finder** |
 | Hosting | Let my devices play this computer | The hosting switch ([Hosting on and off](#hosting-on-and-off)), with what it needs: on a Mac, Screen Recording and Accessibility for the host; on Windows, whether there are NVIDIA graphics, and the drivers turning hosting on installs (SudoVDA, ViGEmBus) |
 | Updates | Look for updates | New releases (the default for a packaged release), releases and main (the default for a build from a checkout: also commits on `main` newer than the build's), or off. See [Updates](#updates) |
 | | Check for Updates | Asks GitHub now, whatever the setting |

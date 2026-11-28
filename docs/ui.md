@@ -117,7 +117,8 @@ end that strip, and on Linux the system's title bar is above it.
 - **Agents** starts agent sessions; **Sessions** lists them and your own
   desktop streams ([ai-agents.md](ai-agents.md#2-work-with-it-sessions)).
 - **Settings**, each row naming a setting and saying in a line what it does:
-  **General** (opening at login, setting up again), **Video**, **Audio**,
+  **General** (opening at login, setting up again, reporting a bug and the
+  logs), **Video**, **Audio**,
   **Input**, **Agent setup**, **Hosting** (the switch, what it needs, This
   computer a click away) and **Updates** ([usage.md](usage.md#updates)).
 - **A stream** opens in a window of its own (see [usage.md](usage.md)).

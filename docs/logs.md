@@ -5,6 +5,10 @@ needs the logs from both sides: Helio on the computer you sit at, and Helio
 Host on the computer you stream. This page says where they are, and how to
 get more out of them.
 
+**Settings → General → Report a Bug…** in Helio opens the form in your
+browser with Helio's version and your system already filled in (on a Mac,
+**Help → Report a Bug…** too). Nothing is sent until you submit the form.
+
 Logs never contain a PIN, password, key or token. They do contain host
 names and addresses: edit them out if you like. On macOS and Linux, only
 your user can enter either program's log folder.
@@ -28,7 +32,8 @@ two weeks however often it started since, up to 1 GiB in all. Send the
 log of the launch that went wrong, which may not be the newest: Helio may
 have started again since (at sign-in, or after an update).
 
-- **On a Mac**, **Help → Show Logs in Finder** opens the folder.
+- **Settings → General → Show Logs** shows `helio.log` in its folder (on a
+  Mac, **Help → Show Logs in Finder** too).
 - **On Linux**, a stream is a process of its own, and each one starts a new
   log: after a stream, `helio.log` is the stream's and the one before it
   the app's. Send both.
