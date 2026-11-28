@@ -2,7 +2,9 @@
 //! The tunnel and the way to a host: one post-quantum WireGuard tunnel for
 //! everything, pairing by PIN (This computer → Devices, from the app's demo:
 //! scripts/capture-hero.sh), and NAT traversal without a relay, the path
-//! docs/networking.md describes.
+//! docs/networking.md describes, played in its order: the host's record to
+//! the DHT, the client's intent, each side reading the other's addresses,
+//! then the direct line, punched from both ends.
 import { Image } from 'astro:assets';
 import Card from './Card.astro';
 import Point from './Point.astro';
@@ -31,18 +33,22 @@ import devices from '../assets/windows/devices.webp';
     </div>
   </Card>
   <Card slot="cards" title="No ports to forward">
-    On your home network or over Tailscale, it just connects. Anywhere else, hosts publish sealed records on the
-    BitTorrent DHT and both sides punch through their routers, with no relay in between.
+    On your home network or over Tailscale, it just connects. Anywhere else, both sides swap addresses in sealed records on the
+    BitTorrent DHT and punch through their routers, with no relay in between.
     <div slot="visual" class="pad">
-      <svg class="path" viewBox="0 0 420 150" role="img" aria-labelledby="path-title">
-        <title id="path-title">
-          Your computer and the host each behind a router, finding each other through the DHT and connecting directly.
-        </title>
+      <svg
+        class="path"
+        viewBox="0 0 420 150"
+        role="img"
+        aria-label="Your computer and the host, each behind a router, leave their addresses on the DHT, read each other’s, and connect directly."
+      >
         <g class="dashed">
           <path d="M70 96 Q 70 29 160 29"></path>
           <path d="M350 96 Q 350 29 260 29"></path>
         </g>
-        <path class="direct" d="M120 118 H 300"></path>
+        <path class="direct" pathLength="1" d="M120 118 H 210"></path>
+        <path class="direct" pathLength="1" d="M300 118 H 210"></path>
+        <circle class="packet" cx="120" cy="118" r="3.5"></circle>
         <g class="node">
           <rect x="20" y="96" width="100" height="44" rx="10"></rect>
           <text x="70" y="123">Your Mac</text>
@@ -55,6 +61,10 @@ import devices from '../assets/windows/devices.webp';
           <rect x="160" y="12" width="100" height="34" rx="17"></rect>
           <text x="210" y="34">DHT</text>
         </g>
+        <circle class="msg publish" r="3.5"></circle>
+        <circle class="msg intent" r="3.5"></circle>
+        <circle class="msg to-mac" r="3.5"></circle>
+        <circle class="msg to-host" r="3.5"></circle>
       </svg>
     </div>
   </Card>
@@ -106,7 +116,7 @@ import devices from '../assets/windows/devices.webp';
   }
 
   .cloud rect {
-    fill: none;
+    fill: rgb(var(--sky-5-rgb) / 0);
     stroke: var(--sky-5);
     stroke-dasharray: 3 4;
   }
@@ -121,9 +131,207 @@ import devices from '../assets/windows/devices.webp';
     stroke-dasharray: 3 5;
   }
 
+  /* Drawn as two halves that meet in the middle: both sides punch through
+     their routers. */
   .direct {
     fill: none;
     stroke: var(--sky-2);
     stroke-width: 2;
+    stroke-dasharray: 1;
+  }
+
+  .msg,
+  .packet {
+    fill: var(--sky-1);
+    opacity: 0;
+  }
+
+  /* The path in its order (docs/networking.md, "How it works"), once as it
+     comes into view and again each time the card is hovered (the script
+     below): gaming-pc's sealed record of its addresses goes up to the DHT;
+     Your Mac's intent, its own addresses, goes up as it looks for the
+     host's; each side reads the other's at once (the host checks its
+     devices' records every few seconds); then both send handshakes, so the
+     line is drawn from both ends, and while the card is hovered the stream
+     runs along it. Until it plays, the line is not drawn. */
+  @media (prefers-reduced-motion: no-preference) {
+    .path[data-waiting] .direct {
+      stroke-dashoffset: 1;
+    }
+
+    .path.run .publish {
+      animation: path-right-up 0.9s linear 0.2s;
+    }
+
+    .path.run .cloud rect {
+      animation:
+        path-heard 0.6s ease-out 1s,
+        path-heard 0.6s ease-out 2.1s;
+    }
+
+    .path.run .intent {
+      animation: path-left-up 0.9s linear 1.3s;
+    }
+
+    .path.run .to-mac {
+      animation: path-left-down 0.9s linear 2.4s;
+    }
+
+    .path.run .to-host {
+      animation: path-right-down 0.9s linear 2.4s;
+    }
+
+    .path.run .direct {
+      animation: path-punch 0.5s cubic-bezier(0.2, 0.7, 0.2, 1) 3.4s both;
+    }
+
+    :global(.card:hover) .path.run .packet {
+      animation: path-packet 2.4s 4s infinite;
+    }
+  }
+
+  /* Each message along its curve, easing out (CSS's ease-out,
+     cubic-bezier(0, 0, 0.58, 1)). An easing applies to each step between
+     keyframes, not to the whole curve, so the steps are linear and the
+     points are where that easing puts the dot along the curve's length,
+     every 1/16 of the time. */
+  @keyframes path-right-up {
+    0% { opacity: 1; translate: 350.0px 96.0px; }
+    6.25% { translate: 349.1px 83.0px; }
+    12.5% { translate: 346.1px 71.0px; }
+    18.75% { translate: 341.1px 60.4px; }
+    25% { translate: 334.2px 51.6px; }
+    31.25% { translate: 326.0px 44.7px; }
+    37.5% { translate: 317.4px 39.6px; }
+    43.75% { translate: 308.5px 35.9px; }
+    50% { translate: 300.0px 33.4px; }
+    56.25% { translate: 292.0px 31.6px; }
+    62.5% { translate: 284.5px 30.4px; }
+    68.75% { translate: 277.7px 29.7px; }
+    75% { translate: 272.0px 29.3px; }
+    81.25% { translate: 267.1px 29.1px; }
+    87.5% { translate: 263.4px 29.0px; }
+    93.75% { translate: 260.9px 29.0px; }
+    100% { opacity: 1; translate: 260.0px 29.0px; }
+  }
+
+  @keyframes path-left-up {
+    0% { opacity: 1; translate: 70.0px 96.0px; }
+    6.25% { translate: 70.9px 83.0px; }
+    12.5% { translate: 73.9px 71.0px; }
+    18.75% { translate: 78.9px 60.4px; }
+    25% { translate: 85.8px 51.6px; }
+    31.25% { translate: 94.0px 44.7px; }
+    37.5% { translate: 102.6px 39.6px; }
+    43.75% { translate: 111.5px 35.9px; }
+    50% { translate: 120.0px 33.4px; }
+    56.25% { translate: 128.0px 31.6px; }
+    62.5% { translate: 135.5px 30.4px; }
+    68.75% { translate: 142.3px 29.7px; }
+    75% { translate: 148.0px 29.3px; }
+    81.25% { translate: 152.9px 29.1px; }
+    87.5% { translate: 156.6px 29.0px; }
+    93.75% { translate: 159.1px 29.0px; }
+    100% { opacity: 1; translate: 160.0px 29.0px; }
+  }
+
+  @keyframes path-left-down {
+    0% { opacity: 1; translate: 160.0px 29.0px; }
+    6.25% { translate: 147.0px 29.4px; }
+    12.5% { translate: 134.7px 30.5px; }
+    18.75% { translate: 123.1px 32.6px; }
+    25% { translate: 112.2px 35.6px; }
+    31.25% { translate: 102.4px 39.7px; }
+    37.5% { translate: 93.8px 44.8px; }
+    43.75% { translate: 86.4px 51.0px; }
+    50% { translate: 80.7px 57.7px; }
+    56.25% { translate: 76.5px 64.8px; }
+    62.5% { translate: 73.6px 71.8px; }
+    68.75% { translate: 71.8px 78.3px; }
+    75% { translate: 70.8px 84.1px; }
+    81.25% { translate: 70.3px 89.0px; }
+    87.5% { translate: 70.1px 92.7px; }
+    93.75% { translate: 70.0px 95.1px; }
+    100% { opacity: 1; translate: 70.0px 96.0px; }
+  }
+
+  @keyframes path-right-down {
+    0% { opacity: 1; translate: 260.0px 29.0px; }
+    6.25% { translate: 273.0px 29.4px; }
+    12.5% { translate: 285.3px 30.5px; }
+    18.75% { translate: 296.9px 32.6px; }
+    25% { translate: 307.8px 35.6px; }
+    31.25% { translate: 317.6px 39.7px; }
+    37.5% { translate: 326.2px 44.8px; }
+    43.75% { translate: 333.6px 51.0px; }
+    50% { translate: 339.3px 57.7px; }
+    56.25% { translate: 343.5px 64.8px; }
+    62.5% { translate: 346.4px 71.8px; }
+    68.75% { translate: 348.2px 78.3px; }
+    75% { translate: 349.2px 84.1px; }
+    81.25% { translate: 349.7px 89.0px; }
+    87.5% { translate: 349.9px 92.7px; }
+    93.75% { translate: 350.0px 95.1px; }
+    100% { opacity: 1; translate: 350.0px 96.0px; }
+  }
+
+  @keyframes path-heard {
+    40% {
+      fill: rgb(var(--sky-5-rgb) / 0.3);
+    }
+  }
+
+  @keyframes path-punch {
+    from {
+      stroke-dashoffset: 1;
+    }
+    to {
+      stroke-dashoffset: 0;
+    }
+  }
+
+  /* Out and back, easing out each way: alternate would play the easing
+     backwards on the way back, an ease-in. */
+  @keyframes path-packet {
+    0% {
+      opacity: 1;
+      translate: 0 0;
+      animation-timing-function: ease-out;
+    }
+    50% {
+      opacity: 1;
+      translate: 180px 0;
+      animation-timing-function: ease-out;
+    }
+    100% {
+      opacity: 1;
+      translate: 0 0;
+    }
   }
 </style>
+
+<script>
+  // The path plays as it comes into view, once, and again each time its
+  // card is hovered. Without the script, or with reduced motion, it is
+  // simply drawn.
+  const path = document.querySelector<SVGSVGElement>('svg.path');
+  if (path && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    const play = () => {
+      seen.disconnect();
+      path.classList.remove('run');
+      // Restyled without it before it comes back, so the animations start again.
+      void path.getBoundingClientRect();
+      delete path.dataset.waiting;
+      path.classList.add('run');
+    };
+    const seen = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) play();
+      },
+      { threshold: 0.6 },
+    );
+    path.dataset.waiting = '';
+    seen.observe(path);
+    path.closest('.card')?.addEventListener('mouseenter', play);
+  }
+</script>
