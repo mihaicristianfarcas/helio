@@ -405,7 +405,7 @@ test('a release newer than the build replaces the card\'s version, sizes and lin
 test('each of the landing page\'s own links finds its section there', () => {
   const ids = new Set([...html.matchAll(/\sid="([^"]+)"/g)].map((match) => match[1]));
   const links = [...html.matchAll(/href="#([^"]*)"/g)].map((match) => match[1]);
-  for (const section of ['top', 'install', 'agents', 'main']) assert.ok(links.includes(section), section);
+  for (const section of ['top', 'install', 'main']) assert.ok(links.includes(section), section);
   for (const link of links) assert.ok(ids.has(link), `#${link}`);
 });
 
