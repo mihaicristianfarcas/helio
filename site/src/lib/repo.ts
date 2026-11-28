@@ -17,3 +17,9 @@ export const DISCUSSIONS = `${REPO}/discussions`;
 export const LIMITATIONS = `${REPO}#known-limitations`;
 
 export const TAP = `brew tap mihaicristianfarcas/helio ${REPO}`;
+
+/** The cask by its full name: Homebrew's own casks have a music composition
+ *  app named `helio`, which the short name installs, and the full name also
+ *  trusts this one cask, which Homebrew 6 and later ask of another's tap
+ *  (docs/install.md). */
+export const CASK_INSTALL = 'brew install --cask mihaicristianfarcas/helio/helio';

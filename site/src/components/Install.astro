@@ -10,7 +10,7 @@
 //! card only for a newer release.
 import Command from './Command.astro';
 import SystemMark from './SystemMark.astro';
-import { REPO, TAP } from '../lib/repo';
+import { REPO, CASK_INSTALL, TAP } from '../lib/repo';
 import { CHECKSUMS, FILES, MANIFEST, type File, type System } from '../lib/downloads';
 import { day, megabytes, release } from '../lib/release';
 
@@ -39,7 +39,7 @@ const panels: Panel[] = [
       'Open the zip and move <strong>Helio</strong> to Applications.',
       'Open Helio, and let it find devices on your local network when it asks.',
     ],
-    commands: [{ label: 'Or with Homebrew', lines: [TAP, 'brew install --cask helio'] }],
+    commands: [{ label: 'Or with Homebrew', lines: [TAP, CASK_INSTALL] }],
   },
   {
     system: 'windows',
