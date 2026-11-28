@@ -625,7 +625,7 @@ What it shows is made from the app, by scripts in `site/scripts/`:
 
 | Script | Makes |
 |---|---|
-| `capture-hero.sh` | The pictures of the app in `src/assets/hero/`, 2700x1800, each a window over a desktop's default wallpaper as macOS composites it: the hero's real stream and its host's **This computer → Overview**, and for the cards the Hosts page (`hosts-sample`), an agent's session and **This computer → Devices**. Then the window alone, cut from the cards' three (`crop-windows.mjs`). The script's header says how each is made; `hero/` holds what runs there. |
+| `capture-hero.sh` | The pictures of the app in `src/assets/hero/`, 2700x1800, each a window over a desktop's default wallpaper as macOS composites it: the hero's real stream and its host's **This computer → Overview**, each made a whole screen (a MacBook's menu bar and Dock, Windows 11's taskbar; `hero/screens.html`) for the devices the page draws round them, and for the cards the Hosts page (`hosts-sample`), an agent's session and **This computer → Devices**. Then the window alone, cut from the cards' three (`crop-windows.mjs`). The script's header says how each is made; `hero/` holds what runs there. |
 | `crop-windows.mjs` | The window alone from each picture in `src/assets/hero/`, into `src/assets/windows/`, for the sections' cards. |
 | `og-card.html` | The link preview, `public/og.jpg`: the page's title beside the hero's two pictures. Any headless browser renders it at 1200x630. |
 

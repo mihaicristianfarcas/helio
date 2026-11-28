@@ -1,0 +1,141 @@
+<!doctype html><html><head><meta charset="utf-8">
+<!--
+  The hero's two screens, 1350x900, each a whole desktop around its picture
+  (capture-hero.sh renders them; the page draws the devices around them):
+
+    screens.html?os=macos&shot=STREAM.png&icons=DIR
+      The Mac: its menu bar over the wallpaper as macOS Tahoe draws it (no
+      bar of its own; the app's menus beside the Apple menu, the status items
+      and the clock on the right), the MacBook's notch in the middle of it,
+      and the Dock at the foot, in glass, with dock.swift's icons from DIR.
+      Helio's menus are the ones helio-app sets (main.rs, cx.set_menus).
+    screens.html?os=windows&shot=HOST.png
+      The PC: Windows 11's taskbar in its dark theme, the icons in the
+      middle, Helio's own (helio-app/assets) open and in front.
+
+  Rendered on a Mac at 2x: the menu bar's Apple logo and its type are the
+  Mac's system font. The clocks show the time only (both systems can), so
+  the picture names no date.
+-->
+<style>
+* { margin: 0; box-sizing: border-box; }
+html, body { width: 1350px; height: 900px; overflow: hidden; }
+body { position: relative; background: #000; -webkit-font-smoothing: antialiased; }
+.shot { position: absolute; inset: 0; width: 1350px; height: 900px; }
+svg { display: block; }
+
+/* macOS Tahoe, on a 14-inch MacBook Pro's proportions: the menu bar as tall
+   as the notch, 34 of 900 points; Tahoe's light wallpaper under it, so its
+   type is dark. */
+.menubar { position: absolute; left: 0; right: 0; top: 0; height: 34px; display: flex; align-items: center;
+  justify-content: space-between; padding: 0 14px 0 20px; color: rgb(0 0 0 / 0.86);
+  font: 500 13px/1 -apple-system, system-ui; letter-spacing: -0.01em; }
+.menus, .status { display: flex; align-items: center; gap: 19px; }
+/* The Apple menu's logo is about 41% of the bar's height on a MacBook (15.5
+   of 38 points), twice a capital's height: 14 points here. */
+.menus .apple { font-size: 18.5px; margin-right: 2px; transform: translateY(-1.5px); }
+.menus b { font-weight: 700; }
+.status { gap: 16px; }
+.status svg { height: 15px; width: auto; fill: none; stroke: currentColor; stroke-width: 1.5; }
+.notch { position: absolute; top: 0; left: 50%; width: 152px; height: 34px; margin-left: -76px; background: #000;
+  border-radius: 0 0 11px 11px; }
+
+/* The Dock: Tahoe's glass, dark in the dark appearance, 42-point tiles
+   (so it clears the stream's window, whose foot is 63 points up), the
+   indicators for open apps, and the Trash past its divider. */
+.dock { position: absolute; left: 50%; bottom: 5px; transform: translateX(-50%); display: flex; align-items: center;
+  gap: 5px; padding: 5px 7px; border-radius: 20px; background: rgb(48 48 54 / 0.42);
+  backdrop-filter: blur(24px) saturate(1.7); -webkit-backdrop-filter: blur(24px) saturate(1.7);
+  box-shadow: inset 0 0 0 0.5px rgb(255 255 255 / 0.32), inset 0 1px 0 rgb(255 255 255 / 0.18), 0 8px 24px rgb(0 0 0 / 0.18); }
+.dock .app { position: relative; width: 42px; height: 42px; }
+.dock .app img { width: 42px; height: 42px; }
+.dock .app.open::after { content: ''; position: absolute; left: 50%; bottom: -3px; width: 4px; height: 4px; margin-left: -2px;
+  border-radius: 50%; background: rgb(255 255 255 / 0.75); }
+.dock .divider { width: 1px; height: 34px; margin: 0 3px; background: rgb(255 255 255 / 0.26); }
+
+/* Windows 11's taskbar at 1080p is 48 of 1080 pixels: 40 of 900 here. Its
+   buttons are 40 wide with 24-pixel icons; the app in front has a lit
+   button and a long accent pill, the others open a short grey one. */
+.taskbar { position: absolute; left: 0; right: 0; bottom: 0; height: 40px; display: flex; align-items: center;
+  justify-content: center; background: rgb(28 28 30 / 0.84);
+  backdrop-filter: blur(30px) saturate(1.4); -webkit-backdrop-filter: blur(30px) saturate(1.4);
+  border-top: 1px solid rgb(255 255 255 / 0.08); color: #fff;
+  font: 400 11.5px/1.25 "Segoe UI Variable Text", "Segoe UI", -apple-system, system-ui; }
+.taskbar .apps { display: flex; gap: 2px; }
+.taskbar .btn { position: relative; width: 38px; height: 34px; display: grid; place-items: center; border-radius: 4px; }
+.taskbar .btn img, .taskbar .btn svg { width: 22px; height: 22px; }
+.taskbar .btn.front { background: rgb(255 255 255 / 0.07); box-shadow: inset 0 0 0 0.5px rgb(255 255 255 / 0.07); }
+.taskbar .btn.open::after, .taskbar .btn.front::after { content: ''; position: absolute; bottom: 1px; left: 50%; height: 3px;
+  border-radius: 2px; }
+.taskbar .btn.open::after { width: 6px; margin-left: -3px; background: rgb(255 255 255 / 0.55); }
+.taskbar .btn.front::after { width: 16px; margin-left: -8px; background: #4cc2ff; }
+.taskbar .tray { position: absolute; right: 10px; top: 0; bottom: 0; display: flex; align-items: center; gap: 12px; }
+.taskbar .tray svg { height: 15px; width: auto; fill: none; stroke: #fff; stroke-width: 1.3; }
+.taskbar .tray svg.more { height: 8px; }
+.taskbar .clock { padding: 0 6px; font-size: 12px; }
+
+[hidden] { display: none !important; }
+</style></head><body>
+<img class="shot" id="shot" alt="">
+
+<div id="macos" hidden>
+  <div class="menubar">
+    <div class="menus">
+      <span class="apple">&#xF8FF;</span><b>Helio</b><span>File</span><span>Edit</span><span>View</span><span>Window</span><span>Help</span>
+    </div>
+    <div class="status">
+      <!-- battery -->
+      <svg viewBox="0 0 30 14"><rect x="0.75" y="0.75" width="25" height="12.5" rx="3.6"/><rect x="2.6" y="2.6" width="17" height="8.8" rx="1.8" fill="currentColor" stroke="none"/><path d="M28 5v4" stroke-linecap="round" stroke-width="1.8"/></svg>
+      <!-- Wi-Fi -->
+      <svg viewBox="0 0 20 15"><path d="M10 14.2 6.6 10.4a5 5 0 0 1 6.8 0Z" fill="currentColor" stroke="none"/><path d="M3.9 7.6a8.8 8.8 0 0 1 12.2 0M1 4.6a13 13 0 0 1 18 0" stroke-linecap="round" stroke-width="1.7"/></svg>
+      <!-- Spotlight -->
+      <svg viewBox="0 0 15 15"><circle cx="6.2" cy="6.2" r="4.9" stroke-width="1.6"/><path d="m9.9 9.9 4 4" stroke-linecap="round" stroke-width="1.8"/></svg>
+      <!-- Control Centre -->
+      <svg viewBox="0 0 18 15"><rect x="0.8" y="0.8" width="16.4" height="5.6" rx="2.8"/><circle cx="4" cy="3.6" r="1.6" fill="currentColor" stroke="none"/><rect x="0.8" y="8.6" width="16.4" height="5.6" rx="2.8"/><circle cx="14" cy="11.4" r="1.6" fill="currentColor" stroke="none"/></svg>
+      <span>Fri 10:42</span>
+    </div>
+  </div>
+  <div class="notch"></div>
+  <div class="dock" id="dock"></div>
+</div>
+
+<div id="windows" hidden>
+  <div class="taskbar">
+    <div class="apps">
+      <!-- Start -->
+      <div class="btn"><svg viewBox="0 0 24 24"><defs><linearGradient id="start" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#52c1ff"/><stop offset="1" stop-color="#0a6cd6"/></linearGradient></defs><g fill="url(#start)"><rect x="1" y="1" width="10.6" height="10.6" rx="0.6"/><rect x="12.4" y="1" width="10.6" height="10.6" rx="0.6"/><rect x="1" y="12.4" width="10.6" height="10.6" rx="0.6"/><rect x="12.4" y="12.4" width="10.6" height="10.6" rx="0.6"/></g></svg></div>
+      <!-- Search -->
+      <div class="btn"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.6" stroke-linecap="round"><circle cx="10.5" cy="10.5" r="6.2"/><path d="m15.2 15.2 5.3 5.3"/></svg></div>
+      <!-- File Explorer -->
+      <div class="btn open"><svg viewBox="0 0 24 24"><path d="M2 6.2c0-1 .8-1.8 1.8-1.8h5.1l2.2 2.2h9.1c1 0 1.8.8 1.8 1.8V18c0 1-.8 1.8-1.8 1.8H3.8C2.8 19.8 2 19 2 18Z" fill="#e8a817"/><path d="M2 9.4c0-1 .8-1.8 1.8-1.8h16.4c1 0 1.8.8 1.8 1.8V18c0 1-.8 1.8-1.8 1.8H3.8C2.8 19.8 2 19 2 18Z" fill="#ffc83d"/></svg></div>
+      <!-- Helio -->
+      <div class="btn front"><img id="helio" alt=""></div>
+    </div>
+    <div class="tray">
+      <svg class="more" viewBox="0 0 12 8"><path d="m1 6.5 5-5 5 5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <!-- network: Ethernet -->
+      <svg viewBox="0 0 18 15"><rect x="1.5" y="1" width="15" height="9.5" rx="1.2"/><path d="M9 10.5V14M5 14h8" stroke-linecap="round"/></svg>
+      <!-- volume -->
+      <svg viewBox="0 0 18 15"><path d="M2 5.2h3l4-3.4v11.4l-4-3.4H2Z" stroke-linejoin="round"/><path d="M11.8 4.8a4 4 0 0 1 0 5.4M14 2.8a7 7 0 0 1 0 9.4" stroke-linecap="round"/></svg>
+      <span class="clock">10:42</span>
+    </div>
+  </div>
+</div>
+
+<script>
+const q = new URLSearchParams(location.search);
+const os = q.get('os');
+document.getElementById('shot').src = q.get('shot');
+document.getElementById(os).hidden = false;
+if (os === 'macos') {
+  const dir = q.get('icons').replace(/\/$/, '');
+  const dock = document.getElementById('dock');
+  for (const [name, open] of [['finder', 1], ['safari', 0], ['terminal', 0], ['settings', 0], ['helio', 1], ['|'], ['trash', 0]]) {
+    if (name === '|') { dock.insertAdjacentHTML('beforeend', '<span class="divider"></span>'); continue; }
+    dock.insertAdjacentHTML('beforeend', `<span class="app${open ? ' open' : ''}"><img src="${dir}/${name}.png" alt=""></span>`);
+  }
+} else {
+  document.getElementById('helio').src = q.get('helio') || '../../../helio-app/assets/hicolor/256x256/apps/dev.mihaicristian.helio.png';
+}
+</script>
+</body></html>
