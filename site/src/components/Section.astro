@@ -1,7 +1,7 @@
 ---
 //! One section of the landing page, laid out as zeron.sh lays out its own: a
 //! statement, its first sentence lit and the rest quiet, as the one heading;
-//! framed cards under it; then a row of points under a rule.
+//! framed cards under it; then its points, in rows of three.
 interface Props {
   id: string;
   /** The first sentence, lit. */
@@ -49,10 +49,12 @@ const { id, lead, rest } = Astro.props;
     margin-top: var(--gap-head);
   }
 
+  /* Two rows of three: closer together than the columns on a short
+     screen, so the two rows read as one list. */
   .points {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 32px;
+    gap: clamp(20px, 3vh, 32px) 32px;
     margin: min(48px, 5vh) 0 0;
     padding: 0;
     list-style: none;

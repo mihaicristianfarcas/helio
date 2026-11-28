@@ -1,10 +1,11 @@
 ---
-//! One of a section's three points: an icon from the app, a title, a
-//! sentence.
+//! One of a section's points, which stand in rows of three: an icon from
+//! the app (or, in the icon slot, another's mark), a title, a sentence.
 import Icon from './Icon.astro';
 
 interface Props {
-  icon: string;
+  /** One of the app's icons; leave it out to give a mark in the icon slot. */
+  icon?: string;
   title: string;
 }
 
@@ -12,7 +13,7 @@ const { icon, title } = Astro.props;
 ---
 
 <li class="point">
-  <h3><Icon name={icon} size={18} />{title}</h3>
+  <h3><slot name="icon">{icon && <Icon name={icon} size={18} />}</slot>{title}</h3>
   <p><slot /></p>
 </li>
 
