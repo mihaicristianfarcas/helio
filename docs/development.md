@@ -577,8 +577,11 @@ are Astro's to size, and code is shown without highlighting, in the page's
 colours.
 
 Its downloads are the newest released version ([Releases](#releases)): the
-page links their fixed names (`src/lib/downloads.ts`) and, as it loads,
-reads `latest.json` for the version and the sizes.
+page links their fixed names (`src/lib/downloads.ts`), and the build writes
+in `latest.json`'s version, sizes and commit (`src/lib/release.ts`), so the
+download card does not move as the page loads. As it loads, the page reads
+`latest.json` again and changes the card only for a newer release; a build
+that cannot read it leaves the card to the page.
 The GitHub button in the header shows the repository's stars: the build
 reads them from GitHub's API (`src/lib/stars.ts`, with the workflow's
 token; a build that cannot reach GitHub leaves the button without a count)
