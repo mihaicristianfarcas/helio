@@ -1,5 +1,5 @@
 // Every figure the page quotes, with where it comes from: docs/benchmarks.md,
-// the 1.0.0 series. Change them here when that page changes.
+// the 0.10.0 series. Change them here when that page changes.
 
 /** The conditions under every figure below, as the page states them. */
 export const SETUP =

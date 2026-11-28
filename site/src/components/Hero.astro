@@ -1,6 +1,10 @@
 ---
-//! The page's opening, as zeron.sh opens its own: what Helio is, one
-//! sentence, the downloads (Install.astro) and the repository; then a real
+//! The page's opening, as zeron.sh opens its own: a title (any screen: the
+//! host makes a virtual display at the client's exact mode, README.md; smooth
+//! on a bad network: frames keep coming on a link that loses packets or
+//! narrows, docs/benchmarks.md, "Bad links", against Moonlight’s 84–85% and
+//! 21–41%, figures in Latency.astro), then what Helio is in one sentence,
+//! the downloads (Install.astro) and the repository; then a real
 //! stream (scripts/capture-hero.sh): Helio's window on a MacBook, the
 //! client, in front of the host's Overview of that same session on a Windows
 //! PC's monitor. The screens are pictures, menu bar, Dock and taskbar
@@ -23,12 +27,12 @@ const streamAlt =
 <section class="hero" id="top">
   <div class="wrap">
     <h1 class="rise" style="--i: 0">
-      <span class="phrase">Low-latency remote desktop</span>
-      <span class="phrase">and game streaming</span>
+      <span class="phrase">Your PC’s games, on any screen.</span>
+      <span class="phrase">Smooth, even when your network isn’t.</span>
     </h1>
     <p class="lead rise" style="--i: 1">
-      Stream a computer’s desktop and games to another, inside one post-quantum WireGuard tunnel. One app for macOS,
-      Windows and Linux, free and open source.
+      Low-latency remote desktop and game streaming, straight from one computer to another, inside a post-quantum
+      WireGuard tunnel. One app for macOS, Windows and Linux, free and open source. Now in public beta.
     </p>
     <div class="actions rise" style="--i: 2">
       <a class="button primary" href="#install">
@@ -108,15 +112,26 @@ const streamAlt =
     }
   }
 
+  /* 10.2vw: on a phone, each phrase in two lines at most (see .phrase). */
   h1 {
-    font-size: min(var(--hero-size), 7.5vh);
+    font-size: min(var(--hero-size), 7.5vh, 10.2vw);
     line-height: 1.02;
     letter-spacing: -0.045em;
   }
 
-  /* The title breaks between its phrases, not inside them. */
+  /* Wider, each phrase on one line: the longer is 16.8em wide, so 5.5vw
+     and 4.4rem keep it inside the column (976 px at 1024 wide, 1200 at
+     most). */
+  @media (min-width: 861px) {
+    h1 {
+      font-size: min(var(--hero-size), 7.5vh, 5.5vw, 4.4rem);
+    }
+  }
+
+  /* Each phrase on a line of its own, the answer under the claim; the
+     longer one wraps inside itself on a phone. */
   .phrase {
-    display: inline-block;
+    display: block;
   }
 
   .lead {
